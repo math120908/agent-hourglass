@@ -32,7 +32,9 @@ enum SoakLine {
     static func format(at: Date, outcome: FetchOutcome, count429: Int) -> String {
         let snap: UsageSnapshot? = if case let .success(s) = outcome { s } else { nil }
         let ts = ISO8601DateFormatter().string(from: at)
-        return "\(ts) status=\(status(outcome)) http=\(httpCode(outcome)) session=\(percent(snap, .session5h)) weekly=\(percent(snap, .weeklyAll)) n429=\(count429)"
+        var line = "\(ts) status=\(status(outcome)) http=\(httpCode(outcome)) session=\(percent(snap, .session5h)) weekly=\(percent(snap, .weeklyAll)) n429=\(count429)"
+        if case let .failure(.rateLimited(retryAt)) = outcome { line += " wait=\(Int(retryAt.timeIntervalSince(at).rounded()))s" }
+        return line
     }
 }
 

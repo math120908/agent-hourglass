@@ -18,7 +18,7 @@ import UsageCore
 
     @Test func rateLimitedLine() {
         let line = SoakLine.format(at: at, outcome: .failure(.rateLimited(retryAt: at)), count429: 3)
-        #expect(line.hasSuffix("status=rateLimited http=429 session=- weekly=- n429=3"))
+        #expect(line.hasSuffix("status=rateLimited http=429 session=- weekly=- n429=3 wait=0s"))
     }
 
     @Test func logFileIs0600AndAppends() throws {
