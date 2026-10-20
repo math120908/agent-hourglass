@@ -13,9 +13,37 @@ public enum AppSupport {
         return dir
     }
 
-    /// Atomic write, then chmod 0600.
+    /// Atomic replace that never exposes umask perms: temp file is created 0600 with O_EXCL in the
+    /// target's directory, fsynced, then rename()d over the target.
     public static func secureWrite(_ data: Data, to url: URL) throws {
-        try data.write(to: url, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        try secureWrite(data, to: url, beforeRename: { _ in })
+    }
+
+    static func secureWrite(_ data: Data, to url: URL, beforeRename: (URL) throws -> Void) throws {
+        let tmp = url.deletingLastPathComponent().appendingPathComponent(".\(url.lastPathComponent).\(UUID().uuidString).tmp")
+        let fd = open(tmp.path, O_CREAT | O_EXCL | O_WRONLY | O_CLOEXEC, 0o600)
+        guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        var renamed = false
+        defer { if !renamed { unlink(tmp.path) } }
+        do {
+            defer { close(fd) }
+            // umask can only clear bits; force exact 0600 regardless.
+            guard fchmod(fd, 0o600) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            try data.withUnsafeBytes { buf in
+                var off = 0
+                while off < buf.count {
+                    let n = write(fd, buf.baseAddress! + off, buf.count - off)
+                    if n < 0 {
+                        if errno == EINTR { continue }
+                        throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+                    }
+                    off += n
+                }
+            }
+            guard fsync(fd) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        }
+        try beforeRename(tmp)
+        guard rename(tmp.path, url.path) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        renamed = true
     }
 }

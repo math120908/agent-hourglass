@@ -24,4 +24,25 @@ struct AppSupportTests {
         _ = try AppSupport.directory(base: base)
         #expect(try mode(dir) == 0o700)
     }
+
+    @Test func tempFileIs0600BeforeRename() throws {
+        let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let dir = try AppSupport.directory(base: base)
+        let file = dir.appendingPathComponent("state.json")
+        let old = umask(0o022)
+        defer { umask(old) }
+        var tempMode = -1
+        var tempDir: URL?
+        try AppSupport.secureWrite(Data("{}".utf8), to: file, beforeRename: { tmp in
+            tempMode = try mode(tmp)
+            tempDir = tmp.deletingLastPathComponent()
+            #expect(try Data(contentsOf: tmp) == Data("{}".utf8))
+            #expect(!FileManager.default.fileExists(atPath: file.path))
+        })
+        #expect(tempMode == 0o600)
+        #expect(tempDir?.standardizedFileURL == dir.standardizedFileURL)
+        #expect(try mode(file) == 0o600)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path) == ["state.json"])
+    }
 }
