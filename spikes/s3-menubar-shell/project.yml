@@ -1,0 +1,24 @@
+name: ClaudeUsageSpike
+options:
+  bundleIdPrefix: cc.kuoc
+  deploymentTarget:
+    macOS: "14.0"
+targets:
+  ClaudeUsageSpike:
+    type: application
+    platform: macOS
+    sources: [App]
+    info:
+      path: App/Info.plist
+      properties:
+        LSUIElement: true
+        CFBundleDisplayName: Claude Usage Spike
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cc.kuoc.claude-usage.spike
+        PRODUCT_NAME: ClaudeUsageSpike
+        SWIFT_VERSION: "5.0"
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        ENABLE_HARDENED_RUNTIME: NO
+        GENERATE_INFOPLIST_FILE: NO
