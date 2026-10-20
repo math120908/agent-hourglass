@@ -34,7 +34,14 @@ struct ClaudeProviderTests {
         #expect(s.meters[2].label == "Fable")
         #expect(s.meters[1].percentUsed == 39)
         #expect(s.meters[0].windowLength == .seconds(5 * 3600))
-        #expect(s.spend == Money(usedMinor: 85, limitMinor: 2000, currency: "EUR", exponent: 2))
+        #expect(s.spend == Money(
+            usedMinor: 85,
+            limitMinor: 2000,
+            currency: "EUR",
+            exponent: 2,
+            isEnabled: false,
+            disabledReason: "out_of_credits"
+        ))
     }
 
     @Test func legacyOnly() throws {
@@ -53,6 +60,10 @@ struct ClaudeProviderTests {
         let s = try ClaudeProvider.decodeUsage(fixture("claude-spend-disabled"), accountID: account, now: now)
         #expect(s.spend?.usedMinor == 85)
         #expect(s.spend?.limitMinor == 2000)
+        #expect(s.spend?.isEnabled == false)
+        #expect(s.spend?.disabledReason == "out_of_credits")
+        let rt = try JSONDecoder().decode(UsageSnapshot.self, from: JSONEncoder().encode(s))
+        #expect(rt.spend == s.spend)
     }
 
     @Test func unknownKeysRecorded() throws {

@@ -55,7 +55,14 @@ extension ClaudeProvider {
               let usedMinor = number(used["amount_minor"]),
               let currency = used["currency"] as? String else { return nil }
         let limitMinor = ((s["limit"] as? [String: Any]).flatMap { number($0["amount_minor"]) }).map { Int($0) }
-        return Money(usedMinor: Int(usedMinor), limitMinor: limitMinor, currency: currency, exponent: Int(number(used["exponent"]) ?? 2))
+        return Money(
+            usedMinor: Int(usedMinor),
+            limitMinor: limitMinor,
+            currency: currency,
+            exponent: Int(number(used["exponent"]) ?? 2),
+            isEnabled: number(s["enabled"]).map { $0 != 0 } ?? true,
+            disabledReason: s["disabled_reason"] as? String
+        )
     }
 
     static func number(_ v: Any?) -> Double? { (v as? NSNumber)?.doubleValue }
