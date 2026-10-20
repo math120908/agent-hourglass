@@ -1,0 +1,12 @@
+{"exportedAt":"2027-01-16T08:00:00Z","app":"claude-usage 1.0 (abc1234)",
+"accounts":[
+{"id":"claude:ACCOUNT","name":"Personal Max","provider":"claude",
+"series":{
+"session5h":[
+{"t":"2027-01-15T07:00:00Z","percent":30,"resetsAt":"2027-01-15T08:00:00Z","rollup":"hourly"},
+{"t":"2027-01-15T08:00:00Z","percent":42,"resetsAt":"2027-01-15T13:00:00Z"},
+{"t":"2027-01-15T08:10:00Z","percent":57.5,"resetsAt":"2027-01-15T13:00:00Z"}],
+"weeklyAll":[
+{"t":"2027-01-15T08:00:00Z","percent":12}]},
+"spend":[
+{"t":"2027-01-15T08:01:00Z","used":0.85,"limit":20,"currency":"EUR"}]}]}
