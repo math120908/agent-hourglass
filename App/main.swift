@@ -1,6 +1,11 @@
 import AppKit
 import UsageCore
 
+MainActor.assumeIsolated {
+    _ = NSApplication.shared
+    SnapshotRenderer.runIfRequested()
+}
+
 let lock: InstanceLock
 do {
     lock = try InstanceLock.acquire()

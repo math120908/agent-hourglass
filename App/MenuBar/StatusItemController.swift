@@ -17,7 +17,12 @@ final class StatusItemController: NSObject {
         self.themeStore = themeStore
         super.init()
         popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: PlaceholderPopoverView())
+        let useFixture = CommandLine.arguments.contains("--fixture")
+        let ids = useFixture ? Fixtures.content().accounts.map(\.id) : appState.accounts
+        let root = PopoverRoot(theme: themeStore.theme, initiallyExpanded: PopoverRoot.storedExpansion(ids)) { [appState] in
+            useFixture ? Fixtures.content(now: Date()) : PopoverContent.live(appState)
+        }
+        popover.contentViewController = NSHostingController(rootView: root)
         if let button = statusItem.button {
             button.target = self
             button.action = #selector(togglePopover(_:))
@@ -68,13 +73,5 @@ final class StatusItemController: NSObject {
         let b = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
         let p = popWindow.frame
         NSLog("popover-gap button=%@ popover=%@ gap=%.1f", NSStringFromRect(b), NSStringFromRect(p), b.minY - p.maxY)
-    }
-}
-
-private struct PlaceholderPopoverView: View {
-    var body: some View {
-        Text("Usage")
-            .font(.headline)
-            .frame(width: 320, height: 120)
     }
 }

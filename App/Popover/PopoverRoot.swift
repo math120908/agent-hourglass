@@ -1,0 +1,37 @@
+import SwiftUI
+import UsageCore
+
+/// Switches on the theme. Content comes from a closure so the live app and fixtures share one path.
+struct PopoverRoot: View {
+    var theme: Theme
+    var content: () -> PopoverContent
+    var actions = PopoverActions()
+    @State private var expanded: Set<AccountID>
+
+    init(
+        theme: Theme,
+        initiallyExpanded: Set<AccountID> = [],
+        actions: PopoverActions = PopoverActions(),
+        content: @escaping () -> PopoverContent
+    ) {
+        self.theme = theme
+        self.content = content
+        self.actions = actions
+        _expanded = State(initialValue: initiallyExpanded)
+    }
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { _ in
+            switch theme {
+            case .glass: GlassPopoverBody(content: content(), expanded: $expanded, actions: actions)
+            }
+        }
+    }
+
+    /// Persisted expansion, plus the first account (menu bar account) on open.
+    static func storedExpansion(_ ids: [AccountID]) -> Set<AccountID> {
+        var set = Set(ids.filter { UserDefaults.standard.bool(forKey: "cardExpanded.\($0.rawValue)") })
+        if let first = ids.first { set.insert(first) }
+        return set
+    }
+}
