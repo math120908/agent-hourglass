@@ -27,7 +27,7 @@ public struct PKCE: Sendable {
 
     public static func make(random: (Int) -> [UInt8] = secureRandom) -> PKCE {
         let v = base64url(random(32))
-        return PKCE(verifier: Secret(v), challenge: challenge(for: v), state: base64url(random(16)))
+        return PKCE(verifier: Secret(v), challenge: challenge(for: v), state: base64url(random(32)))
     }
 }
 

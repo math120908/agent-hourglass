@@ -10,7 +10,7 @@ struct PKCETests {
     @Test func makeProducesUnpaddedBase64url() {
         let p = PKCE.make()
         #expect(p.verifier.reveal().count == 43)
-        #expect(p.state.count == 22)
+        #expect(p.state.count == 43)
         #expect(!p.challenge.contains("=") && !p.challenge.contains("+") && !p.challenge.contains("/"))
         #expect(PKCE.make().state != p.state)
     }

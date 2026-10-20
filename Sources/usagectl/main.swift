@@ -34,6 +34,7 @@ func login(_ args: [String]) async throws {
     let (cred, remote) = try await ClaudePKCEFlow().run(loginHint: argValue(args, "--hint")) { url in
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        print("Open this URL if the browser did not open:\n\(url.absoluteString)\n")
         p.arguments = [url.absoluteString]
         try? p.run()
     }
