@@ -98,7 +98,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc func toggle() {
         if popover.isShown { popover.performClose(nil) }
-        else if let b = item.button { popover.show(relativeTo: b.bounds, of: b, preferredEdge: .minY); NSApp.activate(ignoringOtherApps: true) }
+        else if let b = item.button {
+            if let v = popover.contentViewController?.view { v.layoutSubtreeIfNeeded(); popover.contentSize = v.fittingSize }
+            popover.show(relativeTo: b.bounds, of: b, preferredEdge: .minY)
+            NSApp.activate(ignoringOtherApps: true)
+        }
     }
 }
 
