@@ -25,6 +25,7 @@ func fail(_ s: String) -> Never {
 var scope = "user:profile"
 var pollCount = 0
 var loginHint: String?
+var redirectHost = "localhost"
 var argv = Array(CommandLine.arguments.dropFirst())
 func nextArg(_ flag: String) -> String {
     if argv.isEmpty { fail("\(flag) needs a value") }
@@ -37,7 +38,9 @@ while !argv.isEmpty {
     case "--poll": guard let n = Int(nextArg(a)), n > 0 else { fail("--poll needs a positive integer") }
         pollCount = n
     case "--login-hint": loginHint = nextArg(a)
-    default: fail("unknown arg \(a). usage: S1Probe [--scope 'a b'] [--poll N] [--login-hint email]")
+    case "--redirect-host": redirectHost = nextArg(a)
+        guard ["localhost", "127.0.0.1"].contains(redirectHost) else { fail("--redirect-host must be localhost or 127.0.0.1") }
+    default: fail("unknown arg \(a). usage: S1Probe [--scope 'a b'] [--poll N] [--login-hint email] [--redirect-host localhost|127.0.0.1]")
     }
 }
 
@@ -91,23 +94,32 @@ enum Outcome { case code(String), failure(String) }
 final class Box<T> { var value: T?; let sem = DispatchSemaphore(value: 0) }
 
 let queue = DispatchQueue(label: "s1.listener")
-let params = NWParameters.tcp
-params.allowLocalEndpointReuse = false
-params.requiredLocalEndpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: .any)
-let listener: NWListener
-do { listener = try NWListener(using: params) } catch { fail("NWListener create: \(error)") }
+func makeListener(_ host: NWEndpoint.Host, _ port: NWEndpoint.Port) -> NWListener {
+    let params = NWParameters.tcp
+    params.allowLocalEndpointReuse = false
+    params.requiredLocalEndpoint = NWEndpoint.hostPort(host: host, port: port)
+    do { return try NWListener(using: params) } catch { fail("NWListener create \(host): \(error)") }
+}
+
+// Starts a listener and blocks until it is ready; returns the bound port (nil on failure).
+func startListener(_ l: NWListener) -> UInt16? {
+    let b = Box<UInt16>()
+    l.stateUpdateHandler = { st in
+        switch st {
+        case .ready: b.value = l.port?.rawValue; b.sem.signal()
+        case .failed(let e): log("listener failed: \(e)"); b.sem.signal()
+        default: break
+        }
+    }
+    l.newConnectionHandler = handleConnection
+    l.start(queue: queue)
+    b.sem.wait()
+    return b.value
+}
 
 let ready = Box<UInt16>()
 let result = Box<Outcome>()
 var handled = false
-
-listener.stateUpdateHandler = { st in
-    switch st {
-    case .ready: ready.value = listener.port?.rawValue; ready.sem.signal()
-    case .failed(let e): log("listener failed: \(e)"); ready.sem.signal()
-    default: break
-    }
-}
 
 func respond(_ c: NWConnection, _ status: String, _ body: String) {
     let resp = "HTTP/1.1 \(status)\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\n"
@@ -115,7 +127,7 @@ func respond(_ c: NWConnection, _ status: String, _ body: String) {
     c.send(content: Data(resp.utf8), completion: .contentProcessed { _ in c.cancel() })
 }
 
-listener.newConnectionHandler = { conn in
+func handleConnection(_ conn: NWConnection) {
     conn.start(queue: queue)
     conn.receive(minimumIncompleteLength: 1, maximumLength: 16384) { data, _, _, _ in
         guard let data, let req = String(data: data, encoding: .utf8) else { return respond(conn, "400 Bad Request", "bad") }
@@ -124,7 +136,7 @@ listener.newConnectionHandler = { conn in
         let port = ready.value ?? 0
         let host = lines.first { $0.lowercased().hasPrefix("host:") }?.dropFirst(5).trimmingCharacters(in: .whitespaces) ?? ""
         guard !handled, parts.count == 3, parts[0] == "GET",
-              host == "127.0.0.1:\(port)" || host == "localhost:\(port)",
+              ["127.0.0.1:\(port)", "localhost:\(port)", "[::1]:\(port)"].contains(host),
               let comps = URLComponents(string: String(parts[1])), comps.path == "/callback"
         else { return respond(conn, "400 Bad Request", "bad request") }
         handled = true
@@ -144,11 +156,17 @@ listener.newConnectionHandler = { conn in
 }
 
 ccItemMetadata("before")
-listener.start(queue: queue)
-ready.sem.wait()
-guard let port = ready.value, port != 0 else { fail("listener did not bind 127.0.0.1") }
-let redirect = "http://127.0.0.1:\(port)/callback"
-log("listening on \(redirect)")
+// Always bind 127.0.0.1; for localhost also bind ::1 on the same port, since the
+// browser may resolve localhost to either family.
+var listeners = [makeListener("127.0.0.1", .any)]
+guard let port = startListener(listeners[0]), port != 0 else { fail("listener did not bind 127.0.0.1") }
+ready.value = port
+if redirectHost == "localhost" {
+    let v6 = makeListener("::1", NWEndpoint.Port(rawValue: port)!)
+    if startListener(v6) == port { listeners.append(v6) } else { log("WARN: could not bind [::1]:\(port); IPv4 only") }
+}
+let redirect = "http://\(redirectHost):\(port)/callback"
+log("listening on \(redirect) (bound: \(listeners.count == 2 ? "127.0.0.1 + ::1" : "127.0.0.1"))")
 
 var auth = URLComponents(string: authorizeURL)!
 auth.queryItems = [
@@ -171,8 +189,8 @@ opener.executableURL = URL(fileURLWithPath: "/usr/bin/open")
 opener.arguments = [authURL]
 try? opener.run()
 
-if result.sem.wait(timeout: .now() + 300) == .timedOut { listener.cancel(); fail("timeout after 5 min, no callback") }
-listener.cancel()
+if result.sem.wait(timeout: .now() + 300) == .timedOut { listeners.forEach { $0.cancel() }; fail("timeout after 5 min, no callback") }
+listeners.forEach { $0.cancel() }
 let code: String
 switch result.value! {
 case .failure(let m): fail(m)
@@ -206,6 +224,7 @@ treq.httpBody = try! JSONSerialization.data(withJSONObject: [
     "code_verifier": verifier,
     "state": state,
 ])
+log("token request: POST \(tokenURL) JSON redirect_uri=\(redirect)")
 let (tstatus, _, tdata) = http(treq)
 let tjson = (try? JSONSerialization.jsonObject(with: tdata)) as? [String: Any] ?? [:]
 guard tstatus == 200, let accessToken = tjson["access_token"] as? String else {
