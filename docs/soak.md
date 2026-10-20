@@ -10,4 +10,4 @@ Concurrent callers on the same account: third-party /Applications/Claude Usage.a
 Analysis: pokemon_pantheon `workspace/261020-claude-usage-mac/research/soak-429-analysis.md`.
 
 ## In-app run: new backoff (step down one level per 200), e981a40+
-Claude account added in the app 2026-10-20 19:58 local. In progress.
+Claude account added in the app 2026-10-20 19:58 local. Full 2 h run skipped by CK. Partial: `log show` for the app subsystem found 0 lines matching 429/rateLimited between 19:58 and 21:08 local (one query, not cross-checked); history has 19 Claude samples in that window. Third-party Claude Usage.app was running throughout.
