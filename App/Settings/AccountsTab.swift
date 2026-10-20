@@ -58,6 +58,8 @@ struct AccountsTab: View {
                 + "Claude has no revoke endpoint, so the token stays valid on Anthropic's side until it expires."
         case .copilot:
             "This deletes the account's usage history from this Mac. gh is not touched: your gh login is left as is."
+        case .codex:
+            "This deletes the account's usage history from this Mac. ~/.codex and your Codex CLI login are not touched."
         }
     }
 }

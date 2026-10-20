@@ -119,6 +119,7 @@ extension AccountStatus {
         case .ghLoginRemoved: "Not in gh"
         case .schemaError: "Unexpected response"
         case .noData: "No data yet"
+        case .codexNotSignedIn: "Codex not signed in"
         }
     }
 
