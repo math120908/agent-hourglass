@@ -11,12 +11,19 @@ private struct FakeGh {
     init(_ body: String, mode: Int = 0o755) throws {
         dir = FileManager.default.temporaryDirectory.appendingPathComponent("fakegh-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let script = "#!/bin/sh\nD='\(dir.path)'\n" + body + "\n"
+        let script = "#!/bin/sh\nD='\(dir.path)'\n[ \"$1\" = --warmup ] && exit 0\n" + body + "\n"
         try script.write(toFile: dir.appendingPathComponent("gh").path, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: dir.appendingPathComponent("gh").path)
+        // The first exec of a freshly written script pays a one-off macOS policy scan (~0.3 s idle,
+        // multiple seconds under load). Pay it here so tests measure GhTokenSource, not that scan.
+        let warm = Process()
+        warm.executableURL = URL(fileURLWithPath: path)
+        warm.arguments = ["--warmup"]
+        try warm.run()
+        warm.waitUntilExit()
     }
 
-    func source(timeout: Duration = .seconds(5)) -> GhTokenSource {
+    func source(timeout: Duration = .seconds(10)) -> GhTokenSource {
         GhTokenSource(candidates: [dir.appendingPathComponent("nope").path, path], timeout: timeout)
     }
 
@@ -77,7 +84,14 @@ struct GhTokenSourceTests {
         let start = Date()
         await #expect(throws: GhError.timeout) { try await gh.source(timeout: .seconds(2)).token(for: "alice") }
         #expect(Date().timeIntervalSince(start) < 5)
-        let pid = try #require(pid_t(gh.read("pid").trimmingCharacters(in: .whitespacesAndNewlines)))
+        // The pid file is written by the child; under parallel load it can land just after the
+        // timeout fires, so poll briefly instead of reading once.
+        var pidText = ""
+        for _ in 0..<50 where pidText.isEmpty {
+            pidText = gh.read("pid").trimmingCharacters(in: .whitespacesAndNewlines)
+            if pidText.isEmpty { try await Task.sleep(for: .milliseconds(20)) }
+        }
+        let pid = try #require(pid_t(pidText))
         try await Task.sleep(for: .milliseconds(200))
         #expect(kill(pid, 0) != 0)
     }
