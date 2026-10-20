@@ -11,10 +11,11 @@ private struct CountingGh {
         dir = FileManager.default.temporaryDirectory.appendingPathComponent("cpgh-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let path = dir.appendingPathComponent("gh").path
-        try "#!/bin/sh\necho x >> '\(dir.path)/calls'\n\(body)\n".write(toFile: path, atomically: true, encoding: .utf8)
+        try ("#!/bin/sh\n" + fakeScriptWarmupGuard + "echo x >> '\(dir.path)/calls'\n\(body)\n").write(toFile: path, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+        try warmUpFakeScript(at: path)
     }
-    var source: GhTokenSource { GhTokenSource(candidates: [dir.appendingPathComponent("gh").path]) }
+    var source: GhTokenSource { GhTokenSource(candidates: [dir.appendingPathComponent("gh").path], timeout: .seconds(10)) }
     var calls: Int {
         ((try? String(contentsOf: dir.appendingPathComponent("calls"), encoding: .utf8)) ?? "")
             .split(separator: "\n").count

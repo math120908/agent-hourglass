@@ -11,16 +11,10 @@ private struct FakeGh {
     init(_ body: String, mode: Int = 0o755) throws {
         dir = FileManager.default.temporaryDirectory.appendingPathComponent("fakegh-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let script = "#!/bin/sh\nD='\(dir.path)'\n[ \"$1\" = --warmup ] && exit 0\n" + body + "\n"
+        let script = "#!/bin/sh\nD='\(dir.path)'\n" + fakeScriptWarmupGuard + body + "\n"
         try script.write(toFile: dir.appendingPathComponent("gh").path, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: dir.appendingPathComponent("gh").path)
-        // The first exec of a freshly written script pays a one-off macOS policy scan (~0.3 s idle,
-        // multiple seconds under load). Pay it here so tests measure GhTokenSource, not that scan.
-        let warm = Process()
-        warm.executableURL = URL(fileURLWithPath: path)
-        warm.arguments = ["--warmup"]
-        try warm.run()
-        warm.waitUntilExit()
+        try warmUpFakeScript(at: path)
     }
 
     func source(timeout: Duration = .seconds(10)) -> GhTokenSource {
