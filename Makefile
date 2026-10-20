@@ -1,7 +1,10 @@
 ID ?= FA3D8189AA4D9C1371B314CBDD1278672754EE99
 APP := build/Build/Products/Release/ClaudeUsage.app
 
-.PHONY: test app sign install hooks
+.PHONY: test app sign install hooks icon
+
+icon:
+	scripts/make-icon.sh
 
 test:
 	swift test

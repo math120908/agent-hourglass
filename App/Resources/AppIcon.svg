@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#2B2522" flood-opacity="0.28"/>
+    </filter>
+    <filter id="rough" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <feTurbulence type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="7"/>
+      <feDisplacementMap in="SourceGraphic" scale="9"/>
+    </filter>
+    <filter id="wash" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="3" seed="3"/>
+      <feDisplacementMap in="SourceGraphic" scale="30"/>
+      <feGaussianBlur stdDeviation="4"/>
+    </filter>
+    <radialGradient id="paper" cx="50%" cy="40%" r="70%">
+      <stop offset="0" stop-color="#FAF5EC"/><stop offset="1" stop-color="#EFE5D6"/>
+    </radialGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#paper)" filter="url(#shadow)"/>
+  <g transform="translate(0 70)">
+  <!-- watercolor wash: filled arc band up to ~40% -->
+  <g filter="url(#wash)" opacity="0.55">
+    <path d="M232 640 A280 280 0 0 1 792 640 L712 640 A200 200 0 0 0 312 640 Z" fill="#E9B79E"/>
+    <path d="M232 640 A280 280 0 0 1 425 374 L450 450 A200 200 0 0 0 312 640 Z" fill="#D97757"/>
+  </g>
+  <g filter="url(#rough)" fill="none" stroke="#2B2522" stroke-linecap="round" stroke-linejoin="round">
+    <!-- outer arc, drawn twice for sketchy feel -->
+    <path d="M222 642 C214 470 352 352 512 350 C676 348 806 470 802 640" stroke-width="30"/>
+    <path d="M236 648 C232 488 360 366 516 362 C668 360 790 478 790 636" stroke-width="9" opacity="0.6"/>
+    <!-- base line -->
+    <path d="M206 646 C380 652 640 638 818 646" stroke-width="24"/>
+    <!-- ticks -->
+    <path d="M284 600 L322 596" stroke-width="22"/>
+    <path d="M318 476 L350 494" stroke-width="22"/>
+    <path d="M410 404 L428 438" stroke-width="22"/>
+    <path d="M512 380 L514 420" stroke-width="22"/>
+    <path d="M614 404 L596 438" stroke-width="22"/>
+    <path d="M706 476 L674 494" stroke-width="22"/>
+    <path d="M740 600 L702 596" stroke-width="22"/>
+    <!-- needle ~40% -->
+    <path d="M512 640 L430 426" stroke="#C4603F" stroke-width="34"/>
+  </g>
+  <!-- sparkle at pivot -->
+  <g filter="url(#rough)" stroke="#D97757" stroke-width="22" stroke-linecap="round">
+    <circle cx="512" cy="640" r="44" fill="#2B2522" stroke="none"/>
+    <path d="M512 586 L512 694 M458 640 L566 640 M474 602 L550 678 M550 602 L474 678"/>
+  </g>
+  </g>
+</svg>
