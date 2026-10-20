@@ -23,8 +23,8 @@ struct PopoverRoot: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { _ in
             switch theme {
-            // Instrument renders Glass until the Instrument popover lands.
-            case .glass, .instrument: GlassPopoverBody(content: content(), expanded: $expanded, actions: actions)
+            case .glass: GlassPopoverBody(content: content(), expanded: $expanded, actions: actions)
+            case .instrument: InstrumentPopoverBody(content: content(), expanded: $expanded, actions: actions)
             }
         }
     }

@@ -23,3 +23,18 @@ import UsageCore
     }
     return PopoverRoot(theme: .glass) { c }
 }
+
+#Preview("Instrument collapsed") {
+    PopoverRoot(theme: .instrument) { Fixtures.content() }
+}
+
+#Preview("Instrument expanded") {
+    let c = Fixtures.content()
+    return PopoverRoot(theme: .instrument, initiallyExpanded: Set(c.accounts.map(\.id))) { c }
+}
+
+#Preview("Instrument expanded dark") {
+    let c = Fixtures.content()
+    return PopoverRoot(theme: .instrument, initiallyExpanded: Set(c.accounts.map(\.id))) { c }
+        .preferredColorScheme(.dark)
+}

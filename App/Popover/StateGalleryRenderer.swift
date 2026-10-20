@@ -3,7 +3,8 @@ import SwiftUI
 import UsageCore
 
 /// Debug: `ClaudeUsage --render-states <dir>` writes one popover + one menu bar icon PNG per
-/// account state (spec §9) in light and dark, then exits.
+/// account state (spec §9) in light and dark, then exits. `--theme instrument` writes
+/// `instr-state-<name>-<mode>.png` popovers instead (no icons).
 @MainActor
 enum StateGalleryRenderer {
     struct Case {
@@ -16,6 +17,7 @@ enum StateGalleryRenderer {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: "--render-states"), i + 1 < args.count else { return }
         let dir = URL(fileURLWithPath: args[i + 1])
+        let theme: Theme = args.firstIndex(of: "--theme").flatMap { $0 + 1 < args.count ? Theme(rawValue: args[$0 + 1]) : nil } ?? .glass
         let base = Fixtures.content()
         for c in cases(base) {
             var content = base
@@ -29,7 +31,11 @@ enum StateGalleryRenderer {
                 now: base.now
             )
             for (mode, ap) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-                let root = PopoverRoot(theme: .glass, initiallyExpanded: [c.account.id]) { content }
+                let root = PopoverRoot(theme: theme, initiallyExpanded: [c.account.id]) { content }
+                if theme == .instrument {
+                    SnapshotRenderer.write(root, appearance: ap, to: dir.appendingPathComponent("instr-state-\(c.name)-\(mode).png"))
+                    continue
+                }
                 SnapshotRenderer.write(root, appearance: ap, to: dir.appendingPathComponent("state-\(c.name)-\(mode).png"))
                 writeIcon(icon, appearance: ap, to: dir.appendingPathComponent("state-\(c.name)-icon-\(mode).png"))
             }
