@@ -1,9 +1,10 @@
 import SwiftUI
 import UsageCore
 
-/// General tab (spec §10.5). Theme picker is added in P7; launch at login lands in P6.
+/// General tab (spec §10.5). Theme picker is added in P7.
 struct GeneralTab: View {
     @Bindable var model: SettingsModel
+    @State private var loginItem = LoginItem(service: MainAppLoginService())
 
     var body: some View {
         Form {
@@ -26,14 +27,27 @@ struct GeneralTab: View {
                 .disabled(model.entries.isEmpty)
             }
             Section {
-                Toggle("Launch at login", isOn: .constant(false))
-                    .disabled(true)
-                Text("Coming in a later update.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                Toggle("Launch at login", isOn: loginBinding)
+                if loginItem.needsApproval {
+                    HStack {
+                        Text("Needs approval in System Settings.")
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Open Login Items") { MainAppLoginService.openSystemSettings() }
+                    }
+                }
+                if let err = loginItem.lastError {
+                    Text(err).font(.system(size: 11)).foregroundStyle(.red)
+                }
             }
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
+        .onAppear { loginItem.refresh() }
+    }
+
+    private var loginBinding: Binding<Bool> {
+        Binding(get: { loginItem.isEnabled }, set: { loginItem.set($0) })
     }
 
     private var menuBarBinding: Binding<AccountID?> {
