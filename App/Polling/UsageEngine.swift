@@ -15,8 +15,11 @@ final class UsageEngine {
     /// Usage history; nil when the store could not be opened (polling continues without it).
     let history: HistoryStore?
     private var maintenanceTimer: Timer?
-    /// Raw-sample window in days until Settings (P3) supplies it.
-    private static let rawDays = 90
+    /// Raw-sample window in days, from Settings > History (30 or 90).
+    nonisolated static let rawDaysKey = "historyRawDays"
+    nonisolated static var rawDays: Int {
+        UserDefaults.standard.integer(forKey: rawDaysKey) == 30 ? 30 : 90
+    }
     private var pathTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
 

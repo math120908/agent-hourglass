@@ -3,12 +3,13 @@ import SwiftUI
 import UsageCore
 
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case general = "General", accounts = "Accounts", about = "About"
+    case general = "General", accounts = "Accounts", history = "History", about = "About"
     var id: String { rawValue }
     var symbol: String {
         switch self {
         case .general: "gearshape"
         case .accounts: "person.2"
+        case .history: "chart.xyaxis.line"
         case .about: "info.circle"
         }
     }
@@ -27,13 +28,14 @@ struct SettingsRoot: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: 300)
+            .frame(width: 400)
             .padding(.top, 14)
             .padding(.bottom, 4)
             Group {
                 switch tab {
                 case .general: GeneralTab(model: model)
                 case .accounts: AccountsTab(model: model, addClaude: addClaude)
+                case .history: HistoryTab(settings: HistorySettings.shared)
                 case .about: AboutTab(model: model)
                 }
             }

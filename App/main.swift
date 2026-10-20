@@ -4,6 +4,7 @@ import UsageCore
 MainActor.assumeIsolated {
     _ = NSApplication.shared
     SnapshotRenderer.runIfRequested()
+    HistorySnapshotRenderer.runIfRequested()
 }
 
 let lock: InstanceLock

@@ -15,6 +15,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private let addAccount: AddAccountWindowController
     private let settings: SettingsWindowController
     private let settingsBackend: EngineSettingsBackend
+    private let historyWindow: HistoryWindowController
 
     init(appState: AppState, themeStore: ThemeStore, engine: UsageEngine) {
         self.appState = appState
@@ -27,6 +28,10 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             model: SettingsModel(appState: appState, backend: settingsBackend),
             addClaude: { addAccount.show() }
         )
+        let backend = settingsBackend
+        historyWindow = HistoryWindowController(engine: engine) { await backend.load().entries }
+        HistorySettings.shared.store = engine.history
+        HistorySettings.shared.onDelete = { [historyWindow] in historyWindow.model.load() }
         super.init()
         engine.setUserInterval(minutes: settings.model.intervalMinutes)
         settings.model.reload()
@@ -36,6 +41,10 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         let ids = useFixture ? Fixtures.content().accounts.map(\.id) : appState.accounts
         let actions = PopoverActions(
             refresh: { [engine] in engine.refresh() },
+            history: { [weak self] in
+                self?.popover.performClose(nil)
+                self?.historyWindow.show()
+            },
             settings: { [weak self] in
                 self?.popover.performClose(nil)
                 self?.settings.show()
