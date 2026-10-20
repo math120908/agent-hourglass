@@ -33,7 +33,10 @@ final class UsageEngine {
             clients: [],
             clock: ContinuousClock(),
             now: { Date() },
-            recorder: history
+            recorder: history,
+            onSaveState: { [appState] id, failed in
+                await MainActor.run { appState.setSaveFailed(id, failed) }
+            }
         ) { [appState] id, outcome in
             await MainActor.run { appState.apply(id, outcome) }
             Self.log.info("result id=\(id.rawValue.prefix(14), privacy: .public) \(Self.summary(outcome), privacy: .public)")

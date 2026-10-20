@@ -170,3 +170,37 @@ struct RefreshLockTests {
         #expect(counter.events.count == 1)
     }
 }
+
+struct SaveFailedWiringTests {
+    @MainActor @Test func keychainWriteFailureReachesAppState() async throws {
+        let id = AccountID(kind: .claude, remoteID: "acct-7")
+        let log = EventLog()
+        let provider = FakeProvider(log: log)
+        let store = LoggingStore(log: log)
+        try store.inner.write(Credential(kind: .claude, access: Secret("tok-old"), refresh: Secret("ref-1"), expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: id, label: "t")
+        store.inner.writeError = CredentialStoreError.unexpected(status: -1)
+        let t = TimeBox()
+        let client = AccountClient(id: id, provider: provider, http: HTTPClient(), store: store, clock: ContinuousClock(), now: { t.now })
+        let state = AppState()
+        let poller = Poller(
+            clients: [client],
+            clock: ContinuousClock(),
+            now: { t.now },
+            jitter: { 0 },
+            onSaveState: { id, failed in await MainActor.run { state.setSaveFailed(id, failed) } }
+        ) { id, outcome in await MainActor.run { state.apply(id, outcome) } }
+        await poller.refreshAll(force: true)
+        #expect(state.saveFailed == [id])
+        store.inner.writeError = nil
+        t.advance(3600)
+        await poller.refreshAll(force: true)
+        #expect(state.saveFailed.isEmpty)
+    }
+}
+
+private final class TimeBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var t = Date()
+    var now: Date { lock.withLock { t } }
+    func advance(_ s: TimeInterval) { lock.withLock { t += s } }
+}

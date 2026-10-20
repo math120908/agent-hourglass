@@ -72,12 +72,12 @@ struct GlassAccountCard: View {
             HStack(spacing: 9) {
                 glyph
                 VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 5) {
-                        Text(account.name)
-                            .font(.system(size: 12.5, weight: .semibold))
-                            .lineLimit(1)
-                            .fixedSize()
-                        if let plan = card.planTag { StatusChipView(text: plan) }
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 5) {
+                            nameText.fixedSize()
+                            if let plan = card.planTag { StatusChipView(text: plan) }
+                        }
+                        nameText
                     }
                     Text(subtitle)
                         .font(.system(size: 10.5))
@@ -86,7 +86,9 @@ struct GlassAccountCard: View {
                 }
                 .layoutPriority(1)
                 Spacer(minLength: 4)
-                if let chip = card.statusChip { statusChip(Self.fitsInRow(chip) ? chip : Self.shortChip(chip)) }
+                if let chip = card.statusChip, Self.fitsInRow(chip) || chip == "Response format changed" {
+                    statusChip(Self.fitsInRow(chip) ? chip : Self.shortChip(chip))
+                }
                 GlassMeterBar(fraction: card.headline?.fraction, paceTick: nil, color: headlineColor, height: 4)
                     .frame(width: 34)
                 Text(headlinePercent)
@@ -103,6 +105,14 @@ struct GlassAccountCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    /// Full name wins over the plan tag; the tag drops first when the row is tight.
+    private var nameText: some View {
+        Text(account.name)
+            .font(.system(size: 12.5, weight: .semibold))
+            .lineLimit(1)
+            .truncationMode(.tail)
     }
 
     private var glyph: some View {

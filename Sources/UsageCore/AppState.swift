@@ -32,6 +32,11 @@ public final class AppState {
         }
     }
 
+    /// Records whether the account's rotated credential could not be written to the Keychain.
+    public func setSaveFailed(_ id: AccountID, _ failed: Bool) {
+        if failed { saveFailed.insert(id) } else { saveFailed.remove(id) }
+    }
+
     /// Fresh iff the last success is younger than 2 × the effective interval.
     public func isFresh(_ id: AccountID) -> Bool {
         guard let t = lastSuccess[id] else { return false }

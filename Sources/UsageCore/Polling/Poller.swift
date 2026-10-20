@@ -7,6 +7,8 @@ public actor Poller {
     public static let staleOnOpen: TimeInterval = 60
 
     public typealias OnResult = @Sendable (AccountID, FetchOutcome) async -> Void
+    /// Reports whether the account's rotated credential failed to persist to the Keychain.
+    public typealias OnSaveState = @Sendable (AccountID, Bool) async -> Void
 
     private var clients: [AccountID: AccountClient] = [:]
     private var order: [AccountID] = []
@@ -19,6 +21,7 @@ public actor Poller {
     private let jitter: @Sendable () -> Double
     private let floor: Duration
     private let onResult: OnResult
+    private let onSaveState: OnSaveState?
     private let recorder: (any HistoryRecording)?
 
     public private(set) var schedule = PollSchedule()
@@ -35,8 +38,10 @@ public actor Poller {
         floor: Duration = .seconds(60),
         jitter: @escaping @Sendable () -> Double = { Double.random(in: -0.05...0.05) },
         recorder: (any HistoryRecording)? = nil,
+        onSaveState: OnSaveState? = nil,
         onResult: @escaping OnResult
     ) {
+        self.onSaveState = onSaveState
         self.clock = clock
         self.now = now
         self.floor = floor
@@ -159,6 +164,7 @@ public actor Poller {
         nextDue[id] = due
         // History is best-effort: a write failure never affects polling.
         if case .success(let snap) = outcome, let recorder { try? await recorder.record(snap) }
+        if let onSaveState { await onSaveState(id, await client.saveFailed) }
         await onResult(id, outcome)
     }
 
