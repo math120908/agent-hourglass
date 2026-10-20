@@ -1,0 +1,8 @@
+{
+  "limits": [
+    {"kind": "session", "group": "session", "percent": 3, "resets_at": "2026-10-20T18:00:00Z", "scope": null},
+    {"kind": "mystery_window", "group": "other", "percent": 9, "resets_at": null, "scope": null}
+  ],
+  "amber_cistern": {"flag": true},
+  "iguana_necktie": {"percent": 77}
+}

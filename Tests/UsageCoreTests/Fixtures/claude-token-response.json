@@ -1,0 +1,11 @@
+{
+  "access_token": "x",
+  "refresh_token": "x",
+  "token_type": "Bearer",
+  "expires_in": 28800,
+  "refresh_token_expires_in": 2592000,
+  "scope": "user:profile",
+  "token_uuid": "TOKEN_ID",
+  "account": {"uuid": "ACCOUNT_ID", "email_address": "user@example.com"},
+  "organization": {"uuid": "ORG_ID", "name": "Example Org"}
+}

@@ -1,0 +1,11 @@
+{
+  "limits": [
+    {"kind": "session", "group": "session", "percent": 50, "resets_at": "2026-10-20T18:00:00Z", "scope": null}
+  ],
+  "spend": {
+    "used": {"amount_minor": 85, "exponent": 2, "currency": "EUR"},
+    "limit": {"amount_minor": 2000, "exponent": 2, "currency": "EUR"},
+    "enabled": 0,
+    "disabled_reason": "out_of_credits"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "limits": [
+    {"kind": "session", "group": "session", "percent": 1, "resets_at": "2026-10-20T18:00:00Z", "scope": null},
+    {"kind": "weekly_all", "group": "weekly", "percent": 39, "resets_at": "2026-10-24T09:00:00Z", "scope": null},
+    {"kind": "weekly_scoped", "group": "weekly", "percent": 21, "resets_at": "2026-10-24T09:00:00Z", "scope": {"model": {"display_name": "Fable"}}}
+  ],
+  "spend": {
+    "used": {"amount_minor": 85, "exponent": 2, "currency": "EUR"},
+    "limit": {"amount_minor": 2000, "exponent": 2, "currency": "EUR"},
+    "cap": {"amount_minor": 2000, "exponent": 2, "currency": "EUR"},
+    "percent": 4,
+    "enabled": 0,
+    "disabled_reason": "out_of_credits"
+  },
+  "five_hour": {"utilization": 1, "resets_at": "2026-10-20T18:00:00Z"},
+  "seven_day": {"utilization": 39, "resets_at": "2026-10-24T09:00:00Z"},
+  "seven_day_opus": null,
+  "amber_cistern": {"flag": true},
+  "iguana_necktie": 7
+}
