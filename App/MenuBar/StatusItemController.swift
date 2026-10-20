@@ -67,8 +67,10 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             resize: { [weak self] height in self?.resize(to: height) }
         )
         makeRoot = { [appState] theme in
-            PopoverRoot(
+            let content = useFixture ? Fixtures.content(now: Date()) : PopoverContent.live(appState)
+            return PopoverRoot(
                 theme: theme,
+                initiallyExpanded: Set(content.accounts.map(\.id)),
                 actions: actions
             ) { useFixture ? Fixtures.content(now: Date()) : PopoverContent.live(appState) }
         }
@@ -131,12 +133,15 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         }
     }
 
-    /// Pops the right-click menu under the icon without assigning statusItem.menu, so left-click keeps the popover.
+    /// Pops the right-click menu under the icon; statusItem.menu is detached after, so left-click keeps the popover.
     private func showMenu(_ sender: NSStatusBarButton) {
         if popover.isShown { popover.performClose(sender) }
         let menu = buildMenu()
         NSLog("status-menu items=%@", menu.items.map { $0.isSeparatorItem ? "---" : $0.title }.joined(separator: " | "))
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
+        // Attach for one click so AppKit anchors it under the icon like a native status menu, then detach.
+        statusItem.menu = menu
+        sender.performClick(nil)
+        statusItem.menu = nil
     }
 
     func buildMenu() -> NSMenu {
