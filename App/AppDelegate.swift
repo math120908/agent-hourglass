@@ -23,5 +23,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let i = args.firstIndex(of: "--add-copilot"), i + 1 < args.count {
             statusItem?.debugAddCopilot(args[i + 1])
         }
+        // Debug: `--toggle-first-card` opens the popover, then flips the first card twice (resize check).
+        if args.contains("--toggle-first-card") {
+            for (n, delay) in [2.0, 4.0, 6.0].enumerated() {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    if n == 0 { self?.statusItem?.debugOpen() } else { self?.statusItem?.debugToggleFirstCard() }
+                }
+            }
+        }
     }
 }

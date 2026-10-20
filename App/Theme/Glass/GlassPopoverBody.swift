@@ -5,6 +5,7 @@ struct GlassPopoverBody: View {
     var content: PopoverContent
     @Binding var expanded: Set<AccountID>
     var actions: PopoverActions
+    @State private var heights = PopoverHeights()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -12,6 +13,7 @@ struct GlassPopoverBody: View {
                 .padding(.horizontal, 14)
                 .padding(.top, 12)
                 .padding(.bottom, 9)
+                .measuresChrome()
             ScrollView {
                 VStack(spacing: 7) {
                     if content.accounts.isEmpty {
@@ -32,13 +34,22 @@ struct GlassPopoverBody: View {
                 }
                 .padding(.horizontal, 9)
                 .padding(.bottom, 2)
+                .measuresContent()
             }
+            .frame(height: heights.viewport)
             .scrollBounceBehavior(.basedOnSize)
-            footer
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
+            VStack(spacing: 0) {
+                footer
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+            }
+            .measuresChrome()
         }
         .frame(width: 340)
+        .collectsHeights($heights)
+        .onChange(of: heights, initial: true) { _, h in
+            if h.content > 0 { actions.resize(h.chrome + h.viewport) }
+        }
         .background(.regularMaterial)
     }
 

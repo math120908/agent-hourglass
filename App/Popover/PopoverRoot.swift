@@ -27,6 +27,10 @@ struct PopoverRoot: View {
             case .instrument: InstrumentPopoverBody(content: content(), expanded: $expanded, actions: actions)
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .debugToggleFirstCard)) { _ in
+            guard let id = content().accounts.first?.id else { return }
+            if expanded.contains(id) { expanded.remove(id) } else { expanded.insert(id) }
+        }
     }
 
     /// Persisted expansion, plus the first account (menu bar account) on open.

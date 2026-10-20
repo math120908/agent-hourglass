@@ -63,7 +63,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             diagnostics: { [weak self] in
                 self?.popover.performClose(nil)
                 self?.settings.show(tab: .about)
-            }
+            },
+            resize: { [weak self] height in self?.resize(to: height) }
         )
         makeRoot = { [appState] theme in
             PopoverRoot(
@@ -72,7 +73,9 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
                 actions: actions
             ) { useFixture ? Fixtures.content(now: Date()) : PopoverContent.live(appState) }
         }
-        popover.contentViewController = NSHostingController(rootView: makeRoot(themeStore.theme))
+        let host = NSHostingController(rootView: makeRoot(themeStore.theme))
+        host.sizingOptions = []  // contentSize is driven only by resize(to:)
+        popover.contentViewController = host
         historyWindow.theme = themeStore.theme
         if let button = statusItem.button {
             button.target = self
@@ -100,10 +103,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     /// Live theme switch: rebuilds the popover root and an open History window.
     private func apply(_ theme: Theme) {
         (popover.contentViewController as? NSHostingController<PopoverRoot>)?.rootView = makeRoot(theme)
-        if popover.isShown, let view = popover.contentViewController?.view {
-            view.layoutSubtreeIfNeeded()
-            popover.contentSize = view.fittingSize
-        }
+        if popover.isShown { fitToContent() }
         historyWindow.theme = theme
         NSLog("theme-switch %@", theme.rawValue)
     }
@@ -123,24 +123,65 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             popover.performClose(sender)
             return
         }
-        if let view = popover.contentViewController?.view {
-            view.layoutSubtreeIfNeeded()
-            popover.contentSize = view.fittingSize
-        }
+        fitToContent()
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
-        logGap(button: sender)
+        logGap(button: sender, tag: "open")
+    }
+
+    /// Before show: lay the root out off-window and let its height preferences land, so resize(to:)
+    /// sets contentSize from the current content (first open and every reopen, never a stale size).
+    private func fitToContent() {
+        guard let view = popover.contentViewController?.view else { return }
+        if view.frame.height < 1 { view.frame = NSRect(x: 0, y: 0, width: 340, height: PopoverSizing.maxHeight) }
+        view.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.03))
+        view.layoutSubtreeIfNeeded()
+    }
+
+    /// Applies the SwiftUI-reported ideal height, capped at 600 pt. Idempotent, so a repeat report is a no-op.
+    private func resize(to ideal: CGFloat) {
+        let target = NSSize(width: 340, height: PopoverSizing.popoverHeight(Double(ideal)))
+        guard popover.contentSize != target else { return }
+        let before = popover.contentSize
+        guard popover.isShown else { popover.contentSize = target; return }
+        popover.animates = true
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.18
+            ctx.allowsImplicitAnimation = true
+            popover.contentSize = target
+        }, completionHandler: { [weak self] in
+            // Popover window frame settles a beat after the animation group; log once it has.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                guard let self, let button = self.statusItem.button else { return }
+                self.logGap(button: button, tag: "resize \(Int(before.height))->\(Int(target.height))")
+            }
+        })
+    }
+
+    func debugOpen() {
+        if !popover.isShown, let b = statusItem.button { togglePopover(b) }
+    }
+
+    /// Debug: `--toggle-first-card` flips the first card's expansion (used to verify live resize).
+    func debugToggleFirstCard() {
+        if !popover.isShown, let b = statusItem.button { togglePopover(b) }
+        NotificationCenter.default.post(name: .debugToggleFirstCard, object: nil)
     }
 
     func popoverWillShow(_ notification: Notification) { engine.setForeground(true) }
 
     func popoverDidClose(_ notification: Notification) { engine.setForeground(false) }
 
-    private func logGap(button: NSStatusBarButton) {
+    private func logGap(button: NSStatusBarButton, tag: String) {
         guard ProcessInfo.processInfo.environment["CU_LOG_POPOVER_GAP"] != nil,
               let buttonWindow = button.window,
               let popWindow = popover.contentViewController?.view.window else { return }
         let b = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
         let p = popWindow.frame
-        NSLog("popover-gap button=%@ popover=%@ gap=%.1f", NSStringFromRect(b), NSStringFromRect(p), b.minY - p.maxY)
+        NSLog("popover-gap [%@] content=%@ button=%@ popover=%@ gap=%.1f", tag, NSStringFromSize(popover.contentSize), NSStringFromRect(b), NSStringFromRect(p), b.minY - p.maxY)
     }
+}
+
+extension Notification.Name {
+    static let debugToggleFirstCard = Notification.Name("debugToggleFirstCard")
 }
