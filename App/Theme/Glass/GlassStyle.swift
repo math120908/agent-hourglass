@@ -10,7 +10,7 @@ enum GlassStyle {
 
     /// Lighter text variant of a chip tint for the dark card (macOS 14 has no Color.mix).
     static func darkText(_ tint: Color) -> Color {
-        tint == critical ? Color(red: 1.0, green: 0.93, blue: 0.91) : Color(red: 1.0, green: 0.84, blue: 0.55)
+        tint == critical ? Color(red: 1.0, green: 0.93, blue: 0.91) : Color(red: 1.0, green: 0.92, blue: 0.74)
     }
 
     static func accent(_ kind: ProviderKind) -> Color { kind == .claude ? claude : copilot }

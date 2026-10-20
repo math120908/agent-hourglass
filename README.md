@@ -28,6 +28,15 @@ Settings > Accounts:
 - **Add Claude account...** opens the browser OAuth login. The token is stored in the Keychain under service `cc.kuoc.claude-usage`. The app never reads Claude Code's own credential.
 - **Add Copilot account...** uses the GitHub CLI. Install `gh` (Homebrew) and run `gh auth login` first; the app asks `gh` for the token on each poll and does not store it.
 
+## Themes
+
+Two looks, switchable at any time in Settings > General > **Theme**:
+
+- **Glass** (default): frosted cards per account.
+- **Instrument**: ring gauges in a hairline list, larger figures in History.
+
+The choice is stored in `UserDefaults` key `theme` and applies immediately to the menu bar icon, the popover, and an open History window. From a shell: `defaults write cc.kuoc.claude-usage theme instrument` (or `glass`).
+
 ## History and export
 
 Usage samples are kept in a local SQLite file. Raw samples are kept for 90 days (30 if `historyRawDays` is set to 30, or automatically if the file grows past 100 MB), then rolled up to hourly points kept for 2 years.
@@ -72,7 +81,7 @@ If launch at login was on, turn it off in Settings first (or remove ClaudeUsage 
 Not part of a normal install. These exist for testing and must not be used with shipped builds:
 
 - `usagectl` (CLI harness and soak, `swift build -c release --product usagectl`). Uses its own Keychain service `cc.kuoc.claude-usage.cli` and writes `soak.log`, `usagectl-accounts.json`, `usagectl.lock` (all 600) into the app support dir.
-- App launch args `--fixture`, `--render-*` (snapshot renderers), `--simulate-keychain-write-failure`. Debug-only paths; not for daily use.
+- App launch args `--fixture`, `--render-*` (snapshot renderers), `--simulate-keychain-write-failure`. `--theme instrument` (or `glass`) selects which theme the `--render-states` and `--render-history` renderers draw; default Glass. Debug-only paths; not for daily use.
 - `make sign ID=<sha1>`, `make hooks` (pre-commit secret-scan + source-guards).
 
 Release checks: `docs/release-checklist.md`.

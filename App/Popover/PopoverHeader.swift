@@ -34,9 +34,15 @@ struct PopoverHeader: View {
         }
     }
 
+    @Environment(\.colorScheme) private var scheme
+
+    /// Dark mode lifts both dots to >= 4.5:1 on the popover material (system green measured 3.7, amber 2.8).
     private var dotColor: Color {
         if content.isOffline { return .secondary }
-        return content.attentionCount > 0 ? GlassStyle.warning : Color.green
+        if content.attentionCount > 0 {
+            return scheme == .dark ? Color(red: 1.0, green: 0.82, blue: 0.45) : GlassStyle.warning
+        }
+        return scheme == .dark ? Color(red: 0.59, green: 0.93, blue: 0.59) : Color.green
     }
 
     private func iconButton(_ symbol: String, _ help: String, _ action: @escaping () -> Void) -> some View {

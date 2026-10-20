@@ -121,7 +121,7 @@ struct InstrumentMeterGrid: View {
     private func textColor(_ s: Meter.Severity) -> Color {
         guard scheme == .dark else { return color(s) }
         switch s {
-        case .normal: return kind == .claude ? Color(red: 1.0, green: 0.80, blue: 0.66) : Color(red: 0.88, green: 0.82, blue: 1.0)
+        case .normal: return kind == .claude ? Color(red: 1.0, green: 0.89, blue: 0.81) : Color(red: 0.88, green: 0.82, blue: 1.0)
         case .warning: return Color(red: 1.0, green: 0.82, blue: 0.45)
         case .critical: return InstrumentAccountRow.darkCritical
         }

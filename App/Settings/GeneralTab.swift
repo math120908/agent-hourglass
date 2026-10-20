@@ -1,13 +1,20 @@
 import SwiftUI
 import UsageCore
 
-/// General tab (spec §10.5). Theme picker is added in P7.
+/// General tab (spec §10.5). The theme picker writes `UserDefaults` key `theme`; ThemeStore applies it live.
 struct GeneralTab: View {
     @Bindable var model: SettingsModel
+    @AppStorage(ThemeStore.key) private var theme: Theme = .default
     @State private var loginItem = LoginItem(service: MainAppLoginService())
 
     var body: some View {
         Form {
+            Section {
+                Picker("Theme", selection: $theme) {
+                    Text("Glass").tag(Theme.glass)
+                    Text("Instrument").tag(Theme.instrument)
+                }
+            }
             Section {
                 Picker("Refresh every", selection: $model.intervalMinutes) {
                     ForEach(SettingsModel.intervals, id: \.self) { m in

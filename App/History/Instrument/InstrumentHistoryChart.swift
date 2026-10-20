@@ -78,7 +78,8 @@ struct InstrumentHistoryChart: View {
         switch s {
         case .session: GlassStyle.claude
         case .weekly: HistoryChart.weekly
-        case .model, .copilot: GlassStyle.copilot
+        case .model: HistoryChart.model
+        case .copilot: GlassStyle.copilot
         }
     }
 
@@ -101,7 +102,7 @@ struct InstrumentHistoryChart: View {
             : [("Session", value(.session, at: t), GlassStyle.claude), ("Weekly", value(.weekly, at: t), HistoryChart.weekly)]
         if kind == .claude {
             for n in Set(visible.filter { $0.style == .model }.map(\.name)).sorted() {
-                rows.append((n, value(.model, name: n, at: t), GlassStyle.copilot))
+                rows.append((n, value(.model, name: n, at: t), HistoryChart.model))
             }
         }
         return VStack(alignment: .leading, spacing: 2) {

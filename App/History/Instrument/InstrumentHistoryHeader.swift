@@ -59,7 +59,7 @@ struct InstrumentHistoryView: View {
                     let off = model.hiddenModels.contains(n)
                     Button {
                         if off { model.hiddenModels.remove(n) } else { model.hiddenModels.insert(n) }
-                    } label: { swatch(GlassStyle.copilot, dashed: false, n) }
+                    } label: { swatch(HistoryChart.model, dashed: false, n) }
                         .buttonStyle(.plain)
                         .opacity(off ? 0.5 : 1)
                         .help(off ? "Show \(n)" : "Hide \(n)")

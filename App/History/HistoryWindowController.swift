@@ -9,6 +9,9 @@ final class HistoryWindowController: NSObject, NSWindowDelegate {
     private let engine: UsageEngine
     private let entries: () async -> [AccountEntry]
     private var window: NSWindow?
+    var theme: Theme = .default {
+        didSet { (window?.contentViewController as? NSHostingController<HistoryView>)?.rootView = HistoryView(model: model, theme: theme) }
+    }
 
     init(engine: UsageEngine, entries: @escaping () async -> [AccountEntry]) {
         self.engine = engine
@@ -18,7 +21,7 @@ final class HistoryWindowController: NSObject, NSWindowDelegate {
 
     func show(account: AccountID? = nil) {
         if window == nil {
-            let w = NSWindow(contentViewController: NSHostingController(rootView: HistoryView(model: model)))
+            let w = NSWindow(contentViewController: NSHostingController(rootView: HistoryView(model: model, theme: theme)))
             w.title = "Usage History"
             w.titleVisibility = .hidden
             w.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]

@@ -12,6 +12,8 @@ struct HistoryChart: View {
     @Environment(\.colorScheme) private var scheme
 
     static let weekly = Color(red: 0.55, green: 0.49, blue: 0.96)
+    /// Per-model lines (e.g. Fable): teal, so they never read as the dashed purple weekly line.
+    static let model = Color(red: 0.13, green: 0.66, blue: 0.62)
 
     private var visible: [ChartLine] { lines.filter { !($0.style == .model && hidden.contains($0.name)) } }
 
@@ -82,7 +84,7 @@ struct HistoryChart: View {
         switch s {
         case .session: GlassStyle.claude
         case .weekly: Self.weekly
-        case .model: GlassStyle.copilot
+        case .model: Self.model
         case .copilot: GlassStyle.copilot
         }
     }
@@ -120,7 +122,7 @@ struct HistoryChart: View {
         if kind == .copilot { return [("Premium", value(.copilot, at: t), GlassStyle.copilot)] }
         var out: [(String, Double?, Color)] = [("Session", value(.session, at: t), GlassStyle.claude), ("Weekly", value(.weekly, at: t), Self.weekly)]
         for n in Set(visible.filter { $0.style == .model }.map(\.name)).sorted() {
-            out.append((n, value(.model, name: n, at: t), GlassStyle.copilot))
+            out.append((n, value(.model, name: n, at: t), Self.model))
         }
         return out
     }

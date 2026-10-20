@@ -41,7 +41,8 @@ struct InstrumentAccountRow: View {
     }
 
     /// Dims stale data but not the status text explaining why, so that text keeps its contrast.
-    private var dimOpacity: Double { card.isDimmed ? 0.82 : 1 }
+    /// Dark mode dims less so the lifted tints stay >= 4.5:1 on the material.
+    private var dimOpacity: Double { card.isDimmed ? (scheme == .dark ? 0.92 : 0.82) : 1 }
 
     private var row: some View {
         Button {
