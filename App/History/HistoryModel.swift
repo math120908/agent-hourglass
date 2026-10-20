@@ -18,11 +18,32 @@ enum HistoryRange: String, CaseIterable, Identifiable {
 
 /// One plotted line segment: a meter within one reset window.
 struct ChartLine: Identifiable, Equatable {
-    enum Style { case session, weekly, model, copilot }
+    enum Style { case session, weekly, model, copilot, window }
     var id: String
     var name: String
     var style: Style
     var points: [SeriesPoint]
+}
+
+extension HistoryModel {
+    /// Copilot / Codex plot one style; nil for Claude (session + weekly + models).
+    var singleStyle: ChartLine.Style? {
+        switch kind {
+        case .copilot: .copilot
+        case .codex: .window
+        default: nil
+        }
+    }
+
+    /// Codex window names ("30-day"), in first-seen order.
+    var windowNames: [String] {
+        var seen: [String] = []
+        for l in lines where l.style == .window && !seen.contains(l.name) { seen.append(l.name) }
+        return seen
+    }
+
+    var singlePeak: Double? { singleStyle.flatMap { s in lines.filter { $0.style == s }.flatMap(\.points).compactMap(\.percent).max() } }
+    var singleEnd: Double? { singleStyle.flatMap { s in lines.filter { $0.style == s }.flatMap(\.points).last { $0.percent != nil }?.percent } }
 }
 
 @MainActor @Observable
@@ -92,6 +113,8 @@ final class HistoryModel {
         case Meter.Kind.weeklyAll.rawValue: style = .weekly; name = "All models, weekly"
         case let m where m.hasPrefix(Meter.Kind.weeklyModel.rawValue + ":"):
             style = .model; name = String(m.dropFirst(Meter.Kind.weeklyModel.rawValue.count + 1))
+        case let m where m.hasPrefix(Meter.Kind.window.rawValue + ":"):
+            style = .window; name = Int(m.dropFirst(Meter.Kind.window.rawValue.count + 1)).map(Meter.windowLabel(seconds:)) ?? "Window"
         default: style = .copilot; name = "Premium requests"
         }
         return ChartLine(id: s.id, name: name, style: style, points: s.points)

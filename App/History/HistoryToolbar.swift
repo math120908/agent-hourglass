@@ -46,7 +46,7 @@ struct HistoryToolbar: View {
     }
 
     private func glyph(_ k: ProviderKind) -> some View {
-        Text(k == .claude ? "C" : "G")
+        Text(GlassStyle.glyph(k))
             .font(.system(size: 8, weight: .bold))
             .foregroundStyle(.white)
             .frame(width: 14, height: 14)

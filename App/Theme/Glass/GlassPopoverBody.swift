@@ -17,7 +17,7 @@ struct GlassPopoverBody: View {
             ScrollView {
                 VStack(spacing: 7) {
                     if content.accounts.isEmpty {
-                        Button("Add a Claude or Copilot account", action: actions.addAccount)
+                        Button("Add a Claude, Copilot or Codex account", action: actions.addAccount)
                             .buttonStyle(.link)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 18)

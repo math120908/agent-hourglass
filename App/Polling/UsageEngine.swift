@@ -13,6 +13,8 @@ final class UsageEngine {
     private let labels = LabelBook()
     /// Shared gh token source: one in-memory token cache for add and polling.
     private var gh = GhTokenSource()
+    /// Shared read-only view of ~/.codex/auth.json for add and polling.
+    private let codex = CodexAuthSource()
     let service: AccountService?
     /// Usage history; nil when the store could not be opened (polling continues without it).
     let history: HistoryStore?
@@ -39,7 +41,7 @@ final class UsageEngine {
             }
         ) { [appState] id, outcome in
             await MainActor.run { appState.apply(id, outcome) }
-            Self.log.info("result id=\(id.rawValue.prefix(14), privacy: .public) \(Self.summary(outcome), privacy: .public)")
+            Self.log.info("result id=\(id.kind == .codex ? "codex" : String(id.rawValue.prefix(14)), privacy: .public) \(Self.summary(outcome), privacy: .public)")
         }
         guard let dir = try? AppSupport.directory() else {
             Self.log.error("no app support directory")
@@ -52,6 +54,7 @@ final class UsageEngine {
         let labels = labels
         let gh = GhTokenSource()
         self.gh = gh
+        let codex = codex
         self.registry = registry
         service = AccountService(
             registry: registry,
@@ -66,9 +69,10 @@ final class UsageEngine {
                 )
             },
             makeClient: { id in
-                Self.makeClient(id, store: store, label: labels.label(for: id), gh: gh, login: labels.login(for: id))
+                Self.makeClient(id, store: store, label: labels.label(for: id), gh: gh, codex: codex, login: labels.login(for: id))
             },
-            ghTokens: gh
+            ghTokens: gh,
+            codexAuth: codex
         )
     }
 
@@ -119,7 +123,7 @@ final class UsageEngine {
         publish(entries)
         let store = CredentialStore()
         for e in entries {
-            await poller.add(client: Self.makeClient(e.id, store: store, label: labels.label(for: e.id), gh: gh, login: e.remoteLogin))
+            await poller.add(client: Self.makeClient(e.id, store: store, label: labels.label(for: e.id), gh: gh, codex: codex, login: e.remoteLogin))
         }
         Self.log.info("engine accounts=\(entries.count, privacy: .public)")
     }
@@ -144,6 +148,14 @@ final class UsageEngine {
         labels.pendingLogin = login
         defer { labels.pendingLogin = nil }
         let id = try await service.addCopilot(login: login)
+        publish(await registry.accounts())
+        return id
+    }
+
+    /// Adds the Codex CLI login; throws `CodexAuthError` when auth.json is missing or not ChatGPT mode.
+    func addCodex() async throws -> AccountID {
+        guard let service, let registry else { throw AccountServiceError.unknownAccount }
+        let id = try await service.addCodex()
         publish(await registry.accounts())
         return id
     }
@@ -211,8 +223,19 @@ final class UsageEngine {
         store: CredentialStore,
         label: String,
         gh: GhTokenSource,
+        codex: CodexAuthSource,
         login: String? = nil
     ) -> AccountClient {
+        if id.kind == .codex {
+            return AccountClient(
+                id: id,
+                provider: CodexProvider(auth: codex),
+                http: HTTPClient(),
+                store: store,
+                clock: ContinuousClock(),
+                now: { Date() }
+            )
+        }
         if id.kind == .copilot {
             return AccountClient(
                 id: id,

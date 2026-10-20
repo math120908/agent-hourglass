@@ -19,7 +19,7 @@ struct InstrumentPopoverBody: View {
                 VStack(spacing: 0) {
                     if content.accounts.isEmpty {
                         Divider()
-                        Button("Add a Claude or Copilot account", action: actions.addAccount)
+                        Button("Add a Claude, Copilot or Codex account", action: actions.addAccount)
                             .buttonStyle(.link)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 18)

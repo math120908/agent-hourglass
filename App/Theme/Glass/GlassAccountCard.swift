@@ -11,6 +11,11 @@ struct GlassAccountCard: View {
     @Environment(\.colorScheme) private var scheme
 
     private var accent: Color { GlassStyle.accent(account.kind) }
+    /// Codex teal is too dark for text on the dark card; lift it to >= 4.5:1.
+    private func textTint(_ s: Meter.Severity, _ c: Color) -> Color {
+        scheme == .dark && s == .normal && account.kind == .codex ? Color(red: 0.72, green: 0.96, blue: 0.93) : c
+    }
+
     private var dimText: Color { scheme == .dark ? .white.opacity(0.90) : .secondary }
 
     var body: some View {
@@ -131,7 +136,7 @@ struct GlassAccountCard: View {
             .fill(accent.gradient)
             .frame(width: 20, height: 20)
             .overlay(
-                Text(account.kind == .claude ? "C" : "G")
+                Text(GlassStyle.glyph(account.kind))
                     .font(.system(size: 10.5, weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
             )
@@ -178,7 +183,7 @@ struct GlassAccountCard: View {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 5) {
                         Text(row.label).font(.system(size: 12, weight: .semibold))
-                        if isWeekly { StatusChipView(text: "Weekly") }
+                        if isWeekly && account.kind != .codex { StatusChipView(text: "Weekly") }
                     }
                     if row.paceTick == nil && account.kind == .claude {
                         Text("5-hour rolling window")
@@ -189,7 +194,7 @@ struct GlassAccountCard: View {
                 Spacer()
                 Text(percent(row))
                     .font(.system(size: row.fraction == nil ? 13 : 20, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(row.fraction == nil ? dimText : color)
+                    .foregroundStyle(row.fraction == nil ? dimText : textTint(row.severity, color))
             }
             if row.fraction != nil {
                 GlassMeterBar(fraction: row.fraction, paceTick: row.paceTick, color: color)

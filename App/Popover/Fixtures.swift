@@ -49,10 +49,22 @@ enum Fixtures {
                 ),
             ]
         )
+        // Mirrors Tests/UsageCoreTests/Fixtures/codex-go.json (Go plan, 12% of a 30-day window, half elapsed).
+        let codexID = AccountID(kind: .codex, remoteID: "acct-synthetic")
+        let codex = UsageSnapshot(
+            accountID: codexID,
+            fetchedAt: fetched,
+            plan: "go",
+            meters: [
+                Meter(kind: .window, label: Meter.windowLabel(seconds: 2_592_000), percentUsed: 12,
+                      resetsAt: now.addingTimeInterval(1_296_000), windowLength: .seconds(2_592_000)),
+            ]
+        )
         return PopoverContent(
             accounts: [
                 PopoverAccount(id: claudeID, name: "Happy Hippo", kind: .claude, snapshot: claude, status: .fresh),
                 PopoverAccount(id: copilotID, name: "ckuo_LinkedIn", kind: .copilot, snapshot: copilot, status: .fresh),
+                PopoverAccount(id: codexID, name: "Codex", kind: .codex, snapshot: codex, status: .fresh),
             ],
             isOffline: false,
             now: now,

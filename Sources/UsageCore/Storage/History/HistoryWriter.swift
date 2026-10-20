@@ -39,9 +39,13 @@ extension HistoryStore: HistoryDeleting, HistoryRecording {
         }
     }
 
-    /// `Meter.Kind` raw value, plus `:<model>` for weeklyModel.
+    /// `Meter.Kind` raw value, plus `:<model>` for weeklyModel and `:<seconds>` for window.
     static func meterKey(_ m: Meter) -> String {
-        m.kind == .weeklyModel ? "\(m.kind.rawValue):\(m.label)" : m.kind.rawValue
+        switch m.kind {
+        case .weeklyModel: "\(m.kind.rawValue):\(m.label)"
+        case .window: "\(m.kind.rawValue):\(m.windowSeconds ?? 0)"
+        default: m.kind.rawValue
+        }
     }
 }
 

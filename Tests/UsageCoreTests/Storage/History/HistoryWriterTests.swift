@@ -37,6 +37,14 @@ import Testing
         #expect(try count(s) == 2)
     }
 
+    @Test func codexWindowKeyedBySeconds() async throws {
+        let s = try HistoryStore.inMemory()
+        let m = Meter(kind: .window, label: "30-day", percentUsed: 12, windowLength: .seconds(2_592_000))
+        try await s.record(snap(t0, 0, meters: [m]))
+        let key = try await s.db.read { try String.fetchOne($0, sql: "SELECT meter FROM sample") }
+        #expect(key == "window:2592000")
+    }
+
     @Test func weeklyModelKeyed() async throws {
         let s = try HistoryStore.inMemory()
         try await s.record(snap(t0, 0, meters: [Meter(kind: .weeklyModel, label: "Fable", percentUsed: 5)]))

@@ -23,7 +23,7 @@ struct HistoryChart: View {
                 ForEach(Array(line.points.enumerated()), id: \.offset) { _, p in
                     if let v = p.percent {
                         LineMark(x: .value("Time", p.t), y: .value("Percent", v), series: .value("Series", line.id))
-                            .interpolationMethod(line.style == .session || line.style == .copilot ? .stepEnd : .linear)
+                            .interpolationMethod(line.style == .session || line.style == .copilot || line.style == .window ? .stepEnd : .linear)
                             .foregroundStyle(color(line.style))
                             .lineStyle(stroke(line.style))
                     }
@@ -86,12 +86,13 @@ struct HistoryChart: View {
         case .weekly: Self.weekly
         case .model: Self.model
         case .copilot: GlassStyle.copilot
+        case .window: GlassStyle.codex
         }
     }
 
     func stroke(_ s: ChartLine.Style) -> StrokeStyle {
         switch s {
-        case .session, .copilot: StrokeStyle(lineWidth: 1.8, lineJoin: .round)
+        case .session, .copilot, .window: StrokeStyle(lineWidth: 1.8, lineJoin: .round)
         case .weekly: StrokeStyle(lineWidth: 1.6, dash: [5, 4])
         case .model: StrokeStyle(lineWidth: 1.4)
         }
@@ -120,6 +121,9 @@ struct HistoryChart: View {
 
     private func rows(at t: Date) -> [(String, Double?, Color)] {
         if kind == .copilot { return [("Premium", value(.copilot, at: t), GlassStyle.copilot)] }
+        if kind == .codex {
+            return Set(visible.filter { $0.style == .window }.map(\.name)).sorted().map { ($0, value(.window, name: $0, at: t), GlassStyle.codex) }
+        }
         var out: [(String, Double?, Color)] = [("Session", value(.session, at: t), GlassStyle.claude), ("Weekly", value(.weekly, at: t), Self.weekly)]
         for n in Set(visible.filter { $0.style == .model }.map(\.name)).sorted() {
             out.append((n, value(.model, name: n, at: t), Self.model))

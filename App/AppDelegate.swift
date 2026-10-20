@@ -23,6 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let i = args.firstIndex(of: "--add-copilot"), i + 1 < args.count {
             statusItem?.debugAddCopilot(args[i + 1])
         }
+        // Debug: `--add-codex` adds the Codex CLI login once.
+        if args.contains("--add-codex") { statusItem?.debugAddCodex() }
         // Debug: `--open-menu` pops the right-click menu after launch (menu verification).
         if args.contains("--open-menu") {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.statusItem?.debugMenu() }

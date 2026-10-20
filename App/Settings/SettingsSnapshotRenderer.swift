@@ -9,8 +9,8 @@ enum SettingsSnapshotRenderer {
         let state = AppState()
         let content = Fixtures.content()
         let entries = content.accounts.enumerated().map { i, a in
-            AccountEntry(id: a.id, kind: a.kind, displayName: a.kind == .claude ? "Personal Max" : "Work Copilot",
-                         remoteLogin: a.kind == .claude ? "ck@example.com" : "ckuo_LinkedIn",
+            AccountEntry(id: a.id, kind: a.kind, displayName: a.kind == .claude ? "Personal Max" : a.kind == .codex ? "Codex" : "Work Copilot",
+                         remoteLogin: a.kind == .claude ? "ck@example.com" : a.kind == .codex ? nil : "ckuo_LinkedIn",
                          order: i, addedAt: Fixtures.now, status: "ok")
         }
         for a in content.accounts {

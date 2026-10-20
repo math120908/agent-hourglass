@@ -93,6 +93,8 @@ struct GlassHistoryView: View {
         HStack(spacing: 14) {
             if model.kind == .copilot {
                 swatch(GlassStyle.copilot, dashed: false, "Premium requests")
+            } else if model.kind == .codex {
+                ForEach(model.windowNames.isEmpty ? ["30-day"] : model.windowNames, id: \.self) { swatch(GlassStyle.codex, dashed: false, $0) }
             } else {
                 swatch(GlassStyle.claude, dashed: false, "Session (5h)")
                 swatch(HistoryChart.weekly, dashed: true, "All models, weekly")
@@ -128,14 +130,27 @@ struct GlassHistoryView: View {
 
     private var stats: some View {
         HStack(alignment: .top, spacing: 10) {
-            stat(model.kind == .copilot ? "Peak premium" : "Peak session", pct(model.kind == .copilot ? copilotPeak : model.summary?.peakSession))
+            stat(peakLabel, pct(model.singleStyle == nil ? model.summary?.peakSession : model.singlePeak))
             stat("Windows at 90% or more", model.isEmpty ? "--" : "\(model.summary?.windowsOver90 ?? 0)")
-            stat(model.kind == .copilot ? "Premium at range end" : "Weekly at range end", pct(model.kind == .copilot ? copilotEnd : model.summary?.weeklyAtEnd))
+            stat(endLabel, pct(model.singleStyle == nil ? model.summary?.weeklyAtEnd : model.singleEnd))
         }
     }
 
-    private var copilotPeak: Double? { model.lines.filter { $0.style == .copilot }.flatMap(\.points).compactMap(\.percent).max() }
-    private var copilotEnd: Double? { model.lines.filter { $0.style == .copilot }.flatMap(\.points).last { $0.percent != nil }?.percent }
+    private var peakLabel: String {
+        switch model.kind {
+        case .copilot: "Peak premium"
+        case .codex: "Peak usage"
+        default: "Peak session"
+        }
+    }
+
+    private var endLabel: String {
+        switch model.kind {
+        case .copilot: "Premium at range end"
+        case .codex: "Usage at range end"
+        default: "Weekly at range end"
+        }
+    }
 
     private func pct(_ v: Double?) -> String { v.map { "\(Int($0.rounded()))%" } ?? "--" }
 

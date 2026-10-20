@@ -44,7 +44,7 @@ enum StateGalleryRenderer {
     }
 
     static func cases(_ base: PopoverContent) -> [Case] {
-        let claude = base.accounts[0], copilot = base.accounts[1]
+        let claude = base.accounts[0], copilot = base.accounts[1], codex = base.accounts[2]
         func with(_ a: PopoverAccount, _ status: AccountStatus, _ edit: (inout PopoverAccount) -> Void = { _ in }) -> PopoverAccount {
             var a = a
             a.status = status
@@ -69,6 +69,9 @@ enum StateGalleryRenderer {
                 $0.snapshot?.meters[0].percentUsed = 64
             }),
             Case(name: "extradisabled", account: claude),
+            Case(name: "codex-fresh", account: codex),
+            Case(name: "codex-notsignedin", account: with(codex, .codexNotSignedIn) { $0.snapshot = nil }),
+            Case(name: "codex-warning", account: with(codex, .fresh) { $0.snapshot?.meters[0].percentUsed = 81 }),
             Case(name: "copilot-notincluded", account: with(copilot, .fresh) {
                 $0.snapshot?.meters[0].limit = 0
                 $0.snapshot?.meters[0].used = 0

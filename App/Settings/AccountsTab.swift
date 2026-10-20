@@ -6,6 +6,7 @@ struct AccountsTab: View {
     @Bindable var model: SettingsModel
     var addClaude: () -> Void
     var addCopilot: () -> Void = {}
+    var addCodex: () -> Void = {}
     @State private var pendingRemoval: AccountEntry?
 
     var body: some View {
@@ -36,6 +37,7 @@ struct AccountsTab: View {
                 Spacer()
                 Button("Add Claude account…", action: addClaude)
                 Button("Add Copilot account…", action: addCopilot)
+                Button("Add Codex account…", action: addCodex)
             }
         }
         .padding(16)

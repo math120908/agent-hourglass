@@ -5,6 +5,8 @@ import UsageCore
 enum GlassStyle {
     static let claude = Color(red: 0.80, green: 0.42, blue: 0.24)
     static let copilot = Color(red: 0.49, green: 0.38, blue: 0.78)
+    /// Codex: neutral teal, clear of Claude orange and Copilot purple.
+    static let codex = Color(red: 0.05, green: 0.52, blue: 0.50)
     static let warning = Color(red: 0.86, green: 0.62, blue: 0.10)
     static let critical = Color(red: 0.86, green: 0.25, blue: 0.24)
 
@@ -13,7 +15,22 @@ enum GlassStyle {
         tint == critical ? Color(red: 1.0, green: 0.93, blue: 0.91) : Color(red: 1.0, green: 0.92, blue: 0.74)
     }
 
-    static func accent(_ kind: ProviderKind) -> Color { kind == .claude ? claude : copilot }
+    static func accent(_ kind: ProviderKind) -> Color {
+        switch kind {
+        case .claude: claude
+        case .copilot: copilot
+        case .codex: codex
+        }
+    }
+
+    /// Card glyph letter per provider.
+    static func glyph(_ kind: ProviderKind) -> String {
+        switch kind {
+        case .claude: "C"
+        case .copilot: "G"
+        case .codex: "X"
+        }
+    }
 
     static func color(_ severity: Meter.Severity, _ kind: ProviderKind) -> Color {
         switch severity {

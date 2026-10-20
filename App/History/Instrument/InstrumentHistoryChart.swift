@@ -16,7 +16,7 @@ struct InstrumentHistoryChart: View {
     var body: some View {
         Chart {
             ForEach(visible) { line in
-                let filled = line.style == .session || line.style == .copilot
+                let filled = line.style == .session || line.style == .copilot || line.style == .window
                 ForEach(Array(line.points.enumerated()), id: \.offset) { _, p in
                     if let v = p.percent {
                         if filled {
@@ -80,12 +80,13 @@ struct InstrumentHistoryChart: View {
         case .weekly: HistoryChart.weekly
         case .model: HistoryChart.model
         case .copilot: GlassStyle.copilot
+        case .window: GlassStyle.codex
         }
     }
 
     private func stroke(_ s: ChartLine.Style) -> StrokeStyle {
         switch s {
-        case .session, .copilot: StrokeStyle(lineWidth: 1.8, lineJoin: .round)
+        case .session, .copilot, .window: StrokeStyle(lineWidth: 1.8, lineJoin: .round)
         case .weekly: StrokeStyle(lineWidth: 1.6, dash: [5, 4])
         case .model: StrokeStyle(lineWidth: 1.4)
         }
@@ -97,7 +98,9 @@ struct InstrumentHistoryChart: View {
     }
 
     private func tooltip(at t: Date) -> some View {
-        var rows: [(String, Double?, Color)] = kind == .copilot
+        var rows: [(String, Double?, Color)] = kind == .codex
+            ? Set(visible.filter { $0.style == .window }.map(\.name)).sorted().map { ($0, value(.window, name: $0, at: t), GlassStyle.codex) }
+            : kind == .copilot
             ? [("Premium", value(.copilot, at: t), GlassStyle.copilot)]
             : [("Session", value(.session, at: t), GlassStyle.claude), ("Weekly", value(.weekly, at: t), HistoryChart.weekly)]
         if kind == .claude {

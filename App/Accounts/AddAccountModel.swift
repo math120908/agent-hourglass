@@ -59,8 +59,29 @@ final class AddAccountModel {
     private var copilotLogin: String?
     var isCopilot: Bool { copilotLogin != nil }
 
+    private(set) var isCodex = false
+
     func retry() {
-        if let copilotLogin { addCopilot(copilotLogin) } else { start() }
+        if isCodex { addCodex() } else if let copilotLogin { addCopilot(copilotLogin) } else { start() }
+    }
+
+    /// Adds the Codex CLI's ChatGPT login from ~/.codex/auth.json (read-only, no browser).
+    func addCodex() {
+        isCodex = true
+        guard state.begin() else {
+            state = .failed("Sign-in already in progress")
+            return
+        }
+        step = .flow
+        task = Task { [engine] in
+            do {
+                state = .success(try await engine.addCodex())
+            } catch is CodexAuthError {
+                state = .failed("Run `codex` and sign in with ChatGPT first")
+            } catch {
+                state = AddFlowState.failure(error)
+            }
+        }
     }
 
     func addCopilot(_ login: String) {

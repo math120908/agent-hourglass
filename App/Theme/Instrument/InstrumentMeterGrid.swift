@@ -121,7 +121,12 @@ struct InstrumentMeterGrid: View {
     private func textColor(_ s: Meter.Severity) -> Color {
         guard scheme == .dark else { return color(s) }
         switch s {
-        case .normal: return kind == .claude ? Color(red: 1.0, green: 0.89, blue: 0.81) : Color(red: 0.88, green: 0.82, blue: 1.0)
+        case .normal:
+            switch kind {
+            case .claude: return Color(red: 1.0, green: 0.89, blue: 0.81)
+            case .copilot: return Color(red: 0.88, green: 0.82, blue: 1.0)
+            case .codex: return Color(red: 0.72, green: 0.96, blue: 0.93)
+            }
         case .warning: return Color(red: 1.0, green: 0.82, blue: 0.45)
         case .critical: return InstrumentAccountRow.darkCritical
         }
@@ -129,6 +134,7 @@ struct InstrumentMeterGrid: View {
 
     private func label(_ row: MeterRow) -> String {
         if kind == .claude && row.paceTick == nil && row.paceText == nil && row.label == "Session" { return "Session (5h)" }
+        if kind == .codex { return row.label }
         return row.paceText != nil || row.paceTick != nil ? "\(row.label), weekly" : row.label
     }
 

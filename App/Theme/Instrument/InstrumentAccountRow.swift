@@ -100,6 +100,10 @@ struct InstrumentAccountRow: View {
             let reset = h.resetText.hasPrefix("Resets ") ? "resets " + h.resetText.dropFirst(7) : h.resetText
             return String(format: "Premium %.1f%% | ", f * 100) + reset
         }
+        if account.kind == .codex {
+            let reset = h.resetText.hasPrefix("Resets ") ? "resets " + h.resetText.dropFirst(7) : h.resetText
+            return "\(h.label) \(h.percentText) | " + (card.secondary ?? reset)
+        }
         let week = card.secondary.map { " | " + $0.replacingOccurrences(of: "Wk ", with: "Week ") } ?? ""
         return "Session \(h.percentText)" + week
     }

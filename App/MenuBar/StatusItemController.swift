@@ -29,7 +29,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         settings = SettingsWindowController(
             model: SettingsModel(appState: appState, backend: settingsBackend),
             addClaude: { addAccount.show() },
-            addCopilot: { addAccount.show(copilot: true) }
+            addCopilot: { addAccount.show(copilot: true) },
+            addCodex: { addAccount.show(codex: true) }
         )
         let backend = settingsBackend
         historyWindow = HistoryWindowController(engine: engine) { await backend.load().entries }
@@ -86,6 +87,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         menuActions = actions
         observe()
     }
+
+    func debugAddCodex() { addAccount.show(codex: true) }
 
     func debugAddCopilot(_ login: String) { addAccount.show(copilot: true, pick: login) }
 

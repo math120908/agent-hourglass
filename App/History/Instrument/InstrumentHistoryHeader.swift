@@ -8,12 +8,11 @@ struct InstrumentHistoryView: View {
     var hover: Date?
 
     private var fmt: HistorySummaryFormatting {
-        if model.kind == .copilot {
-            let pts = model.lines.filter { $0.style == .copilot }.flatMap(\.points)
+        if model.singleStyle != nil {
             return HistorySummaryFormatting(
-                peak: pts.compactMap(\.percent).max(),
+                peak: model.singlePeak,
                 windows: model.summary?.windowsOver90 ?? 0,
-                weekly: pts.last { $0.percent != nil }?.percent,
+                weekly: model.singleEnd,
                 isEmpty: model.isEmpty
             )
         }
@@ -52,6 +51,8 @@ struct InstrumentHistoryView: View {
         HStack(spacing: 14) {
             if model.kind == .copilot {
                 swatch(GlassStyle.copilot, dashed: false, "Premium")
+            } else if model.kind == .codex {
+                ForEach(model.windowNames.isEmpty ? ["30-day"] : model.windowNames, id: \.self) { swatch(GlassStyle.codex, dashed: false, $0) }
             } else {
                 swatch(GlassStyle.claude, dashed: false, "Session")
                 swatch(HistoryChart.weekly, dashed: true, "Weekly")
@@ -94,8 +95,8 @@ struct InstrumentHistoryHeader: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 18) {
-            figure(model.kind == .copilot ? "Premium now" : "Weekly now", fmt.weeklyNow, .primary)
-            figure(model.kind == .copilot ? "Peak premium" : "Peak session", fmt.peakSession, model.isEmpty ? .primary : GlassStyle.accent(model.kind))
+            figure(model.kind == .copilot ? "Premium now" : model.kind == .codex ? "Usage now" : "Weekly now", fmt.weeklyNow, .primary)
+            figure(model.kind == .copilot ? "Peak premium" : model.kind == .codex ? "Peak usage" : "Peak session", fmt.peakSession, model.isEmpty ? .primary : GlassStyle.accent(model.kind))
             Spacer()
             HStack(spacing: 8) {
                 Text(HistorySummaryFormatting.rangeLabel(model.interval, isNow: !model.canGoNext))
