@@ -19,6 +19,8 @@ public actor AccountClient {
     private let now: @Sendable () -> Date
     private let lock = RefreshLock()
     private let label: String
+    /// Copilot only: borrows the token from gh for `login`. No Keychain item.
+    private let gh: (source: GhTokenSource, login: String)?
 
     public private(set) var status: AccountStatus = .noData
     public private(set) var nextEarliestFetch: Date = .distantPast
@@ -37,8 +39,11 @@ public actor AccountClient {
         clock: any Clock<Duration>,
         now: @escaping @Sendable () -> Date,
         backoff: Backoff = Backoff(),
-        label: String? = nil
+        label: String? = nil,
+        tokenSource: GhTokenSource? = nil,
+        login: String? = nil
     ) {
+        self.gh = tokenSource.flatMap { src in login.map { (src, $0) } }
         self.id = id
         self.label = label ?? AccountService.keychainLabel(kind: id.kind ?? .claude, number: 1)
         self.provider = provider
@@ -51,6 +56,7 @@ public actor AccountClient {
 
     public func fetch() async -> FetchOutcome {
         if status == .needsLogin { return .failure(.needsLogin) }
+        if let gh { return await fetchCopilot(gh.source, login: gh.login) }
         if saveFailed, let credential { persist(credential) }
         do {
             var cred = try currentCredential()
@@ -68,15 +74,44 @@ public actor AccountClient {
                     throw ProviderError.invalidGrant
                 }
             }
-            snap.accountID = id
-            backoff.reset()
-            lastSnapshot = snap
-            status = saveFailed ? .stale : .fresh
-            nextEarliestFetch = now().addingTimeInterval(Backoff.seconds(provider.minimumInterval))
-            return .success(snap)
+            return succeed(snap)
         } catch {
             return .failure(fail(error))
         }
+    }
+
+    /// Token cached by gh; a 401 drops it, re-reads once and retries once.
+    private func fetchCopilot(_ src: GhTokenSource, login: String) async -> FetchOutcome {
+        do {
+            var snap: UsageSnapshot
+            do {
+                snap = try await provider.fetch(credential: Self.copilotCredential(try await src.token(for: login)), http: http)
+            } catch ProviderError.unauthorized {
+                src.invalidate(login)
+                do {
+                    snap = try await provider.fetch(credential: Self.copilotCredential(try await src.token(for: login)), http: http)
+                } catch ProviderError.unauthorized {
+                    throw ProviderError.invalidGrant
+                }
+            }
+            return succeed(snap)
+        } catch {
+            return .failure(fail(error))
+        }
+    }
+
+    static func copilotCredential(_ token: Secret) -> Credential {
+        Credential(kind: .copilot, access: token, refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: [])
+    }
+
+    private func succeed(_ s: UsageSnapshot) -> FetchOutcome {
+        var snap = s
+        snap.accountID = id
+        backoff.reset()
+        lastSnapshot = snap
+        status = saveFailed ? .stale : .fresh
+        nextEarliestFetch = now().addingTimeInterval(Backoff.seconds(provider.minimumInterval))
+        return .success(snap)
     }
 
     private func currentCredential() throws -> Credential {
@@ -114,6 +149,15 @@ public actor AccountClient {
 
     private func fail(_ error: any Error) -> AccountStatus {
         let s: AccountStatus
+        if let gh = error as? GhError {
+            switch gh {
+            case .missing, .untrusted: s = .ghMissing
+            case .loginRemoved: s = .ghLoginRemoved
+            case .timeout: s = .stale
+            }
+            status = s
+            return s
+        }
         switch error as? ProviderError {
         case .invalidGrant, .unauthorized:
             s = .needsLogin
