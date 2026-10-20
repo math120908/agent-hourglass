@@ -18,7 +18,7 @@ struct InstrumentMeterGrid: View {
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 0) {
                 ForEach(Array(card.rows.enumerated()), id: \.offset) { _, row in meter(row) }
                 if let spend = card.spend { spendRow(spend) }
-                if card.rows.isEmpty && card.spend == nil {
+                if card.rows.isEmpty && card.spend == nil && card.headline != nil {
                     GridRow {
                         Text(card.updatedText).font(.system(size: 11)).glassTone()
                             .gridCellColumns(2)
@@ -41,7 +41,7 @@ struct InstrumentMeterGrid: View {
             Text(row.percentText)
                 .font(.system(size: 34, weight: .semibold).monospacedDigit())
                 .tracking(-1)
-                .foregroundStyle(color(row.severity))
+                .foregroundStyle(textColor(row.severity))
             VStack(alignment: .leading, spacing: 1) {
                 Text("of weekly limit used")
                 Text("\(row.paceText ?? ""), \(reset)")
@@ -62,7 +62,7 @@ struct InstrumentMeterGrid: View {
             Text(label(row)).font(.system(size: 12))
             Text(percent(row))
                 .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                .foregroundStyle(row.fraction == nil ? AnyShapeStyle(dim) : AnyShapeStyle(c))
+                .foregroundStyle(row.fraction == nil ? AnyShapeStyle(dim) : AnyShapeStyle(textColor(row.severity)))
                 .gridColumnAlignment(.trailing)
         }
         .padding(.top, 9)
@@ -82,7 +82,7 @@ struct InstrumentMeterGrid: View {
             .font(.system(size: 10.5).monospacedDigit())
             .glassTone()
             .gridCellColumns(2)
-            .padding(.top, 3)
+            .padding(.top, 7)
         }
     }
 
@@ -105,7 +105,7 @@ struct InstrumentMeterGrid: View {
             GlassMeterBar(
                 fraction: spend.fraction,
                 paceTick: nil,
-                color: spend.chip == nil ? GlassStyle.accent(kind) : Color.secondary.opacity(0.6),
+                color: spend.chip == nil ? GlassStyle.accent(kind) : Color.primary.opacity(0.45),
                 height: 4
             )
             .gridCellColumns(2)
@@ -116,6 +116,16 @@ struct InstrumentMeterGrid: View {
     private var dim: Color { scheme == .dark ? .white.opacity(0.90) : .secondary }
 
     private func color(_ s: Meter.Severity) -> Color { GlassStyle.color(s, kind) }
+
+    /// Text tint: the Glass hue in light mode, a lifted variant (>= 4.5:1 on the dark material) in dark mode.
+    private func textColor(_ s: Meter.Severity) -> Color {
+        guard scheme == .dark else { return color(s) }
+        switch s {
+        case .normal: return kind == .claude ? Color(red: 1.0, green: 0.80, blue: 0.66) : Color(red: 0.88, green: 0.82, blue: 1.0)
+        case .warning: return Color(red: 1.0, green: 0.82, blue: 0.45)
+        case .critical: return InstrumentAccountRow.darkCritical
+        }
+    }
 
     private func label(_ row: MeterRow) -> String {
         if kind == .claude && row.paceTick == nil && row.paceText == nil && row.label == "Session" { return "Session (5h)" }

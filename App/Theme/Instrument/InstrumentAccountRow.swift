@@ -13,7 +13,7 @@ struct InstrumentAccountRow: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            row
+            row.opacity(dimOpacity)
             if let chip = card.statusChip, chip == "Response format changed" {
                 Button(action: onDiagnostics) { StatusChipView(text: "Format changed", tint: GlassStyle.critical) }
                     .buttonStyle(.plain)
@@ -22,9 +22,9 @@ struct InstrumentAccountRow: View {
                     .padding(.leading, 58)
                     .padding(.bottom, 8)
             } else if let chip = card.statusChip, !GlassAccountCard.fitsInRow(chip) {
-                Text(chip)
+                Text(Self.unbreakCommands(chip))
                     .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(scheme == .dark ? GlassStyle.darkText(GlassStyle.critical) : GlassStyle.critical)
+                    .foregroundStyle(scheme == .dark ? Self.darkCritical : GlassStyle.critical)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.leading, 58)
@@ -33,11 +33,15 @@ struct InstrumentAccountRow: View {
                     .textSelection(.enabled)
             }
             if isExpanded {
-                InstrumentMeterGrid(kind: account.kind, card: card).transition(.opacity)
+                InstrumentMeterGrid(kind: account.kind, card: card)
+                    .opacity(dimOpacity)
+                    .transition(.opacity)
             }
         }
-        .opacity(card.isDimmed ? 0.82 : 1)
     }
+
+    /// Dims stale data but not the status text explaining why, so that text keeps its contrast.
+    private var dimOpacity: Double { card.isDimmed ? 0.82 : 1 }
 
     private var row: some View {
         Button {
@@ -97,6 +101,16 @@ struct InstrumentAccountRow: View {
         }
         let week = card.secondary.map { " | " + $0.replacingOccurrences(of: "Wk ", with: "Week ") } ?? ""
         return "Session \(h.percentText)" + week
+    }
+
+    /// Red that keeps >= 4.5:1 on the dark popover material, matching the light-mode hue.
+    static let darkCritical = Color(red: 1.0, green: 0.83, blue: 0.81)
+
+    /// Keeps a backticked command on one line by swapping its spaces for no-break spaces.
+    static func unbreakCommands(_ text: String) -> String {
+        text.split(separator: "`", omittingEmptySubsequences: false).enumerated().map { i, part in
+            i % 2 == 1 ? part.replacingOccurrences(of: " ", with: "\u{00A0}") : String(part)
+        }.joined(separator: "`")
     }
 
     @ViewBuilder
