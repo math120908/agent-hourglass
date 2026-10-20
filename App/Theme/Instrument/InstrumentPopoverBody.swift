@@ -77,7 +77,6 @@ struct InstrumentPopoverBody: View {
             get: { expanded.contains(id) },
             set: { open in
                 if open { expanded.insert(id) } else { expanded.remove(id) }
-                UserDefaults.standard.set(open, forKey: "cardExpanded.\(id.rawValue)")
             }
         )
     }

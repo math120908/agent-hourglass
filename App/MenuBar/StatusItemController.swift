@@ -16,6 +16,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private let settings: SettingsWindowController
     private let settingsBackend: EngineSettingsBackend
     private let historyWindow: HistoryWindowController
+    private var menuActions = PopoverActions()
     private var makeRoot: (Theme) -> PopoverRoot = { PopoverRoot(theme: $0) { Fixtures.content() } }
 
     init(appState: AppState, themeStore: ThemeStore, engine: UsageEngine) {
@@ -40,7 +41,6 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         popover.behavior = .transient
         popover.delegate = self
         let useFixture = CommandLine.arguments.contains("--fixture")
-        let ids = useFixture ? Fixtures.content().accounts.map(\.id) : appState.accounts
         let actions = PopoverActions(
             refresh: { [engine] in engine.refresh() },
             history: { [weak self] in
@@ -69,7 +69,6 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         makeRoot = { [appState] theme in
             PopoverRoot(
                 theme: theme,
-                initiallyExpanded: PopoverRoot.storedExpansion(ids),
                 actions: actions
             ) { useFixture ? Fixtures.content(now: Date()) : PopoverContent.live(appState) }
         }
@@ -79,8 +78,10 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         historyWindow.theme = themeStore.theme
         if let button = statusItem.button {
             button.target = self
-            button.action = #selector(togglePopover(_:))
+            button.action = #selector(statusItemClicked(_:))
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
+        menuActions = actions
         observe()
     }
 
@@ -118,11 +119,59 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         )
     }
 
-    @objc private func togglePopover(_ sender: NSStatusBarButton) {
+    @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
+        let event = NSApp.currentEvent
+        if StatusMenuItem.opensMenu(
+            isRightMouseUp: event?.type == .rightMouseUp,
+            controlHeld: event?.modifierFlags.contains(.control) ?? false
+        ) {
+            showMenu(sender)
+        } else {
+            togglePopover(sender)
+        }
+    }
+
+    /// Pops the right-click menu under the icon without assigning statusItem.menu, so left-click keeps the popover.
+    private func showMenu(_ sender: NSStatusBarButton) {
+        if popover.isShown { popover.performClose(sender) }
+        let menu = buildMenu()
+        NSLog("status-menu items=%@", menu.items.map { $0.isSeparatorItem ? "---" : $0.title }.joined(separator: " | "))
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
+    }
+
+    func buildMenu() -> NSMenu {
+        let menu = NSMenu()
+        for spec in StatusMenuItem.layout {
+            guard let spec else { menu.addItem(.separator()); continue }
+            let item = NSMenuItem(title: spec.title, action: #selector(menuItemChosen(_:)), keyEquivalent: spec.keyEquivalent)
+            item.target = self
+            item.representedObject = spec.title
+            menu.addItem(item)
+        }
+        return menu
+    }
+
+    @objc private func menuItemChosen(_ item: NSMenuItem) {
+        switch StatusMenuItem.layout.compactMap({ $0 }).first(where: { $0.title == item.title }) {
+        case .refresh: menuActions.refresh()
+        case .history: menuActions.history()
+        case .settings: menuActions.settings()
+        case .quit: NSApp.terminate(nil)
+        case nil: break
+        }
+    }
+
+    func debugMenu() {
+        guard let b = statusItem.button else { return }
+        showMenu(b)
+    }
+
+    private func togglePopover(_ sender: NSStatusBarButton) {
         if popover.isShown {
             popover.performClose(sender)
             return
         }
+        NotificationCenter.default.post(name: .popoverWillOpen, object: nil)
         fitToContent()
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
         logGap(button: sender, tag: "open")
@@ -183,5 +232,6 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 }
 
 extension Notification.Name {
+    static let popoverWillOpen = Notification.Name("popoverWillOpen")
     static let debugToggleFirstCard = Notification.Name("debugToggleFirstCard")
 }

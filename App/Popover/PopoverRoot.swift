@@ -27,16 +27,12 @@ struct PopoverRoot: View {
             case .instrument: InstrumentPopoverBody(content: content(), expanded: $expanded, actions: actions)
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .popoverWillOpen)) { _ in
+            expanded = Set(content().accounts.map(\.id))
+        }
         .onReceive(NotificationCenter.default.publisher(for: .debugToggleFirstCard)) { _ in
             guard let id = content().accounts.first?.id else { return }
             if expanded.contains(id) { expanded.remove(id) } else { expanded.insert(id) }
         }
-    }
-
-    /// Persisted expansion, plus the first account (menu bar account) on open.
-    static func storedExpansion(_ ids: [AccountID]) -> Set<AccountID> {
-        var set = Set(ids.filter { UserDefaults.standard.bool(forKey: "cardExpanded.\($0.rawValue)") })
-        if let first = ids.first { set.insert(first) }
-        return set
     }
 }

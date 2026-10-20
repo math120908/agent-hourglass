@@ -23,6 +23,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let i = args.firstIndex(of: "--add-copilot"), i + 1 < args.count {
             statusItem?.debugAddCopilot(args[i + 1])
         }
+        // Debug: `--open-menu` pops the right-click menu after launch (menu verification).
+        if args.contains("--open-menu") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in self?.statusItem?.debugMenu() }
+        }
         // Debug: `--toggle-first-card` opens the popover, then flips the first card twice (resize check).
         if args.contains("--toggle-first-card") {
             for (n, delay) in [2.0, 4.0, 6.0].enumerated() {
