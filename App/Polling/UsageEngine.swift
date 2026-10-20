@@ -12,12 +12,24 @@ final class UsageEngine {
     private let registry: AccountRegistry?
     private let labels = LabelBook()
     let service: AccountService?
+    /// Usage history; nil when the store could not be opened (polling continues without it).
+    let history: HistoryStore?
+    private var maintenanceTimer: Timer?
+    /// Raw-sample window in days until Settings (P3) supplies it.
+    private static let rawDays = 90
     private var pathTask: Task<Void, Never>?
     private var observers: [NSObjectProtocol] = []
 
     init(appState: AppState) {
         self.appState = appState
-        poller = Poller(clients: [], clock: ContinuousClock(), now: { Date() }) { [appState] id, outcome in
+        let history = Self.openHistory()
+        self.history = history
+        poller = Poller(
+            clients: [],
+            clock: ContinuousClock(),
+            now: { Date() },
+            recorder: history
+        ) { [appState] id, outcome in
             await MainActor.run { appState.apply(id, outcome) }
             Self.log.debug("result id=\(id.rawValue.prefix(14), privacy: .public) \(Self.summary(outcome), privacy: .public)")
         }
@@ -35,7 +47,7 @@ final class UsageEngine {
             registry: registry,
             store: store,
             poller: poller,
-            history: NoHistory(),
+            history: history.map { $0 as any HistoryDeleting } ?? NoHistory(),
             claudeLogin: { hint, expected in
                 try await ClaudePKCEFlow().run(
                     loginHint: hint,
@@ -49,6 +61,10 @@ final class UsageEngine {
 
     func start() {
         let poller = poller
+        runMaintenance()
+        maintenanceTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.runMaintenance() }
+        }
         Task { [self] in
             await loadAccounts()
             await poller.start()
@@ -122,6 +138,29 @@ final class UsageEngine {
         Task {
             Self.log.debug("manual refresh")
             await poller.refreshAll(force: true)
+        }
+    }
+
+    /// Opens the history store; on failure logs and returns nil so polling degrades to no history.
+    private static func openHistory() -> HistoryStore? {
+        do {
+            return try HistoryStore(url: HistoryStore.defaultURL())
+        } catch {
+            log.error("history unavailable: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
+    /// Runs on launch and hourly; `runMaintenanceIfDue` decides whether today's pass is due.
+    private func runMaintenance() {
+        guard let history else { return }
+        Task.detached {
+            do {
+                let ran = try await history.runMaintenanceIfDue(now: Date(), calendar: .current, rawDays: Self.rawDays)
+                if ran { Self.log.info("history maintenance ran") }
+            } catch {
+                Self.log.error("history maintenance failed: \(String(describing: error), privacy: .public)")
+            }
         }
     }
 
