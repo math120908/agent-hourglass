@@ -7,18 +7,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let appState = AppState()
     private let themeStore = ThemeStore()
     private var statusItem: StatusItemController?
-    private var pathTask: Task<Void, Never>?
+    private var engine: UsageEngine?
 
     init(lock: InstanceLock) {
         self.lock = lock
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusItem = StatusItemController(appState: appState, themeStore: themeStore)
-        pathTask = Task { [appState] in
-            for await online in PathMonitor.updates() {
-                appState.isOffline = !online
-            }
-        }
+        let engine = UsageEngine(appState: appState)
+        self.engine = engine
+        statusItem = StatusItemController(appState: appState, themeStore: themeStore, engine: engine)
+        engine.start()
     }
 }

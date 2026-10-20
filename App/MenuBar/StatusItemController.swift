@@ -4,22 +4,30 @@ import SwiftUI
 import UsageCore
 
 @MainActor
-final class StatusItemController: NSObject {
+final class StatusItemController: NSObject, NSPopoverDelegate {
     private let appState: AppState
     private let themeStore: ThemeStore
+    private let engine: UsageEngine
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
     private var lastIcon: IconState?
     private var lastTheme: Theme?
 
-    init(appState: AppState, themeStore: ThemeStore) {
+    init(appState: AppState, themeStore: ThemeStore, engine: UsageEngine) {
         self.appState = appState
         self.themeStore = themeStore
+        self.engine = engine
         super.init()
         popover.behavior = .transient
+        popover.delegate = self
         let useFixture = CommandLine.arguments.contains("--fixture")
         let ids = useFixture ? Fixtures.content().accounts.map(\.id) : appState.accounts
-        let root = PopoverRoot(theme: themeStore.theme, initiallyExpanded: PopoverRoot.storedExpansion(ids)) { [appState] in
+        let actions = PopoverActions(refresh: { [engine] in engine.refresh() })
+        let root = PopoverRoot(
+            theme: themeStore.theme,
+            initiallyExpanded: PopoverRoot.storedExpansion(ids),
+            actions: actions
+        ) { [appState] in
             useFixture ? Fixtures.content(now: Date()) : PopoverContent.live(appState)
         }
         popover.contentViewController = NSHostingController(rootView: root)
@@ -65,6 +73,10 @@ final class StatusItemController: NSObject {
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
         logGap(button: sender)
     }
+
+    func popoverWillShow(_ notification: Notification) { engine.setForeground(true) }
+
+    func popoverDidClose(_ notification: Notification) { engine.setForeground(false) }
 
     private func logGap(button: NSStatusBarButton) {
         guard ProcessInfo.processInfo.environment["CU_LOG_POPOVER_GAP"] != nil,
