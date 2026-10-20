@@ -21,6 +21,7 @@ public actor AccountService {
     private let now: @Sendable () -> Date
     private let ghTokens: GhTokenSource?
     private let http: HTTPClient
+    private let codexAuth: CodexAuthSource?
     private var signingIn = false
 
     public init(
@@ -32,8 +33,10 @@ public actor AccountService {
         makeClient: @escaping MakeClient,
         now: @escaping @Sendable () -> Date = { Date() },
         ghTokens: GhTokenSource? = nil,
-        http: HTTPClient = HTTPClient()
+        http: HTTPClient = HTTPClient(),
+        codexAuth: CodexAuthSource? = nil
     ) {
+        self.codexAuth = codexAuth
         self.ghTokens = ghTokens
         self.http = http
         self.registry = registry
@@ -89,6 +92,29 @@ public actor AccountService {
         return id
     }
 
+    /// Adds the Codex CLI's ChatGPT login. Reads auth.json only; no Keychain item, no network for the id.
+    @discardableResult
+    public func addCodex() async throws -> AccountID {
+        guard let codexAuth else { throw CodexAuthError.missing }
+        codexAuth.invalidate()
+        let accountID = try codexAuth.login().accountID
+        let id = AccountID(kind: .codex, remoteID: accountID)
+        let existing = await registry.accounts().first { $0.id == id }
+        try await registry.upsert(AccountEntry(
+            id: id,
+            kind: .codex,
+            displayName: existing?.displayName ?? "Codex",
+            remoteLogin: nil,
+            order: existing?.order ?? 0,
+            addedAt: existing?.addedAt ?? now(),
+            status: "ok"
+        ))
+        if existing != nil { await poller.remove(client: id) }
+        await poller.add(client: makeClient(id))
+        await poller.refreshAll(force: false)
+        return id
+    }
+
     /// Re-auths `id`. A login that resolves to another account is dropped without any write.
     public func reauth(_ id: AccountID) async throws {
         guard let entry = await registry.accounts().first(where: { $0.id == id }) else { throw AccountServiceError.unknownAccount }
@@ -101,7 +127,7 @@ public actor AccountService {
     /// Deletes credential, registry entry (promoting the next menu bar account) and history.
     public func remove(_ id: AccountID) async throws {
         await poller.remove(client: id)
-        if id.kind != .copilot { try store.delete(id) }
+        if id.kind == .claude { try store.delete(id) }
         try await registry.remove(id)
         try await history.deleteAccount(id)
     }
@@ -109,7 +135,7 @@ public actor AccountService {
     /// Deletes Keychain items under our service that have no registry entry.
     public func cleanupOrphans() async throws {
         let known = Set(await registry.accounts().map(\.id))
-        for id in try store.allAccountIDs() where id.kind != .copilot && !known.contains(id) {
+        for id in try store.allAccountIDs() where id.kind == .claude && !known.contains(id) {
             try store.delete(id)
         }
     }

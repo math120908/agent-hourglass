@@ -53,6 +53,7 @@ public enum Diagnostics {
         case .ghLoginRemoved: "ghLoginRemoved"
         case .schemaError: "schemaError"
         case .noData: "noData"
+        case .codexNotSignedIn: "codexNotSignedIn"
         }
     }
 }

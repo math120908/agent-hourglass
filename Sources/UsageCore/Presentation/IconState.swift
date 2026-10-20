@@ -34,15 +34,22 @@ public struct IconState: Equatable, Sendable {
         let candidates = [menuBarAccount].compactMap { $0 } + order
         guard let id = candidates.first(where: { snapshots[$0] != nil || statuses[$0] != nil }) else { return .empty }
         let meter = snapshots[id]?.meters.first { $0.kind == .session5h }
+            ?? snapshots[id]?.meters.first { $0.kind == .window }
             ?? snapshots[id]?.meters.first { $0.kind == .copilotPremium && !$0.isUnlimited && ($0.limit ?? 0) > 0 }
-        let caption = meter?.kind == .copilotPremium || id.kind == .copilot ? "PR" : "5H"
+        let caption: String
+        if meter?.kind == .window, let s = meter?.windowSeconds {
+            caption = Meter.windowCaption(seconds: s)
+        } else {
+            caption = meter?.kind == .copilotPremium || id.kind == .copilot ? "PR" : "5H"
+        }
         let percent = meter?.percentUsed.map { Int(min(100, max(0, $0)).rounded()) }
         let pace = meter?.paceFraction(now: now).map { Int(($0 * 100).rounded()) }
-        let weekly = snapshots[id]?.meters.first { $0.kind == .weeklyAll }?.percentUsed
+        let second = id.kind == .codex ? snapshots[id]?.meters.filter { $0.kind == .window }.dropFirst().first : nil
+        let weekly = (second ?? snapshots[id]?.meters.first { $0.kind == .weeklyAll })?.percentUsed
             .map { Int(min(100, max(0, $0)).rounded()) }
         let level: Level
         switch statuses[id] ?? .fresh {
-        case .stale, .needsLogin: level = .outline
+        case .stale, .needsLogin, .codexNotSignedIn: level = .outline
         default:
             guard let percent else { level = .outline; break }
             level = percent >= 90 ? .critical : percent >= 75 ? .warning : .normal

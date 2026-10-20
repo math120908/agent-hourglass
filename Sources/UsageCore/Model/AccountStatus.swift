@@ -10,4 +10,6 @@ public enum AccountStatus: Codable, Sendable, Equatable {
     case ghLoginRemoved
     case schemaError
     case noData
+    /// No usable ChatGPT login in ~/.codex/auth.json (missing, API-key mode, unsafe permissions, malformed).
+    case codexNotSignedIn
 }

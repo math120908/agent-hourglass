@@ -1,1 +1,1 @@
-public enum ProviderKind: String, Codable, Sendable { case claude, copilot }
+public enum ProviderKind: String, Codable, Sendable { case claude, copilot, codex }

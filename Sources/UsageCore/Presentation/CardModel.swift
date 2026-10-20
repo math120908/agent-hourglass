@@ -43,10 +43,10 @@ public struct CardModel: Equatable, Sendable {
     ) -> CardModel {
         let ctx = Ctx(now: now, calendar: calendar, locale: locale)
         let meters = (snapshot?.meters ?? []).filter(isVisible)
-        let headlineKind: Meter.Kind = kind == .claude ? .session5h : .copilotPremium
+        let headlineKind: Meter.Kind = kind == .claude ? .session5h : kind == .codex ? .window : .copilotPremium
         return CardModel(
             headline: meters.first { $0.kind == headlineKind }.map { ctx.row($0) },
-            secondary: meters.first { $0.kind == .weeklyAll }?.percentUsed.map { "Wk \(Int($0.rounded()))%" },
+            secondary: secondary(meters, kind: kind),
             rows: meters.map { ctx.row($0) },
             spend: snapshot?.spend.map(spendRow),
             planTag: Formatting.planTag(snapshot?.plan),
@@ -54,6 +54,17 @@ public struct CardModel: Equatable, Sendable {
             updatedText: snapshot.map { ctx.updated($0.fetchedAt) } ?? "No data yet",
             isDimmed: !(status == .fresh || status == .noData)
         )
+    }
+
+    /// Claude: weekly-all percent. Codex: the second window, captioned from its length.
+    static func secondary(_ meters: [Meter], kind: ProviderKind) -> String? {
+        if kind == .codex {
+            let windows = meters.filter { $0.kind == .window }
+            guard windows.count > 1, let s = windows[1].windowSeconds, let p = windows[1].percentUsed else { return nil }
+            let cap = s == 604_800 ? "Wk" : Meter.windowCaption(seconds: s)
+            return "\(cap) \(Int(p.rounded()))%"
+        }
+        return meters.first { $0.kind == .weeklyAll }?.percentUsed.map { "Wk \(Int($0.rounded()))%" }
     }
 
     static func isVisible(_ m: Meter) -> Bool {
@@ -70,7 +81,13 @@ public struct CardModel: Equatable, Sendable {
         case .fresh, .noData, .offline: return nil
         case .stale: return "Stale"
         case .rateLimited(let at): return "Rate limited, retry \(Formatting.clock(at, ctx.calendar))"
-        case .needsLogin: return kind == .copilot ? "Run `gh auth login`" : "Sign in again"
+        case .needsLogin:
+            switch kind {
+            case .copilot: return "Run `gh auth login`"
+            case .codex: return "Run `codex` to sign in"
+            case .claude: return "Sign in again"
+            }
+        case .codexNotSignedIn: return "Run `codex` to sign in"
         case .ghMissing: return "Install gh (Homebrew)"
         case .ghLoginRemoved: return "Login \(login.map { "`\($0)` " } ?? "")not in gh; run `gh auth login`"
         case .schemaError: return "Response format changed"
@@ -140,6 +157,11 @@ public struct CardModel: Equatable, Sendable {
             case .weeklyAll, .weeklyModel:
                 return "Resets \(Formatting.pattern("EEE", at, calendar, locale)) \(Formatting.clock(at, calendar))"
             case .copilotPremium, .copilotChat, .copilotCompletions:
+                return "Resets \(Formatting.pattern("MMM d", at, calendar, locale))"
+            case .window:
+                let s = m.windowSeconds ?? 0
+                if s < 86400 { return "Resets in \(Formatting.span(at.timeIntervalSince(now))) (\(Formatting.clock(at, calendar)))" }
+                if s <= 604_800 { return "Resets \(Formatting.pattern("EEE", at, calendar, locale)) \(Formatting.clock(at, calendar))" }
                 return "Resets \(Formatting.pattern("MMM d", at, calendar, locale))"
             }
         }

@@ -57,6 +57,7 @@ public actor AccountClient {
     public func fetch() async -> FetchOutcome {
         if status == .needsLogin { return .failure(.needsLogin) }
         if let gh { return await fetchCopilot(gh.source, login: gh.login) }
+        if provider.kind == .codex { return await fetchBorrowed() }
         if saveFailed, let credential { persist(credential) }
         do {
             var cred = try currentCredential()
@@ -95,6 +96,15 @@ public actor AccountClient {
                 }
             }
             return succeed(snap)
+        } catch {
+            return .failure(fail(error))
+        }
+    }
+
+    /// Codex: the provider reads ~/.codex/auth.json itself and handles the 401 re-read. No Keychain.
+    private func fetchBorrowed() async -> FetchOutcome {
+        do {
+            return succeed(try await provider.fetch(credential: CodexProvider.borrowed, http: http))
         } catch {
             return .failure(fail(error))
         }
@@ -158,6 +168,10 @@ public actor AccountClient {
             }
             status = s
             return s
+        }
+        if error is CodexAuthError {
+            status = .codexNotSignedIn
+            return .codexNotSignedIn
         }
         switch error as? ProviderError {
         case .invalidGrant, .unauthorized:

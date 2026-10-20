@@ -3,6 +3,8 @@ import Foundation
 public struct Meter: Codable, Sendable, Equatable {
     public enum Kind: String, Codable, Sendable {
         case session5h, weeklyAll, weeklyModel, copilotPremium, copilotChat, copilotCompletions
+        /// A rate-limit window whose length comes from the server (Codex). Label and reset text follow `windowLength`.
+        case window
     }
 
     public enum Severity: String, Codable, Sendable { case normal, warning, critical }
@@ -40,6 +42,29 @@ public struct Meter: Codable, Sendable, Equatable {
         self.windowLength = windowLength
         self.isUnlimited = isUnlimited
         self.severity = severity
+    }
+
+    /// Window length in whole seconds, nil when unknown.
+    public var windowSeconds: Int? { windowLength.map { Int($0.components.seconds) } }
+
+    /// "5-hour", "Weekly", "30-day", else "N-day" / "N-hour" / "N-min".
+    public static func windowLabel(seconds: Int) -> String {
+        switch seconds {
+        case 604_800: return "Weekly"
+        case let s where s > 0 && s % 86400 == 0: return "\(s / 86400)-day"
+        case let s where s > 0 && s % 3600 == 0: return "\(s / 3600)-hour"
+        default: return "\(max(0, seconds) / 60)-min"
+        }
+    }
+
+    /// Short icon caption: "5H", "WK", "30D".
+    public static func windowCaption(seconds: Int) -> String {
+        switch seconds {
+        case 604_800: return "WK"
+        case let s where s > 0 && s % 86400 == 0: return "\(s / 86400)D"
+        case let s where s > 0 && s % 3600 == 0: return "\(s / 3600)H"
+        default: return "\(max(0, seconds) / 60)M"
+        }
     }
 
     /// Elapsed fraction of the window: `1 - (resetsAt - now) / windowLength`, clamped to 0...1.

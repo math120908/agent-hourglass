@@ -30,7 +30,7 @@ struct URLSessionTransport: HTTPTransport {
 
 public final class HTTPClient: Sendable {
     /// Hosts that may receive a bearer token. Any other host is rejected before sending.
-    public static let authHosts: Set<String> = ["api.anthropic.com", "platform.claude.com", "claude.ai", "api.github.com"]
+    public static let authHosts: Set<String> = ["api.anthropic.com", "platform.claude.com", "claude.ai", "api.github.com", "chatgpt.com"]
 
     let configuration: URLSessionConfiguration
     private let transport: HTTPTransport
