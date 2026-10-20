@@ -83,6 +83,14 @@ import Testing
         #expect(make(s, .fresh).statusChip == nil)
         #expect(!make(s, .fresh).isDimmed)
     }
+    @Test func copilotGhChips() {
+        let cp: (AccountStatus, String?) -> String? = { st, login in
+            CardModel.make(snapshot: nil, status: st, kind: .copilot, now: self.now, calendar: self.cal, locale: self.locale, login: login).statusChip
+        }
+        #expect(cp(.needsLogin, nil) == "Run `gh auth login`")
+        #expect(cp(.ghMissing, nil) == "Install gh (Homebrew)")
+        #expect(cp(.ghLoginRemoved, "ckuo_LinkedIn") == "Login `ckuo_LinkedIn` not in gh; run `gh auth login`")
+    }
     @Test func spendEnabled() {
         let m = make(claude([], spend: Money(usedMinor: 85, limitMinor: 2000, currency: "EUR", exponent: 2)))
         #expect(m.spend == SpendRow(text: "0.85 / 20.00 EUR", fraction: 0.0425, chip: nil))

@@ -8,9 +8,10 @@ struct PopoverAccount: Identifiable {
     var kind: ProviderKind
     var snapshot: UsageSnapshot?
     var status: AccountStatus
+    var login: String? = nil
 
     func card(now: Date, calendar: Calendar = .current, locale: Locale = .current) -> CardModel {
-        CardModel.make(snapshot: snapshot, status: status, kind: kind, now: now, calendar: calendar, locale: locale)
+        CardModel.make(snapshot: snapshot, status: status, kind: kind, now: now, calendar: calendar, locale: locale, login: login)
     }
 }
 
@@ -26,10 +27,11 @@ struct PopoverContent {
         let accounts = state.accounts.map { id in
             PopoverAccount(
                 id: id,
-                name: id.rawValue.split(separator: ":", maxSplits: 1).last.map(String.init) ?? id.rawValue,
+                name: state.names[id] ?? id.rawValue.split(separator: ":", maxSplits: 1).last.map(String.init) ?? id.rawValue,
                 kind: id.kind ?? .claude,
                 snapshot: state.snapshots[id],
-                status: state.statuses[id] ?? .noData
+                status: state.statuses[id] ?? .noData,
+                login: state.logins[id]
             )
         }
         return PopoverContent(accounts: accounts, isOffline: state.isOffline, now: now)

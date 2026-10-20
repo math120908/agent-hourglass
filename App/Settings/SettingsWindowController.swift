@@ -20,6 +20,7 @@ struct SettingsRoot: View {
     @Bindable var model: SettingsModel
     @State var tab: SettingsTab = .general
     var addClaude: () -> Void = {}
+    var addCopilot: () -> Void = {}
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,7 +35,7 @@ struct SettingsRoot: View {
             Group {
                 switch tab {
                 case .general: GeneralTab(model: model)
-                case .accounts: AccountsTab(model: model, addClaude: addClaude)
+                case .accounts: AccountsTab(model: model, addClaude: addClaude, addCopilot: addCopilot)
                 case .history: HistoryTab(settings: HistorySettings.shared)
                 case .about: AboutTab(model: model)
                 }
@@ -50,16 +51,18 @@ struct SettingsRoot: View {
 final class SettingsWindowController {
     let model: SettingsModel
     private let addClaude: () -> Void
+    private let addCopilot: () -> Void
     private var window: NSWindow?
 
-    init(model: SettingsModel, addClaude: @escaping () -> Void) {
+    init(model: SettingsModel, addClaude: @escaping () -> Void, addCopilot: @escaping () -> Void = {}) {
         self.model = model
         self.addClaude = addClaude
+        self.addCopilot = addCopilot
     }
 
     func show(tab: SettingsTab = .general) {
         model.reload()
-        let root = SettingsRoot(model: model, tab: tab, addClaude: addClaude)
+        let root = SettingsRoot(model: model, tab: tab, addClaude: addClaude, addCopilot: addCopilot)
         if let window {
             (window.contentViewController as? NSHostingController<SettingsRoot>)?.rootView = root
         } else {

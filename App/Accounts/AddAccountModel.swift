@@ -5,7 +5,10 @@ import UsageCore
 /// Drives the Add Account sheet. One flow at a time across all windows.
 @MainActor @Observable
 final class AddAccountModel {
-    enum Step { case provider, claudeEmail, flow }
+    enum Step { case provider, claudeEmail, copilotPick, flow }
+
+    /// Copilot pick list; nil while loading, empty when gh is missing or has no github.com login.
+    var logins: [String]?
 
     /// The authorize URL of the flow in progress (never the verifier), for "Copy link".
     static var currentURL: URL?
@@ -41,6 +44,38 @@ final class AddAccountModel {
                 state = AddFlowState.failure(error)
             }
             Self.currentURL = nil
+        }
+    }
+
+    /// Loads github.com logins from `gh auth status`. gh missing shows the empty state.
+    func loadLogins() {
+        step = .copilotPick
+        logins = nil
+        Task { [engine] in
+            logins = (try? await engine.copilotLogins()) ?? []
+        }
+    }
+
+    private var copilotLogin: String?
+    var isCopilot: Bool { copilotLogin != nil }
+
+    func retry() {
+        if let copilotLogin { addCopilot(copilotLogin) } else { start() }
+    }
+
+    func addCopilot(_ login: String) {
+        copilotLogin = login
+        guard state.begin() else {
+            state = .failed("Sign-in already in progress")
+            return
+        }
+        step = .flow
+        task = Task { [engine] in
+            do {
+                state = .success(try await engine.addCopilot(login: login))
+            } catch {
+                state = AddFlowState.failure(error)
+            }
         }
     }
 

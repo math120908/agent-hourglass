@@ -8,6 +8,9 @@ public final class AppState {
     public var snapshots: [AccountID: UsageSnapshot] = [:]
     public var statuses: [AccountID: AccountStatus] = [:]
     public var lastSuccess: [AccountID: Date] = [:]
+    /// Display name and gh login per account, from the registry.
+    public var names: [AccountID: String] = [:]
+    public var logins: [AccountID: String] = [:]
     public var isOffline = false
     public var effectiveInterval: Duration = PollSchedule().effectiveInterval(floor: .seconds(60))
 

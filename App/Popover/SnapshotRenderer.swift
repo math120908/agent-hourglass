@@ -17,7 +17,29 @@ enum SnapshotRenderer {
             }
         }
         SettingsSnapshotRenderer.render(to: dir)
+        renderCopilotAdd(to: dir)
         exit(0)
+    }
+
+    /// copilot-<state>-<mode>.png: pick list, gh-missing empty state, added.
+    private static func renderCopilotAdd(to dir: URL) {
+        let state = AppState()
+        let content = Fixtures.content()
+        let copilot = content.accounts.first { $0.kind == .copilot }!
+        state.snapshots[copilot.id] = copilot.snapshot
+        let engine = UsageEngine(appState: state)
+        for (name, setup) in [
+            ("pick", { (m: AddAccountModel) in m.step = .copilotPick; m.logins = ["ckuo_LinkedIn", "small2kuo"] }),
+            ("ghmissing", { (m: AddAccountModel) in m.step = .copilotPick; m.logins = [] }),
+            ("added", { (m: AddAccountModel) in m.step = .flow; m.state = .success(copilot.id) }),
+        ] {
+            let model = AddAccountModel(engine: engine)
+            setup(model)
+            for (mode, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+                write(AddAccountSheet(model: model, appState: state) {}, appearance: appearance,
+                      to: dir.appendingPathComponent("copilot-\(name)-\(mode).png"))
+            }
+        }
     }
 
     private static func write(_ view: some View, appearance: NSAppearance.Name, to url: URL) {

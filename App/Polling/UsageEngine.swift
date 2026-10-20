@@ -11,6 +11,8 @@ final class UsageEngine {
     private let poller: Poller
     private let registry: AccountRegistry?
     private let labels = LabelBook()
+    /// Shared gh token source: one in-memory token cache for add and polling.
+    private var gh = GhTokenSource()
     let service: AccountService?
     /// Usage history; nil when the store could not be opened (polling continues without it).
     let history: HistoryStore?
@@ -45,6 +47,8 @@ final class UsageEngine {
         let registry = AccountRegistry(directory: dir)
         let store = CredentialStore()
         let labels = labels
+        let gh = GhTokenSource()
+        self.gh = gh
         self.registry = registry
         service = AccountService(
             registry: registry,
@@ -58,7 +62,10 @@ final class UsageEngine {
                     expectedRemoteID: expected
                 )
             },
-            makeClient: { id in Self.makeClient(id, store: store, label: labels.label(for: id)) }
+            makeClient: { id in
+                Self.makeClient(id, store: store, label: labels.label(for: id), gh: gh, login: labels.login(for: id))
+            },
+            ghTokens: gh
         )
     }
 
@@ -106,10 +113,10 @@ final class UsageEngine {
             Self.log.error("orphan cleanup failed: \(String(describing: error), privacy: .public)")
         }
         labels.reset(entries)
-        appState.accounts = entries.map(\.id)
+        publish(entries)
         let store = CredentialStore()
         for e in entries {
-            await poller.add(client: Self.makeClient(e.id, store: store, label: labels.label(for: e.id)))
+            await poller.add(client: Self.makeClient(e.id, store: store, label: labels.label(for: e.id), gh: gh, login: e.remoteLogin))
         }
         Self.log.info("engine accounts=\(entries.count, privacy: .public)")
     }
@@ -121,8 +128,27 @@ final class UsageEngine {
         let id = try await service.addClaude(loginHint: loginHint)
         let entries = await registry.accounts()
         labels.reset(entries)
-        appState.accounts = entries.map(\.id)
+        publish(entries)
         return id
+    }
+
+    /// github.com logins known to gh; throws `GhError.missing` when gh is absent.
+    func copilotLogins() async throws -> [String] { try await gh.logins() }
+
+    /// Adds a Copilot account borrowing gh's `login` (one GET /user, then one fetch).
+    func addCopilot(login: String) async throws -> AccountID {
+        guard let service, let registry else { throw AccountServiceError.unknownAccount }
+        labels.pendingLogin = login
+        defer { labels.pendingLogin = nil }
+        let id = try await service.addCopilot(login: login)
+        publish(await registry.accounts())
+        return id
+    }
+
+    private func publish(_ entries: [AccountEntry]) {
+        appState.accounts = entries.map(\.id)
+        appState.names = Dictionary(entries.map { ($0.id, $0.displayName) }, uniquingKeysWith: { a, _ in a })
+        appState.logins = Dictionary(entries.compactMap { e in e.remoteLogin.map { (e.id, $0) } }, uniquingKeysWith: { a, _ in a })
     }
 
     func setForeground(_ fg: Bool) {
@@ -177,8 +203,26 @@ final class UsageEngine {
         }
     }
 
-    nonisolated private static func makeClient(_ id: AccountID, store: CredentialStore, label: String) -> AccountClient {
-        AccountClient(
+    nonisolated private static func makeClient(
+        _ id: AccountID,
+        store: CredentialStore,
+        label: String,
+        gh: GhTokenSource,
+        login: String? = nil
+    ) -> AccountClient {
+        if id.kind == .copilot {
+            return AccountClient(
+                id: id,
+                provider: CopilotProvider(),
+                http: HTTPClient(),
+                store: store,
+                clock: ContinuousClock(),
+                now: { Date() },
+                tokenSource: gh,
+                login: login
+            )
+        }
+        return AccountClient(
             id: id,
             provider: ClaudeProvider(),
             http: HTTPClient(),
@@ -203,7 +247,19 @@ final class UsageEngine {
 private final class LabelBook: @unchecked Sendable {
     private let lock = NSLock()
     private var labels: [AccountID: String] = [:]
+    private var logins: [AccountID: String] = [:]
+    private var pending: String?
     private var next = 1
+
+    /// Login for a Copilot add in flight, used before its registry entry is known here.
+    var pendingLogin: String? {
+        get { lock.withLock { pending } }
+        set { lock.withLock { pending = newValue } }
+    }
+
+    func login(for id: AccountID) -> String? {
+        lock.withLock { logins[id] ?? pending }
+    }
 
     func reset(_ entries: [AccountEntry]) {
         var out: [AccountID: String] = [:]
@@ -212,8 +268,10 @@ private final class LabelBook: @unchecked Sendable {
             n += 1
             out[e.id] = AccountService.keychainLabel(kind: .claude, number: n)
         }
+        let gh = Dictionary(entries.compactMap { e in e.remoteLogin.map { (e.id, $0) } }, uniquingKeysWith: { a, _ in a })
         lock.withLock {
             labels = out
+            logins = gh
             next = n + 1
         }
     }

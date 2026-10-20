@@ -26,7 +26,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         settingsBackend = EngineSettingsBackend(engine: engine, appState: appState)
         settings = SettingsWindowController(
             model: SettingsModel(appState: appState, backend: settingsBackend),
-            addClaude: { addAccount.show() }
+            addClaude: { addAccount.show() },
+            addCopilot: { addAccount.show(copilot: true) }
         )
         let backend = settingsBackend
         historyWindow = HistoryWindowController(engine: engine) { await backend.load().entries }
@@ -73,6 +74,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         }
         observe()
     }
+
+    func debugAddCopilot(_ login: String) { addAccount.show(copilot: true, pick: login) }
 
     /// Redraws the icon only when the derived IconState or theme changes.
     private func observe() {

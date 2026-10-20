@@ -5,6 +5,7 @@ import UsageCore
 struct AccountsTab: View {
     @Bindable var model: SettingsModel
     var addClaude: () -> Void
+    var addCopilot: () -> Void = {}
     @State private var pendingRemoval: AccountEntry?
 
     var body: some View {
@@ -34,9 +35,7 @@ struct AccountsTab: View {
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                 Spacer()
                 Button("Add Claude account…", action: addClaude)
-                Button("Add Copilot account…") {}
-                    .disabled(true)
-                    .help("Coming in P4")
+                Button("Add Copilot account…", action: addCopilot)
             }
         }
         .padding(16)
@@ -58,7 +57,7 @@ struct AccountsTab: View {
             "This deletes the account's saved sign-in and its usage history from this Mac. "
                 + "Claude has no revoke endpoint, so the token stays valid on Anthropic's side until it expires."
         case .copilot:
-            "This deletes the account's usage history from this Mac. Your gh login is left as is."
+            "This deletes the account's usage history from this Mac. gh is not touched: your gh login is left as is."
         }
     }
 }

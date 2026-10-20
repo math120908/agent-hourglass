@@ -37,7 +37,8 @@ public struct CardModel: Equatable, Sendable {
         kind: ProviderKind,
         now: Date,
         calendar: Calendar,
-        locale: Locale
+        locale: Locale,
+        login: String? = nil
     ) -> CardModel {
         let ctx = Ctx(now: now, calendar: calendar, locale: locale)
         let meters = (snapshot?.meters ?? []).filter(isVisible)
@@ -48,7 +49,7 @@ public struct CardModel: Equatable, Sendable {
             rows: meters.map { ctx.row($0) },
             spend: snapshot?.spend.map(spendRow),
             planTag: Formatting.planTag(snapshot?.plan),
-            statusChip: chip(status, ctx),
+            statusChip: chip(status, ctx, kind: kind, login: login),
             updatedText: snapshot.map { ctx.updated($0.fetchedAt) } ?? "No data yet",
             isDimmed: !(status == .fresh || status == .noData)
         )
@@ -62,15 +63,15 @@ public struct CardModel: Equatable, Sendable {
         }
     }
 
-    static func chip(_ status: AccountStatus, _ ctx: Ctx) -> String? {
+    static func chip(_ status: AccountStatus, _ ctx: Ctx, kind: ProviderKind = .claude, login: String? = nil) -> String? {
         switch status {
         case .fresh, .noData: return nil
         case .stale: return "Stale"
         case .rateLimited(let at): return "Rate limited, retry \(Formatting.clock(at, ctx.calendar))"
         case .offline: return "Offline"
-        case .needsLogin: return "Sign in again"
+        case .needsLogin: return kind == .copilot ? "Run `gh auth login`" : "Sign in again"
         case .ghMissing: return "Install gh (Homebrew)"
-        case .ghLoginRemoved: return "Login not in gh"
+        case .ghLoginRemoved: return "Login \(login.map { "`\($0)` " } ?? "")not in gh; run `gh auth login`"
         case .schemaError: return "Response format changed"
         }
     }
