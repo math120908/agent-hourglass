@@ -2,22 +2,23 @@ import AppKit
 import SwiftUI
 import UsageCore
 
-/// Debug: writes history-<range>-<mode>.png and history-empty-light.png from a seeded in-memory store.
+/// Debug: writes history-<range>-<mode>.png (instr-history-* for Instrument) and history-empty-light.png from a seeded in-memory store.
 @MainActor
 enum HistorySnapshotRenderer {
-    /// `ClaudeUsage --render-history <dir>`.
+    /// `ClaudeUsage --render-history <dir> [--theme instrument]`.
     static func runIfRequested() {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: "--render-history"), i + 1 < args.count else { return }
         let dir = URL(fileURLWithPath: args[i + 1])
         Task { @MainActor in
-            await render(to: dir)
+            let t = args.firstIndex(of: "--theme").flatMap { $0 + 1 < args.count ? Theme(rawValue: args[$0 + 1]) : nil } ?? .glass
+            await render(to: dir, theme: t)
             exit(0)
         }
         RunLoop.main.run()
     }
 
-    static func render(to dir: URL) async {
+    static func render(to dir: URL, theme: Theme = .glass) async {
         guard let store = try? HistoryStore.inMemory() else { return }
         let now = Fixtures.now
         let id = AccountID(kind: .claude, remoteID: "happy-hippo")
@@ -26,7 +27,7 @@ enum HistorySnapshotRenderer {
         let cases: [(String, HistoryRange, Int)] = [("24h", .day, 0), ("7d", .week, 0), ("empty", .day, 40)]
         for (name, range, offset) in cases {
             for (mode, ap) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-                if name == "empty" && mode == "dark" { continue }
+                if theme == .glass && name == "empty" && mode == "dark" { continue }
                 let model = HistoryModel(store: store, now: { now })
                 model.range = range
                 model.hiddenModels = name == "7d" ? [] : ["Fable"]
@@ -34,7 +35,8 @@ enum HistorySnapshotRenderer {
                 model.offset = offset
                 try? await Task.sleep(for: .milliseconds(400))
                 let h = name == "empty" ? nil : now.addingTimeInterval(-range.seconds * 0.27)
-                write(HistoryView(model: model, hover: h), ap, dir.appendingPathComponent("history-\(name)-\(mode).png"))
+                let prefix = theme == .glass ? "history" : "instr-history"
+                write(HistoryView(model: model, theme: theme, hover: h), ap, dir.appendingPathComponent("\(prefix)-\(name)-\(mode).png"))
             }
         }
     }

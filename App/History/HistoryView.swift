@@ -1,7 +1,7 @@
 import SwiftUI
 import UsageCore
 
-/// History window root (spec §10.7). Switches on theme; Glass is the only case.
+/// History window root (spec §10.7). Switches on theme.
 struct HistoryView: View {
     @Bindable var model: HistoryModel
     var theme: Theme = .glass
@@ -10,7 +10,8 @@ struct HistoryView: View {
 
     var body: some View {
         switch theme {
-        default: GlassHistoryView(model: model, hover: hover)
+        case .instrument: InstrumentHistoryView(model: model, hover: hover)
+        case .glass: GlassHistoryView(model: model, hover: hover)
         }
     }
 }
