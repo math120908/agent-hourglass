@@ -19,6 +19,7 @@ public actor Poller {
     private let jitter: @Sendable () -> Double
     private let floor: Duration
     private let onResult: OnResult
+    private let recorder: (any HistoryRecording)?
 
     public private(set) var schedule = PollSchedule()
     private var asleep = false
@@ -33,6 +34,7 @@ public actor Poller {
         now: @escaping @Sendable () -> Date,
         floor: Duration = .seconds(60),
         jitter: @escaping @Sendable () -> Double = { Double.random(in: -0.05...0.05) },
+        recorder: (any HistoryRecording)? = nil,
         onResult: @escaping OnResult
     ) {
         self.clock = clock
@@ -40,6 +42,7 @@ public actor Poller {
         self.floor = floor
         self.jitter = jitter
         self.onResult = onResult
+        self.recorder = recorder
         let t = now()
         let interval = schedule.effectiveInterval(floor: floor)
         for c in clients {
@@ -154,6 +157,8 @@ public actor Poller {
         if after > due { due = after }
         if case .failure(.needsLogin) = outcome { due = .distantFuture }
         nextDue[id] = due
+        // History is best-effort: a write failure never affects polling.
+        if case .success(let snap) = outcome, let recorder { try? await recorder.record(snap) }
         await onResult(id, outcome)
     }
 

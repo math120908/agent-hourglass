@@ -8,6 +8,7 @@ public final class HistoryStore: Sendable {
 
     let db: any DatabaseWriter
     let url: URL?
+    let lastRows = LastRowCache()
 
     /// Opens (creating if needed) the store at `url`. Throws on locked/corrupt files.
     public init(url: URL) throws {
@@ -60,6 +61,7 @@ public final class HistoryStore: Sendable {
                 try db.execute(sql: "DELETE FROM \(table) WHERE account_id = ?", arguments: [id.rawValue])
             }
         }
+        lastRows.clear()
     }
 
     public func deleteAll() async throws {
@@ -68,6 +70,7 @@ public final class HistoryStore: Sendable {
                 try db.execute(sql: "DELETE FROM \(table)")
             }
         }
+        lastRows.clear()
     }
 
     /// Main file + WAL size; 0 for in-memory.
