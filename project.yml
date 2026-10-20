@@ -1,0 +1,29 @@
+name: ClaudeUsage
+options:
+  bundleIdPrefix: cc.kuoc
+  deploymentTarget:
+    macOS: "14.0"
+packages:
+  UsageCore:
+    path: .
+targets:
+  ClaudeUsage:
+    type: application
+    platform: macOS
+    sources: [App]
+    dependencies:
+      - package: UsageCore
+    info:
+      path: App/Info.plist
+      properties:
+        LSUIElement: true
+        CFBundleDisplayName: Claude Usage
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cc.kuoc.claude-usage
+        PRODUCT_NAME: ClaudeUsage
+        SWIFT_VERSION: "6.0"
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        ENABLE_HARDENED_RUNTIME: NO
+        GENERATE_INFOPLIST_FILE: NO
