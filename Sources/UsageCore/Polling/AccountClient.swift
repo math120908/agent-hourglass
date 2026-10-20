@@ -106,7 +106,9 @@ public actor AccountClient {
         do {
             return succeed(try await provider.fetch(credential: CodexProvider.borrowed, http: http))
         } catch {
-            return .failure(fail(error))
+            let s = fail(error)
+            Self.log.info("codex fetch failed: \(String(describing: type(of: error)), privacy: .public) status=\(String(describing: s), privacy: .public)")
+            return .failure(s)
         }
     }
 

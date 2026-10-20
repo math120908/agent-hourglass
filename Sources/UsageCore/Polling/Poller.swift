@@ -15,6 +15,9 @@ public actor Poller {
     private var nextDue: [AccountID: Date] = [:]
     private var lastAttempt: [AccountID: Date] = [:]
     private var lastSuccess: [AccountID: Date] = [:]
+    /// Accounts with a fetch in progress. A slow account (e.g. a Keychain read waiting on an
+    /// access prompt) must never block the others, so fetches run concurrently and are deduped here.
+    private var inFlight: Set<AccountID> = []
 
     private let clock: any Clock<Duration>
     private let now: @Sendable () -> Date
@@ -81,9 +84,7 @@ public actor Poller {
         reschedule()
         guard fg, canPoll else { return }
         let t = now()
-        for id in order where (lastSuccess[id].map { t.timeIntervalSince($0) >= Self.staleOnOpen } ?? true) {
-            await fetch(id, at: t)
-        }
+        await fetchAll(order.filter { id in lastSuccess[id].map { t.timeIntervalSince($0) >= Self.staleOnOpen } ?? true }, at: t)
     }
 
     public func setUserInterval(_ d: Duration) {
@@ -97,11 +98,11 @@ public actor Poller {
         guard canPoll else { return }
         let t = now()
         let floorS = Backoff.seconds(floor)
-        for id in order {
-            if let last = lastAttempt[id], t.timeIntervalSince(last) < floorS { continue }
-            if !force, let due = nextDue[id], t < due { continue }
-            await fetch(id, at: t)
-        }
+        await fetchAll(order.filter { id in
+            if let last = lastAttempt[id], t.timeIntervalSince(last) < floorS { return false }
+            if !force, let due = nextDue[id], t < due { return false }
+            return true
+        }, at: t)
     }
 
     public func sleep() { asleep = true; wakeAt = nil }
@@ -120,13 +121,10 @@ public actor Poller {
         if let w = wakeAt {
             guard t >= w else { return }
             wakeAt = nil
-            for id in order { await fetch(id, at: t) }
+            await fetchAll(order, at: t)
             return
         }
-        for id in order {
-            guard let due = nextDue[id], t >= due else { continue }
-            await fetch(id, at: t)
-        }
+        await fetchAll(order.filter { id in nextDue[id].map { t >= $0 } ?? false }, at: t)
     }
 
     public func start(tickEvery: Duration = .seconds(1)) {
@@ -134,7 +132,8 @@ public actor Poller {
         let clock = clock
         loop = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.tick()
+                // Not awaited: a tick stuck on one account must not stop the next tick.
+                if let self { Task { await self.tick() } }
                 try? await clock.sleep(for: tickEvery)
             }
         }
@@ -149,7 +148,19 @@ public actor Poller {
 
     private var canPoll: Bool { !asleep && !offline }
 
+    /// Runs each fetch in its own task and waits for all. Concurrent, so one stuck account never
+    /// delays the rest; `inFlight` stops a later tick from starting a second fetch of a stuck one.
+    private func fetchAll(_ ids: [AccountID], at t: Date) async {
+        var tasks: [Task<Void, Never>] = []
+        for id in ids where clients[id] != nil && !inFlight.contains(id) {
+            inFlight.insert(id)
+            tasks.append(Task { await self.fetch(id, at: t) })
+        }
+        for task in tasks { await task.value }
+    }
+
     private func fetch(_ id: AccountID, at t: Date) async {
+        defer { inFlight.remove(id) }
         guard let client = clients[id] else { return }
         if await client.status == .needsLogin { nextDue[id] = .distantFuture; return }
         let earliest = await client.nextEarliestFetch

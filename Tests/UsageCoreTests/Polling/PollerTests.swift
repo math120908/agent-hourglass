@@ -150,3 +150,35 @@ struct PollerTests {
         #expect(!s.isFresh(id))
     }
 }
+
+/// Keychain stand-in whose read blocks until released (an unanswered access prompt).
+final class BlockingStore: CredentialStoring, @unchecked Sendable {
+    let gate = DispatchSemaphore(value: 0)
+    func read(_ id: AccountID) throws -> Credential? { gate.wait(); return nil }
+    func write(_ c: Credential, for id: AccountID, label: String) throws {}
+    func delete(_ id: AccountID) throws {}
+    func allAccountIDs() throws -> [AccountID] { [] }
+}
+
+struct PollerStuckAccountTests {
+    /// Regression: one Claude account stuck in a Keychain read starved every account after it
+    /// (the Codex account never fetched). Other accounts must keep polling.
+    @Test func stuckAccountDoesNotBlockOthers() async throws {
+        let clock = TestClock()
+        let provider = CountingProvider()
+        let blocking = BlockingStore()
+        let store = InMemoryCredentialStore()
+        let stuck = AccountID(kind: .claude, remoteID: "stuck")
+        let ok = AccountID(kind: .claude, remoteID: "ok")
+        try store.write(Credential(kind: .claude, access: Secret("ok"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: ok, label: "t")
+        let results = Results()
+        let p = Poller(clients: [], clock: ContinuousClock(), now: { clock.now }, jitter: { 0 }) { results.add($0, $1) }
+        await p.add(client: AccountClient(id: stuck, provider: provider, http: HTTPClient(), store: blocking, clock: ContinuousClock(), now: { clock.now }))
+        await p.add(client: AccountClient(id: ok, provider: provider, http: HTTPClient(), store: store, clock: ContinuousClock(), now: { clock.now }))
+        let tick = Task { await p.tick() }
+        for _ in 0..<200 where provider.fetches.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(provider.fetches == ["ok"])
+        blocking.gate.signal()
+        await tick.value
+    }
+}
