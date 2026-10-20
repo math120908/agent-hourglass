@@ -16,4 +16,13 @@ import Testing
             #expect(Theme(storedValue: theme.rawValue) == theme)
         }
     }
+
+    @Test func instrumentRoundTrip() {
+        #expect(Theme(storedValue: "instrument") == .instrument)
+        #expect(Theme.instrument.rawValue == "instrument")
+    }
+
+    @Test func allCasesOrder() {
+        #expect(Theme.allCases == [.glass, .instrument])
+    }
 }

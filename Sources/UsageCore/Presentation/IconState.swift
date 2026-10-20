@@ -11,12 +11,15 @@ public struct IconState: Equatable, Sendable {
     public var pace: Int?
     /// Short window caption: "5H" for Claude session, "PR" for Copilot premium.
     public var caption: String
+    /// Integer weekly percent (0...100) for the Instrument second bar, nil when unknown.
+    public var weekly: Int?
 
-    public init(level: Level, percent: Int?, pace: Int?, caption: String) {
+    public init(level: Level, percent: Int?, pace: Int?, caption: String, weekly: Int? = nil) {
         self.level = level
         self.percent = percent
         self.pace = pace
         self.caption = caption
+        self.weekly = weekly
     }
 
     public static let empty = IconState(level: .empty, percent: nil, pace: nil, caption: "")
@@ -35,6 +38,8 @@ public struct IconState: Equatable, Sendable {
         let caption = meter?.kind == .copilotPremium || id.kind == .copilot ? "PR" : "5H"
         let percent = meter?.percentUsed.map { Int(min(100, max(0, $0)).rounded()) }
         let pace = meter?.paceFraction(now: now).map { Int(($0 * 100).rounded()) }
+        let weekly = snapshots[id]?.meters.first { $0.kind == .weeklyAll }?.percentUsed
+            .map { Int(min(100, max(0, $0)).rounded()) }
         let level: Level
         switch statuses[id] ?? .fresh {
         case .stale, .needsLogin: level = .outline
@@ -42,6 +47,6 @@ public struct IconState: Equatable, Sendable {
             guard let percent else { level = .outline; break }
             level = percent >= 90 ? .critical : percent >= 75 ? .warning : .normal
         }
-        return IconState(level: level, percent: percent, pace: pace, caption: caption)
+        return IconState(level: level, percent: percent, pace: pace, caption: caption, weekly: weekly)
     }
 }

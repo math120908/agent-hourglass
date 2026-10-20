@@ -1,8 +1,9 @@
 import AppKit
 
-/// Visual theme. v1 ships Glass only; Instrument arrives in P7 as a new case.
+/// Visual theme. Glass is the default; Instrument is mockup B.
 public enum Theme: String, CaseIterable, Codable, Sendable {
     case glass
+    case instrument
 
     public static let `default`: Theme = .glass
 
@@ -20,5 +21,6 @@ public protocol MenuBarIconRendering {
 public func iconRenderer(for theme: Theme) -> MenuBarIconRendering {
     switch theme {
     case .glass: GlassIconRenderer()
+    case .instrument: InstrumentIconRenderer()
     }
 }
