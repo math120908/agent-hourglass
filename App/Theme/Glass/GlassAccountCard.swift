@@ -8,15 +8,26 @@ struct GlassAccountCard: View {
     var onSignIn: () -> Void = {}
     var onDiagnostics: () -> Void = {}
 
+    @Environment(\.colorScheme) private var scheme
+
     private var accent: Color { GlassStyle.accent(account.kind) }
+    private var dimText: Color { scheme == .dark ? .white.opacity(0.90) : .secondary }
 
     var body: some View {
         VStack(spacing: 0) {
             compactRow
-            if let chip = card.statusChip, !Self.fitsInRow(chip) {
+            if let chip = card.statusChip, chip == "Response format changed" {
+                // The name keeps the row; the diagnostics chip moves to its own line.
+                Button(action: onDiagnostics) { StatusChipView(text: "Format changed", tint: GlassStyle.critical) }
+                    .buttonStyle(.plain)
+                    .help("Response format changed. Open About to copy diagnostics.")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 8)
+            } else if let chip = card.statusChip, !Self.fitsInRow(chip) {
                 Text(chip)
                     .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(GlassStyle.critical)
+                    .foregroundStyle(scheme == .dark ? GlassStyle.darkText(GlassStyle.critical) : GlassStyle.critical)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 12)
@@ -37,7 +48,7 @@ struct GlassAccountCard: View {
                         Divider().opacity(0.6)
                         Text(card.updatedText)
                             .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                            .glassTone()
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 10)
@@ -81,13 +92,13 @@ struct GlassAccountCard: View {
                     }
                     Text(subtitle)
                         .font(.system(size: 10.5))
-                        .foregroundStyle(.secondary)
+                        .glassTone()
                         .lineLimit(1)
                 }
                 .layoutPriority(1)
                 Spacer(minLength: 4)
-                if let chip = card.statusChip, Self.fitsInRow(chip) || chip == "Response format changed" {
-                    statusChip(Self.fitsInRow(chip) ? chip : Self.shortChip(chip))
+                if let chip = card.statusChip, Self.fitsInRow(chip) {
+                    statusChip(chip)
                 }
                 GlassMeterBar(fraction: card.headline?.fraction, paceTick: nil, color: headlineColor, height: 4)
                     .frame(width: 34)
@@ -97,7 +108,7 @@ struct GlassAccountCard: View {
                     .frame(minWidth: 38, alignment: .trailing)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 9.5, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                    .glassTone(.tertiary)
                     .rotationEffect(.degrees(isExpanded ? 90 : 0))
             }
             .padding(.horizontal, 11)
@@ -147,24 +158,11 @@ struct GlassAccountCard: View {
     /// Long recovery copy gets its own line under the row so the row never exceeds 340 pt.
     static func fitsInRow(_ chip: String) -> Bool { chip.count <= 14 }
 
-    static func shortChip(_ chip: String) -> String {
-        if chip.hasPrefix("Rate limited") { return "Rate limited" }
-        if chip == "Response format changed" { return chip }
-        if chip.hasPrefix("Login ") || chip.hasPrefix("Run ") { return "gh login" }
-        if chip.hasPrefix("Install gh") { return "gh missing" }
-        if chip.hasPrefix("Can't save") { return "Keychain" }
-        return "Attention"
-    }
-
     @ViewBuilder
     private func statusChip(_ text: String) -> some View {
         if text == "Sign in again" {
             Button(action: onSignIn) { StatusChipView(text: "Sign in", tint: GlassStyle.critical) }
                 .buttonStyle(.plain)
-        } else if text == "Response format changed" {
-            Button(action: onDiagnostics) { StatusChipView(text: "Format changed", tint: GlassStyle.critical) }
-                .buttonStyle(.plain)
-                .help("Response format changed. Open About to copy diagnostics.")
         } else {
             StatusChipView(text: text, tint: text == "Stale" ? GlassStyle.warning : GlassStyle.critical)
         }
@@ -185,13 +183,13 @@ struct GlassAccountCard: View {
                     if row.paceTick == nil && account.kind == .claude {
                         Text("5-hour rolling window")
                             .font(.system(size: 10.5))
-                            .foregroundStyle(.secondary)
+                            .glassTone()
                     }
                 }
                 Spacer()
                 Text(percent(row))
                     .font(.system(size: row.fraction == nil ? 13 : 20, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(row.fraction == nil ? Color.secondary : color)
+                    .foregroundStyle(row.fraction == nil ? dimText : color)
             }
             if row.fraction != nil {
                 GlassMeterBar(fraction: row.fraction, paceTick: row.paceTick, color: color)
@@ -230,7 +228,7 @@ struct GlassAccountCard: View {
             Text(right).lineLimit(1)
         }
         .font(.system(size: 10.5).monospacedDigit())
-        .foregroundStyle(.secondary)
+        .glassTone()
     }
 
     private func spendSection(_ spend: SpendRow) -> some View {
@@ -248,10 +246,10 @@ struct GlassAccountCard: View {
                     if parts.count > 1 {
                         Text(" / " + parts[1])
                             .font(.system(size: 10.5).monospacedDigit())
-                            .foregroundStyle(.secondary)
+                            .glassTone()
                     }
                 }
-                .foregroundStyle(spend.chip == nil ? Color.primary : Color.secondary)
+                .foregroundStyle(spend.chip == nil ? Color.primary : dimText)
             }
             GlassMeterBar(
                 fraction: spend.fraction,
