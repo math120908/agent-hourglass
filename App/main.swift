@@ -1,6 +1,20 @@
 import AppKit
 import UsageCore
 
-let app = NSApplication.shared
-app.setActivationPolicy(.accessory)
-app.run()
+let lock: InstanceLock
+do {
+    lock = try InstanceLock.acquire()
+} catch InstanceLock.Error.alreadyRunning {
+    exit(0)
+} catch {
+    NSLog("ClaudeUsage: instance lock failed: %@", String(describing: error))
+    exit(1)
+}
+
+MainActor.assumeIsolated {
+    let app = NSApplication.shared
+    let delegate = AppDelegate(lock: lock)
+    app.delegate = delegate
+    app.setActivationPolicy(.accessory)
+    withExtendedLifetime(delegate) { app.run() }
+}
