@@ -5,6 +5,7 @@ struct PopoverActions {
     var refresh: () -> Void = {}
     var history: () -> Void = {}
     var settings: () -> Void = {}
+    var addAccount: () -> Void = {}
     var signIn: (AccountID) -> Void = { _ in }
 }
 
@@ -24,6 +25,7 @@ struct PopoverHeader: View {
                 .foregroundStyle(.secondary)
             }
             Spacer()
+            iconButton("plus", "Add account", actions.addAccount)
             iconButton("arrow.clockwise", "Refresh all", actions.refresh)
             iconButton("chart.xyaxis.line", "History", actions.history)
             iconButton("gearshape", "Settings", actions.settings)

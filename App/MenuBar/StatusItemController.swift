@@ -12,17 +12,25 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private let popover = NSPopover()
     private var lastIcon: IconState?
     private var lastTheme: Theme?
+    private let addAccount: AddAccountWindowController
 
     init(appState: AppState, themeStore: ThemeStore, engine: UsageEngine) {
         self.appState = appState
         self.themeStore = themeStore
         self.engine = engine
+        addAccount = AddAccountWindowController(engine: engine, appState: appState)
         super.init()
         popover.behavior = .transient
         popover.delegate = self
         let useFixture = CommandLine.arguments.contains("--fixture")
         let ids = useFixture ? Fixtures.content().accounts.map(\.id) : appState.accounts
-        let actions = PopoverActions(refresh: { [engine] in engine.refresh() })
+        let actions = PopoverActions(
+            refresh: { [engine] in engine.refresh() },
+            addAccount: { [weak self] in
+                self?.popover.performClose(nil)
+                self?.addAccount.show()
+            }
+        )
         let root = PopoverRoot(
             theme: themeStore.theme,
             initiallyExpanded: PopoverRoot.storedExpansion(ids),

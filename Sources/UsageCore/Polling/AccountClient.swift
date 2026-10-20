@@ -18,6 +18,7 @@ public actor AccountClient {
     private let clock: any Clock<Duration>
     private let now: @Sendable () -> Date
     private let lock = RefreshLock()
+    private let label: String
 
     public private(set) var status: AccountStatus = .noData
     public private(set) var nextEarliestFetch: Date = .distantPast
@@ -35,9 +36,11 @@ public actor AccountClient {
         store: CredentialStoring,
         clock: any Clock<Duration>,
         now: @escaping @Sendable () -> Date,
-        backoff: Backoff = Backoff()
+        backoff: Backoff = Backoff(),
+        label: String? = nil
     ) {
         self.id = id
+        self.label = label ?? AccountService.keychainLabel(kind: id.kind ?? .claude, number: 1)
         self.provider = provider
         self.http = http
         self.store = store
@@ -102,7 +105,7 @@ public actor AccountClient {
 
     private func persist(_ c: Credential) {
         do {
-            try store.write(c, for: id, label: "Claude Usage (\(id.rawValue))")
+            try store.write(c, for: id, label: label)
             saveFailed = false
         } catch {
             saveFailed = true
