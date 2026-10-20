@@ -1,10 +1,11 @@
 import AppKit
 
 /// Glass (mockup A) menu bar icon: outlined bar, pace line, "→5H" caption underneath.
-/// Template in normal/outline; warning/critical carry a yellow/red fill and draw
-/// their ink with `labelColor`, resolved at draw time so light and dark bars both work.
+/// Never a template: the normal pace line is green, warning/critical fills are yellow/red.
+/// Ink is `labelColor`, resolved at draw time so light and dark bars both work.
 public struct GlassIconRenderer: MenuBarIconRendering {
-    public static let size = NSSize(width: 30, height: 22)
+    /// Wide enough for the longest caption, "→5H 100%" (about 41 pt at 7 pt bold).
+    public static let size = NSSize(width: 42, height: 22)
 
     public init() {}
 
@@ -21,25 +22,27 @@ public struct GlassIconRenderer: MenuBarIconRendering {
             img.isTemplate = true
             return img
         }
-        let colored = state.level == .warning || state.level == .critical
         let img = NSImage(size: Self.size, flipped: true) { _ in
-            Self.draw(state, ink: colored ? .labelColor : .black)
+            Self.draw(state, ink: .labelColor)
             return true
         }
-        img.isTemplate = !colored
+        img.isTemplate = false
         img.accessibilityDescription = state.percent.map { "\(state.caption) \($0)%" } ?? state.caption
         return img
     }
 
     private static func draw(_ state: IconState, ink: NSColor) {
+        let w = size.width
+        let inner = w - 6
+
         // Track outline.
-        let track = NSBezierPath(roundedRect: NSRect(x: 1.5, y: 3.5, width: 27, height: 7), xRadius: 2, yRadius: 2)
+        let track = NSBezierPath(roundedRect: NSRect(x: 1.5, y: 4, width: w - 3, height: 7), xRadius: 2, yRadius: 2)
         track.lineWidth = 1
         if state.level == .outline { track.setLineDash([2, 1.5], count: 2, phase: 0) }
         ink.withAlphaComponent(0.75).setStroke()
         track.stroke()
 
-        // Fill.
+        // Fill: session percent.
         if state.level != .outline, let p = state.percent, p > 0 {
             let fill: NSColor = switch state.level {
             case .warning: .systemYellow
@@ -47,21 +50,20 @@ public struct GlassIconRenderer: MenuBarIconRendering {
             default: ink
             }
             fill.setFill()
-            NSBezierPath(roundedRect: NSRect(x: 3, y: 5, width: max(1.5, 24 * CGFloat(p) / 100), height: 4),
+            NSBezierPath(roundedRect: NSRect(x: 3, y: 5.5, width: inner * CGFloat(p) / 100, height: 4),
                          xRadius: 1, yRadius: 1).fill()
         }
 
-        // Pace line.
+        // Pace line: green when normal, ink otherwise.
         if state.level != .outline, let pace = state.pace {
-            ink.setFill()
-            NSBezierPath(roundedRect: NSRect(x: 3 + 24 * CGFloat(pace) / 100 - 0.7, y: 2, width: 1.4, height: 10),
+            (state.level == .normal ? NSColor.systemGreen : ink).setFill()
+            NSBezierPath(roundedRect: NSRect(x: 3 + inner * CGFloat(pace) / 100 - 0.7, y: 3, width: 1.4, height: 9),
                          xRadius: 0.7, yRadius: 0.7).fill()
         }
 
-        // Caption.
-        // At warning/critical the percent replaces the arrow so the caption fits in 30 pt.
+        // Caption: "→5H" when normal, "→5H 78%" otherwise.
         var text = "→" + state.caption
-        if state.level == .warning || state.level == .critical, let p = state.percent { text = "\(state.caption) \(p)%" }
+        if state.level != .normal, let p = state.percent { text += " \(p)%" }
         let para = NSMutableParagraphStyle()
         para.alignment = .center
         para.lineBreakMode = .byClipping
@@ -70,7 +72,7 @@ public struct GlassIconRenderer: MenuBarIconRendering {
             .foregroundColor: ink,
             .paragraphStyle: para,
         ]
-        (text as NSString).draw(in: NSRect(x: 0, y: 12.5, width: 30, height: 9), withAttributes: attrs)
+        (text as NSString).draw(in: NSRect(x: 0, y: 12.5, width: w, height: 9), withAttributes: attrs)
     }
 
     /// Rasterizes `image` at `scale` under the current drawing appearance.
