@@ -12,6 +12,8 @@ app:
 	xcodegen generate --quiet
 	xcodebuild -project ClaudeUsage.xcodeproj -scheme ClaudeUsage -configuration Release \
 	  -derivedDataPath build CODE_SIGNING_ALLOWED=YES -quiet build
+	/usr/libexec/PlistBuddy -c "Delete :GitCommit" "$(APP)/Contents/Info.plist" 2>/dev/null || true
+	/usr/libexec/PlistBuddy -c "Add :GitCommit string $$(git rev-parse --short HEAD)" "$(APP)/Contents/Info.plist"
 	$(MAKE) sign ID=$(ID)
 
 sign:

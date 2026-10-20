@@ -13,22 +13,41 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private var lastIcon: IconState?
     private var lastTheme: Theme?
     private let addAccount: AddAccountWindowController
+    private let settings: SettingsWindowController
+    private let settingsBackend: EngineSettingsBackend
 
     init(appState: AppState, themeStore: ThemeStore, engine: UsageEngine) {
         self.appState = appState
         self.themeStore = themeStore
         self.engine = engine
-        addAccount = AddAccountWindowController(engine: engine, appState: appState)
+        let addAccount = AddAccountWindowController(engine: engine, appState: appState)
+        self.addAccount = addAccount
+        settingsBackend = EngineSettingsBackend(engine: engine, appState: appState)
+        settings = SettingsWindowController(
+            model: SettingsModel(appState: appState, backend: settingsBackend),
+            addClaude: { addAccount.show() }
+        )
         super.init()
+        engine.setUserInterval(minutes: settings.model.intervalMinutes)
+        settings.model.reload()
         popover.behavior = .transient
         popover.delegate = self
         let useFixture = CommandLine.arguments.contains("--fixture")
         let ids = useFixture ? Fixtures.content().accounts.map(\.id) : appState.accounts
         let actions = PopoverActions(
             refresh: { [engine] in engine.refresh() },
+            settings: { [weak self] in
+                self?.popover.performClose(nil)
+                self?.settings.show()
+            },
             addAccount: { [weak self] in
                 self?.popover.performClose(nil)
                 self?.addAccount.show()
+            },
+            signIn: { [weak self] id in
+                self?.popover.performClose(nil)
+                self?.settings.show(tab: .accounts)
+                self?.settings.model.reauth(id)
             }
         )
         let root = PopoverRoot(
@@ -63,7 +82,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         IconState.make(
             appState: appState.snapshots,
             statuses: appState.statuses,
-            menuBarAccount: nil,
+            menuBarAccount: settings.model.menuBarAccount,
             order: appState.accounts,
             now: Date()
         )

@@ -132,6 +132,16 @@ final class UsageEngine {
         }
     }
 
+    /// User refresh interval from Settings; applies while the popover is open.
+    func setUserInterval(minutes: Int) {
+        let poller = poller
+        Task { [appState] in
+            await poller.setUserInterval(.seconds(minutes * 60))
+            appState.effectiveInterval = await poller.interval
+            Self.log.debug("user interval=\(minutes * 60, privacy: .public)s")
+        }
+    }
+
     /// Manual refresh: Poller enforces the 60 s floor per account.
     func refresh() {
         let poller = poller

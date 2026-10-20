@@ -16,6 +16,7 @@ enum SnapshotRenderer {
                 write(root, appearance: appearance, to: dir.appendingPathComponent("popover-\(mode)-\(state).png"))
             }
         }
+        SettingsSnapshotRenderer.render(to: dir)
         exit(0)
     }
 
