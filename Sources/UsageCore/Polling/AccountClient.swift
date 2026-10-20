@@ -164,7 +164,7 @@ public actor AccountClient {
             s = .needsLogin
         case let .rateLimited(retryAfter):
             let at = backoff.next(retryAfter: retryAfter, now: now())
-            Self.log.info("429 #\(self.backoff.consecutive429) for \(self.id.rawValue, privacy: .public) retryAfter=\(retryAfter.map { "\($0)" } ?? "none", privacy: .public) wait=\(Int(at.timeIntervalSince(self.now())))s")
+            Self.log.info("429 #\(self.backoff.consecutive429) for \(self.id.rawValue, privacy: .public) retryAfter=\(retryAfter.map { "\($0)" } ?? "none", privacy: .public) wait=\(Int(at.timeIntervalSince(self.now())), privacy: .public)s")
             nextEarliestFetch = at
             s = .rateLimited(retryAt: at)
         case .transport:
