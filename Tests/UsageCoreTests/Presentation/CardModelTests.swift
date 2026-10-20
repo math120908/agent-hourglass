@@ -78,7 +78,8 @@ import Testing
     @Test func staleNeedsLoginOfflineChips() {
         let s = claude([session(1, resetsIn: 3600)])
         #expect(make(s, .stale).statusChip == "Stale")
-        #expect(make(s, .offline).statusChip == "Offline")
+        #expect(make(s, .offline).statusChip == nil)
+        #expect(make(s, .offline).isDimmed)
         #expect(make(s, .needsLogin).statusChip == "Sign in again")
         #expect(make(s, .fresh).statusChip == nil)
         #expect(!make(s, .fresh).isDimmed)

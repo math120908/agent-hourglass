@@ -12,6 +12,8 @@ public final class AppState {
     public var names: [AccountID: String] = [:]
     public var logins: [AccountID: String] = [:]
     public var isOffline = false
+    /// Accounts whose rotated credential could not be written to the Keychain.
+    public var saveFailed: Set<AccountID> = []
     public var effectiveInterval: Duration = PollSchedule().effectiveInterval(floor: .seconds(60))
 
     private let now: @Sendable () -> Date

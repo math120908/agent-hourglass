@@ -9,9 +9,10 @@ struct PopoverAccount: Identifiable {
     var snapshot: UsageSnapshot?
     var status: AccountStatus
     var login: String? = nil
+    var saveFailed = false
 
     func card(now: Date, calendar: Calendar = .current, locale: Locale = .current) -> CardModel {
-        CardModel.make(snapshot: snapshot, status: status, kind: kind, now: now, calendar: calendar, locale: locale, login: login)
+        CardModel.make(snapshot: snapshot, status: status, kind: kind, now: now, calendar: calendar, locale: locale, login: login, saveFailed: saveFailed)
     }
 }
 
@@ -31,7 +32,8 @@ struct PopoverContent {
                 kind: id.kind ?? .claude,
                 snapshot: state.snapshots[id],
                 status: state.statuses[id] ?? .noData,
-                login: state.logins[id]
+                login: state.logins[id],
+                saveFailed: state.saveFailed.contains(id) || (DebugFlags.simulateKeychainWriteFailure && id.kind == .claude)
             )
         }
         return PopoverContent(accounts: accounts, isOffline: state.isOffline, now: now)
@@ -54,5 +56,17 @@ struct PopoverContent {
     func clock(_ date: Date) -> String {
         let c = calendar.dateComponents([.hour, .minute], from: date)
         return String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
+    }
+}
+
+/// Debug-only launch flags.
+enum DebugFlags {
+    /// `--simulate-keychain-write-failure`: show the "Can't save credential" chip on Claude cards (DEBUG builds only).
+    static var simulateKeychainWriteFailure: Bool {
+        #if DEBUG
+        CommandLine.arguments.contains("--simulate-keychain-write-failure")
+        #else
+        false
+        #endif
     }
 }

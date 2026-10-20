@@ -6,12 +6,23 @@ struct GlassAccountCard: View {
     var card: CardModel
     @Binding var isExpanded: Bool
     var onSignIn: () -> Void = {}
+    var onDiagnostics: () -> Void = {}
 
     private var accent: Color { GlassStyle.accent(account.kind) }
 
     var body: some View {
         VStack(spacing: 0) {
             compactRow
+            if let chip = card.statusChip, !Self.fitsInRow(chip) {
+                Text(chip)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(GlassStyle.critical)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 8)
+                    .textSelection(.enabled)
+            }
             if isExpanded {
                 VStack(spacing: 0) {
                     ForEach(Array(card.rows.enumerated()), id: \.offset) { _, row in
@@ -75,7 +86,7 @@ struct GlassAccountCard: View {
                 }
                 .layoutPriority(1)
                 Spacer(minLength: 4)
-                if let chip = card.statusChip { statusChip(chip) }
+                if let chip = card.statusChip { statusChip(Self.fitsInRow(chip) ? chip : Self.shortChip(chip)) }
                 GlassMeterBar(fraction: card.headline?.fraction, paceTick: nil, color: headlineColor, height: 4)
                     .frame(width: 34)
                 Text(headlinePercent)
@@ -123,11 +134,27 @@ struct GlassAccountCard: View {
         (card.headline?.severity ?? .normal) == .normal ? .primary : headlineColor
     }
 
+    /// Long recovery copy gets its own line under the row so the row never exceeds 340 pt.
+    static func fitsInRow(_ chip: String) -> Bool { chip.count <= 14 }
+
+    static func shortChip(_ chip: String) -> String {
+        if chip.hasPrefix("Rate limited") { return "Rate limited" }
+        if chip == "Response format changed" { return chip }
+        if chip.hasPrefix("Login ") || chip.hasPrefix("Run ") { return "gh login" }
+        if chip.hasPrefix("Install gh") { return "gh missing" }
+        if chip.hasPrefix("Can't save") { return "Keychain" }
+        return "Attention"
+    }
+
     @ViewBuilder
     private func statusChip(_ text: String) -> some View {
         if text == "Sign in again" {
             Button(action: onSignIn) { StatusChipView(text: "Sign in", tint: GlassStyle.critical) }
                 .buttonStyle(.plain)
+        } else if text == "Response format changed" {
+            Button(action: onDiagnostics) { StatusChipView(text: "Format changed", tint: GlassStyle.critical) }
+                .buttonStyle(.plain)
+                .help("Response format changed. Open About to copy diagnostics.")
         } else {
             StatusChipView(text: text, tint: text == "Stale" ? GlassStyle.warning : GlassStyle.critical)
         }

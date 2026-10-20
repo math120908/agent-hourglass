@@ -58,6 +58,10 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
                 self?.popover.performClose(nil)
                 self?.settings.show(tab: .accounts)
                 self?.settings.model.reauth(id)
+            },
+            diagnostics: { [weak self] in
+                self?.popover.performClose(nil)
+                self?.settings.show(tab: .about)
             }
         )
         let root = PopoverRoot(

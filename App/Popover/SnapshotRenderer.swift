@@ -42,7 +42,7 @@ enum SnapshotRenderer {
         }
     }
 
-    private static func write(_ view: some View, appearance: NSAppearance.Name, to url: URL) {
+    static func write(_ view: some View, appearance: NSAppearance.Name, to url: URL) {
         let backdrop = view.background(
             LinearGradient(
                 colors: [Color(red: 0.62, green: 0.68, blue: 0.86), Color(red: 0.78, green: 0.62, blue: 0.74)],

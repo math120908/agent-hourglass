@@ -4,6 +4,7 @@ import UsageCore
 MainActor.assumeIsolated {
     _ = NSApplication.shared
     SnapshotRenderer.runIfRequested()
+    StateGalleryRenderer.runIfRequested()
     HistorySnapshotRenderer.runIfRequested()
 }
 

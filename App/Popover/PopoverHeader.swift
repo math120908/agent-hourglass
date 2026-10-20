@@ -7,6 +7,8 @@ struct PopoverActions {
     var settings: () -> Void = {}
     var addAccount: () -> Void = {}
     var signIn: (AccountID) -> Void = { _ in }
+    /// schemaError recovery: opens About, where "Copy diagnostics" lives.
+    var diagnostics: () -> Void = {}
 }
 
 struct PopoverHeader: View {

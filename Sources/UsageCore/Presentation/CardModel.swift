@@ -38,7 +38,8 @@ public struct CardModel: Equatable, Sendable {
         now: Date,
         calendar: Calendar,
         locale: Locale,
-        login: String? = nil
+        login: String? = nil,
+        saveFailed: Bool = false
     ) -> CardModel {
         let ctx = Ctx(now: now, calendar: calendar, locale: locale)
         let meters = (snapshot?.meters ?? []).filter(isVisible)
@@ -49,7 +50,7 @@ public struct CardModel: Equatable, Sendable {
             rows: meters.map { ctx.row($0) },
             spend: snapshot?.spend.map(spendRow),
             planTag: Formatting.planTag(snapshot?.plan),
-            statusChip: chip(status, ctx, kind: kind, login: login),
+            statusChip: saveFailed ? "Can't save credential" : chip(status, ctx, kind: kind, login: login),
             updatedText: snapshot.map { ctx.updated($0.fetchedAt) } ?? "No data yet",
             isDimmed: !(status == .fresh || status == .noData)
         )
@@ -65,10 +66,10 @@ public struct CardModel: Equatable, Sendable {
 
     static func chip(_ status: AccountStatus, _ ctx: Ctx, kind: ProviderKind = .claude, login: String? = nil) -> String? {
         switch status {
-        case .fresh, .noData: return nil
+        // Offline is one global banner in the header, never a per-card chip (spec §9).
+        case .fresh, .noData, .offline: return nil
         case .stale: return "Stale"
         case .rateLimited(let at): return "Rate limited, retry \(Formatting.clock(at, ctx.calendar))"
-        case .offline: return "Offline"
         case .needsLogin: return kind == .copilot ? "Run `gh auth login`" : "Sign in again"
         case .ghMissing: return "Install gh (Homebrew)"
         case .ghLoginRemoved: return "Login \(login.map { "`\($0)` " } ?? "")not in gh; run `gh auth login`"
