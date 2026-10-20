@@ -36,7 +36,7 @@ final class UsageEngine {
             recorder: history
         ) { [appState] id, outcome in
             await MainActor.run { appState.apply(id, outcome) }
-            Self.log.debug("result id=\(id.rawValue.prefix(14), privacy: .public) \(Self.summary(outcome), privacy: .public)")
+            Self.log.info("result id=\(id.rawValue.prefix(14), privacy: .public) \(Self.summary(outcome), privacy: .public)")
         }
         guard let dir = try? AppSupport.directory() else {
             Self.log.error("no app support directory")

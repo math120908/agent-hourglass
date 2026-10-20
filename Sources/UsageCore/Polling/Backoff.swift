@@ -18,11 +18,18 @@ public struct Backoff: Sendable {
         if let retryAfter {
             return now.addingTimeInterval(Self.seconds(max(retryAfter, Self.floor)))
         }
-        let base = min(120 * pow(2, Double(consecutive429 - 1)), Self.seconds(Self.cap))
-        return now.addingTimeInterval(base * (1 + jitter()))
+        return now.addingTimeInterval(Self.ladder(consecutive429) * (1 + jitter()))
     }
 
-    public mutating func reset() { consecutive429 = 0 }
+    /// A 200 after a 429 lowers the level one step instead of resetting it.
+    public mutating func stepDown() { consecutive429 = max(consecutive429 - 1, 0) }
+
+    /// The current level's ladder delay (no jitter); nil at level 0.
+    public var levelDelay: TimeInterval? { consecutive429 > 0 ? Self.ladder(consecutive429) : nil }
+
+    static func ladder(_ level: Int) -> TimeInterval {
+        min(120 * pow(2, Double(level - 1)), seconds(cap))
+    }
 
     static func seconds(_ d: Duration) -> TimeInterval {
         Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18

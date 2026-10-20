@@ -19,11 +19,22 @@ struct BackoffTests {
         #expect(abs(hi.next(retryAfter: nil, now: now).timeIntervalSince(now) - 132) < 1e-9)
     }
 
-    @Test func resetAfterSuccess() {
+    @Test func twoThenOneSuccessLeavesLevel1() {
         var b = Backoff(jitter: { 0 })
         _ = b.next(retryAfter: nil, now: now)
         _ = b.next(retryAfter: nil, now: now)
-        b.reset()
+        b.stepDown()
+        #expect(b.consecutive429 == 1)
+        #expect(b.levelDelay == 120)
+    }
+
+    @Test func threeSuccessesAfterTwo429sReachLevel0() {
+        var b = Backoff(jitter: { 0 })
+        _ = b.next(retryAfter: nil, now: now)
+        _ = b.next(retryAfter: nil, now: now)
+        b.stepDown(); b.stepDown(); b.stepDown()
+        #expect(b.consecutive429 == 0)
+        #expect(b.levelDelay == nil)
         #expect(b.next(retryAfter: nil, now: now).timeIntervalSince(now) == 120)
     }
 }

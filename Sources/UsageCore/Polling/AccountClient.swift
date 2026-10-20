@@ -107,10 +107,11 @@ public actor AccountClient {
     private func succeed(_ s: UsageSnapshot) -> FetchOutcome {
         var snap = s
         snap.accountID = id
-        backoff.reset()
+        backoff.stepDown()
         lastSnapshot = snap
         status = saveFailed ? .stale : .fresh
-        nextEarliestFetch = now().addingTimeInterval(Backoff.seconds(provider.minimumInterval))
+        let wait = max(Backoff.seconds(provider.minimumInterval), backoff.levelDelay ?? 0)
+        nextEarliestFetch = now().addingTimeInterval(wait)
         return .success(snap)
     }
 
