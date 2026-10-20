@@ -168,3 +168,37 @@ struct CopilotAccountTests {
 
     static let cred = Credential(kind: .copilot, access: Secret("t"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: [])
 }
+
+struct CopilotHistoryReproTests {
+    @Test func addCopilotRecordsSample() async throws {
+        let gh = try CountingGh()
+        let t = QueueTransport()
+        let store = InMemoryCredentialStore()
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cprec-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let history = try HistoryStore(url: dir.appendingPathComponent("h.sqlite"))
+        let results = SvcEventLog()
+        let poller = Poller(clients: [], clock: ContinuousClock(), now: { Date() }, jitter: { 0 }, recorder: history) { id, o in
+            results.add("\(id.rawValue) \(o)")
+        }
+        let src = gh.source
+        let http = HTTPClient(transport: t)
+        let svc = AccountService(
+            registry: AccountRegistry(directory: dir),
+            store: store,
+            poller: poller,
+            history: history,
+            claudeLogin: { _, _ in throw AccountServiceError.unknownAccount },
+            makeClient: { id in
+                AccountClient(id: id, provider: CopilotProvider(), http: http, store: store, clock: ContinuousClock(), now: { Date() }, tokenSource: src, login: "alice")
+            },
+            ghTokens: src,
+            http: http
+        )
+        let id = try await svc.addCopilot(login: "alice")
+        #expect(t.copilotCalls == 1)
+        #expect(!results.all.isEmpty)
+        let rows = try await HistoryQuery(store: history).series(account: id, range: DateInterval(start: Date().addingTimeInterval(-3600), duration: 7200))
+        #expect(!rows.isEmpty)
+    }
+}
