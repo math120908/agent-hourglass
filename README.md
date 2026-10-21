@@ -1,6 +1,6 @@
 # Agent Hourglass
 
-macOS menu bar app that shows plan usage for Claude and GitHub Copilot accounts: current session and weekly meters in a popover, a menu bar icon for one chosen account, and a History window with charts and export.
+macOS menu bar app that shows plan usage for Claude, GitHub Copilot, and OpenAI Codex accounts: current session and weekly meters in a popover, a menu bar icon for one chosen account, and a History window with charts and export.
 
 `UsageCore` is an SPM library (no AppKit); `App/` is the AppKit shell built via XcodeGen.
 
@@ -13,20 +13,23 @@ Requires Xcode, XcodeGen, and the self-signed code-signing identity `Claude Usag
 
 ```bash
 make test      # swift test + secret-scan + source-guards
-make app       # xcodegen + Release build + GitCommit stamp + codesign
+make app       # xcodegen + Release build + version bump + GitCommit stamp + codesign
 make install   # make app, quit the running app, copy to ~/Applications/AgentHourglass.app
 ```
 
 The app installs as `~/Applications/AgentHourglass.app`. Older builds were named `ClaudeUsage.app`; `make install` removes that copy. It is a different app from Anthropic's `/Applications/Claude Usage.app` (note the space); never overwrite or delete that one.
 
+Each build on `master` bumps the patch version (`1.0.1`, `1.0.2`, ...). The counter lives in the untracked `.build-number`; builds on other branches reuse it with a `-dev` suffix. A new build changes the code signature, so macOS may ask for Keychain access once after each rebuild.
+
 When macOS asks for Keychain access, click **Allow**, never **Always Allow**. The app only reads its own items.
 
 ## Accounts
 
-Settings > Accounts:
+Settings > Accounts > **Add Account** menu (the list refreshes as soon as an account is added). Settings > History has an **Open Usage History** link.
 
-- **Add Claude account...** opens the browser OAuth login. The token is stored in the Keychain under service `cc.kuoc.claude-usage`. The app never reads Claude Code's own credential.
-- **Add Copilot account...** uses the GitHub CLI. Install `gh` (Homebrew) and run `gh auth login` first; the app asks `gh` for the token on each poll and does not store it.
+- **Claude** opens the browser OAuth login. The token is stored in the Keychain under service `cc.kuoc.claude-usage`. The app never reads Claude Code's own credential.
+- **GitHub Copilot** uses the GitHub CLI. Install `gh` (Homebrew) and run `gh auth login` first; the app asks `gh` for the token on each poll and does not store it.
+- **Codex** reads the Codex CLI login from `~/.codex/auth.json` (read-only; run `codex login` first). The app never refreshes or writes that file. Meters are labelled by window length (for example `30-day`).
 
 ## Themes
 
