@@ -36,6 +36,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         historyWindow = HistoryWindowController(engine: engine) { await backend.load().entries }
         HistorySettings.shared.store = engine.history
         HistorySettings.shared.onDelete = { [historyWindow] in historyWindow.model.load() }
+        HistorySettings.shared.openHistory = { [historyWindow] in historyWindow.show() }
         super.init()
         engine.setUserInterval(minutes: settings.model.intervalMinutes)
         settings.model.reload()

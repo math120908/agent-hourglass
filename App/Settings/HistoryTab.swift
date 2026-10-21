@@ -16,6 +16,8 @@ final class HistorySettings {
     var error: String?
     /// Called after a delete so open views reload.
     @ObservationIgnored var onDelete: () -> Void = {}
+    /// Opens the Usage History window; wired by StatusItemController.
+    @ObservationIgnored var openHistory: (() -> Void)?
 
     init(store: HistoryStore? = nil) {
         self.store = store
@@ -46,6 +48,16 @@ struct HistoryTab: View {
 
     var body: some View {
         Form {
+            if let open = settings.openHistory {
+                Section {
+                    Button {
+                        open()
+                    } label: {
+                        Label("Open Usage History", systemImage: "chart.xyaxis.line")
+                    }
+                    .buttonStyle(.link)
+                }
+            }
             Section {
                 Picker("Keep detailed samples for", selection: $settings.rawDays) {
                     ForEach(HistorySettings.retentionChoices, id: \.self) { Text("\($0) days").tag($0) }
