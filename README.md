@@ -2,26 +2,17 @@
 
 macOS menu bar app that shows plan usage for Claude, GitHub Copilot, and OpenAI Codex accounts: current session and weekly meters in a popover, a menu bar icon for one chosen account, and a History window with charts and export.
 
-`UsageCore` is an SPM library (no AppKit); `App/` is the AppKit shell built via XcodeGen.
-
 ## Install
 
-Requires Xcode, XcodeGen, and the self-signed code-signing identity `Claude Usage Dev` in the login keychain:
-
-- SHA-1: `FA3D8189AA4D9C1371B314CBDD1278672754EE99`
-- Valid until 2036-10-17
-
 ```bash
-make test      # swift test + secret-scan + source-guards
-make app       # xcodegen + Release build + version bump + GitCommit stamp + codesign
-make install   # make app, quit the running app, copy to ~/Applications/AgentHourglass.app
+make install   # builds and copies to ~/Applications/AgentHourglass.app
 ```
+
+Build requirements, signing, and versioning are in [DEVELOPMENT.md](DEVELOPMENT.md).
 
 The app installs as `~/Applications/AgentHourglass.app`. Older builds were named `ClaudeUsage.app`; `make install` removes that copy. It is a different app from Anthropic's `/Applications/Claude Usage.app` (note the space); never overwrite or delete that one.
 
-Each build on `master` bumps the patch version (`1.0.1`, `1.0.2`, ...). The counter lives in the untracked `.build-number`; builds on other branches reuse it with a `-dev` suffix. A new build changes the code signature, so macOS may ask for Keychain access once after each rebuild.
-
-When macOS asks for Keychain access, click **Allow**, never **Always Allow**. The app only reads its own items.
+When macOS asks for Keychain access, click **Allow**, never **Always Allow**. The app only reads its own items. A rebuild may ask once again.
 
 ## Accounts
 
@@ -76,18 +67,8 @@ If launch at login was on, turn it off in Settings first (or remove AgentHourgla
 - Usage endpoints are undocumented and may change; unknown fields show as a schema error and appear in diagnostics.
 - Polling backs off on HTTP 429 (at least the Retry-After value, minimum 60 s), so a card can show "Rate limited" for a while.
 - Copilot requires `gh`; removing the login from `gh` shows "Login not in gh".
-- Self-signed: other Macs need their own identity (`make app ID=<sha1>`). Not notarized.
+- Self-signed and not notarized; see DEVELOPMENT.md.
 - No notifications.
-
-## Dev only
-
-Not part of a normal install. These exist for testing and must not be used with shipped builds:
-
-- `usagectl` (CLI harness and soak, `swift build -c release --product usagectl`). Uses its own Keychain service `cc.kuoc.claude-usage.cli` and writes `soak.log`, `usagectl-accounts.json`, `usagectl.lock` (all 600) into the app support dir.
-- App launch args `--fixture`, `--render-*` (snapshot renderers), `--simulate-keychain-write-failure`. `--theme instrument` (or `glass`) selects which theme the `--render-states` and `--render-history` renderers draw; default Glass. Debug-only paths; not for daily use.
-- `make sign ID=<sha1>`, `make hooks` (pre-commit secret-scan + source-guards).
-
-Release checks: `docs/release-checklist.md`.
 
 ## Disclaimer and icon credits
 This is an unofficial personal tool. It is not affiliated with, endorsed by, or sponsored by Anthropic, GitHub, Microsoft, or OpenAI.
