@@ -9,7 +9,7 @@ public enum StatusMenuItem: Equatable, Sendable {
         case .refresh: "Refresh Now"
         case .history: "Open History…"
         case .settings: "Settings…"
-        case .quit: "Quit Claude Usage"
+        case .quit: "Quit Agent Hourglass"
         }
     }
 

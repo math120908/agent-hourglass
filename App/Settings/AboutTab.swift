@@ -22,7 +22,7 @@ struct AboutTab: View {
             Image(systemName: "gauge.with.dots.needle.33percent")
                 .font(.system(size: 40, weight: .light))
                 .foregroundStyle(GlassStyle.claude)
-            Text("Claude Usage").font(.system(size: 17, weight: .semibold))
+            Text("Agent Hourglass").font(.system(size: 17, weight: .semibold))
             Text("Version \(Self.version)")
                 .font(.system(size: 12).monospacedDigit()).foregroundStyle(.secondary)
                 .textSelection(.enabled)

@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import UsageCore
 
-/// Debug: `ClaudeUsage --render-snapshots <dir>` writes popover PNGs (light/dark, collapsed/expanded) and exits.
+/// Debug: `AgentHourglass --render-snapshots <dir>` writes popover PNGs (light/dark, collapsed/expanded) and exits.
 @MainActor
 enum SnapshotRenderer {
     static func runIfRequested() {

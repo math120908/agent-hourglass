@@ -5,7 +5,7 @@ import UsageCore
 /// Debug: writes history-<range>-<mode>.png (instr-history-* for Instrument) and history-empty-light.png from a seeded in-memory store.
 @MainActor
 enum HistorySnapshotRenderer {
-    /// `ClaudeUsage --render-history <dir> [--theme instrument]`.
+    /// `AgentHourglass --render-history <dir> [--theme instrument]`.
     static func runIfRequested() {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: "--render-history"), i + 1 < args.count else { return }

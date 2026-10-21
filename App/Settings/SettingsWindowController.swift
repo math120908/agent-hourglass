@@ -75,7 +75,7 @@ final class SettingsWindowController {
             (window.contentViewController as? NSHostingController<SettingsRoot>)?.rootView = root
         } else {
             let w = NSWindow(contentViewController: NSHostingController(rootView: root))
-            w.title = "Claude Usage Settings"
+            w.title = "Agent Hourglass Settings"
             w.styleMask = [.titled, .closable, .fullSizeContentView]
             w.titlebarAppearsTransparent = true
             w.isReleasedWhenClosed = false

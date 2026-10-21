@@ -14,7 +14,7 @@ do {
 } catch InstanceLock.Error.alreadyRunning {
     exit(0)
 } catch {
-    NSLog("ClaudeUsage: instance lock failed: %@", String(describing: error))
+    NSLog("AgentHourglass: instance lock failed: %@", String(describing: error))
     exit(1)
 }
 

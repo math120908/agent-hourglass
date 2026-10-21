@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import UsageCore
 
-/// Debug: `ClaudeUsage --render-states <dir>` writes one popover + one menu bar icon PNG per
+/// Debug: `AgentHourglass --render-states <dir>` writes one popover + one menu bar icon PNG per
 /// account state (spec §9) in light and dark, then exits. `--theme instrument` writes
 /// `instr-state-<name>-<mode>.png` popovers instead (no icons).
 @MainActor

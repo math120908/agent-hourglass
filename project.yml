@@ -1,4 +1,4 @@
-name: ClaudeUsage
+name: AgentHourglass
 options:
   bundleIdPrefix: cc.kuoc
   deploymentTarget:
@@ -7,7 +7,7 @@ packages:
   UsageCore:
     path: .
 targets:
-  ClaudeUsage:
+  AgentHourglass:
     type: application
     platform: macOS
     sources: [App]
@@ -17,12 +17,12 @@ targets:
       path: App/Info.plist
       properties:
         LSUIElement: true
-        CFBundleDisplayName: Claude Usage
+        CFBundleDisplayName: Agent Hourglass
         CFBundleIconFile: AppIcon
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cc.kuoc.claude-usage
-        PRODUCT_NAME: ClaudeUsage
+        PRODUCT_NAME: AgentHourglass
         SWIFT_VERSION: "6.0"
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_STYLE: Manual

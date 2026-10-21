@@ -1,4 +1,4 @@
-# claude-usage
+# Agent Hourglass
 
 macOS menu bar app that shows plan usage for Claude and GitHub Copilot accounts: current session and weekly meters in a popover, a menu bar icon for one chosen account, and a History window with charts and export.
 
@@ -14,10 +14,10 @@ Requires Xcode, XcodeGen, and the self-signed code-signing identity `Claude Usag
 ```bash
 make test      # swift test + secret-scan + source-guards
 make app       # xcodegen + Release build + GitCommit stamp + codesign
-make install   # make app, quit the running app, copy to ~/Applications/ClaudeUsage.app
+make install   # make app, quit the running app, copy to ~/Applications/AgentHourglass.app
 ```
 
-The app installs as `~/Applications/ClaudeUsage.app`. It is a different app from Anthropic's `/Applications/Claude Usage.app` (note the space); never overwrite or delete that one.
+The app installs as `~/Applications/AgentHourglass.app`. Older builds were named `ClaudeUsage.app`; `make install` removes that copy. It is a different app from Anthropic's `/Applications/Claude Usage.app` (note the space); never overwrite or delete that one.
 
 When macOS asks for Keychain access, click **Allow**, never **Always Allow**. The app only reads its own items.
 
@@ -58,15 +58,15 @@ Logs go to the unified log, subsystem `cc.kuoc.claude-usage`. Tokens are never l
 ## Uninstall
 
 ```bash
-pkill -x ClaudeUsage
-rm -rf ~/Applications/ClaudeUsage.app
+pkill -x AgentHourglass
+rm -rf ~/Applications/AgentHourglass.app
 rm -rf ~/Library/Application\ Support/cc.kuoc.claude-usage
 # Keychain items (repeat until "could not be found"):
 security delete-generic-password -s cc.kuoc.claude-usage
 security delete-generic-password -s cc.kuoc.claude-usage.cli
 ```
 
-If launch at login was on, turn it off in Settings first (or remove ClaudeUsage from System Settings > General > Login Items).
+If launch at login was on, turn it off in Settings first (or remove AgentHourglass from System Settings > General > Login Items).
 
 ## Known limits
 

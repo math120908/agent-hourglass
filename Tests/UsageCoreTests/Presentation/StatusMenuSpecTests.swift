@@ -4,7 +4,7 @@ import Testing
 struct StatusMenuSpecTests {
     @Test func titlesInOrderWithSeparatorBeforeQuit() {
         let titles = StatusMenuItem.layout.map { $0?.title ?? "---" }
-        #expect(titles == ["Refresh Now", "Open History…", "Settings…", "---", "Quit Claude Usage"])
+        #expect(titles == ["Refresh Now", "Open History…", "Settings…", "---", "Quit Agent Hourglass"])
     }
 
     @Test func clickRouting() {

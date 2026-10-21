@@ -110,7 +110,7 @@ private final class Server: @unchecked Sendable {
     private var handled = false
     private var query: [String: String]?
 
-    static let page = "<!doctype html><html><head><meta charset=\"utf-8\"><title>ClaudeUsage</title></head>"
+    static let page = "<!doctype html><html><head><meta charset=\"utf-8\"><title>Agent Hourglass</title></head>"
         + "<body><p>Signed in. You can close this tab.</p></body></html>"
 
     init(port: UInt16, fds: [Int32]) { self.port = port; self.fds = fds }
