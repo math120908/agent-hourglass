@@ -85,3 +85,8 @@ Not part of a normal install. These exist for testing and must not be used with 
 - `make sign ID=<sha1>`, `make hooks` (pre-commit secret-scan + source-guards).
 
 Release checks: `docs/release-checklist.md`.
+
+## Disclaimer and icon credits
+This is an unofficial personal tool. It is not affiliated with, endorsed by, or sponsored by Anthropic, GitHub, Microsoft, or OpenAI.
+Claude, GitHub Copilot, Codex, and OpenAI are trademarks of their respective owners. The provider logos are used only to show which service an account belongs to.
+Provider icon SVGs come from [Simple Icons](https://simpleicons.org) (CC0-1.0); the trademarks themselves remain with their owners.

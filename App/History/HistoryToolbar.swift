@@ -46,8 +46,7 @@ struct HistoryToolbar: View {
     }
 
     private func glyph(_ k: ProviderKind) -> some View {
-        Text(GlassStyle.glyph(k))
-            .font(.system(size: 8, weight: .bold))
+        ProviderIcon(kind: k, size: 9)
             .foregroundStyle(.white)
             .frame(width: 14, height: 14)
             .background(RoundedRectangle(cornerRadius: 4).fill(GlassStyle.accent(k)))

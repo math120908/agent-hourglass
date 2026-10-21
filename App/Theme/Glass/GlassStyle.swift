@@ -23,15 +23,6 @@ enum GlassStyle {
         }
     }
 
-    /// Card glyph letter per provider.
-    static func glyph(_ kind: ProviderKind) -> String {
-        switch kind {
-        case .claude: "C"
-        case .copilot: "G"
-        case .codex: "X"
-        }
-    }
-
     static func color(_ severity: Meter.Severity, _ kind: ProviderKind) -> Color {
         switch severity {
         case .normal: accent(kind)

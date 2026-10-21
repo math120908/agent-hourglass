@@ -136,8 +136,7 @@ struct GlassAccountCard: View {
             .fill(accent.gradient)
             .frame(width: 20, height: 20)
             .overlay(
-                Text(GlassStyle.glyph(account.kind))
-                    .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                ProviderIcon(kind: account.kind, size: 12)
                     .foregroundStyle(.white)
             )
     }

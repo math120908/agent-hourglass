@@ -37,9 +37,9 @@ struct AccountsTab: View {
                 Spacer()
                 // One menu instead of a button per provider, so new providers don't widen the bar.
                 Menu {
-                    Button("Claude", action: addClaude)
-                    Button("GitHub Copilot", action: addCopilot)
-                    Button("Codex", action: addCodex)
+                    Button(action: addClaude) { Label { Text("Claude") } icon: { ProviderIcon(kind: .claude) } }
+                    Button(action: addCopilot) { Label { Text("GitHub Copilot") } icon: { ProviderIcon(kind: .copilot) } }
+                    Button(action: addCodex) { Label { Text("Codex") } icon: { ProviderIcon(kind: .codex) } }
                 } label: {
                     Label("Add Account", systemImage: "plus")
                 }
@@ -85,7 +85,7 @@ private struct AccountRow: View {
         let status = model.status(entry.id)
         HStack(spacing: 10) {
             Image(systemName: "line.3.horizontal").font(.system(size: 11)).foregroundStyle(.tertiary)
-            Circle().fill(GlassStyle.accent(entry.kind)).frame(width: 9, height: 9)
+            ProviderIcon(kind: entry.kind, size: 14).foregroundStyle(GlassStyle.accent(entry.kind))
             VStack(alignment: .leading, spacing: 2) {
                 TextField("Name", text: $name)
                     .textFieldStyle(.plain)
