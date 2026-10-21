@@ -117,16 +117,16 @@ struct GhTokenSourceTests {
         let gh = try FakeGh("""
         cat <<'OUT'
         github.com
-          ✓ Logged in to github.com account ckuo_LinkedIn (keyring)
+          ✓ Logged in to github.com account pikachu-dev (keyring)
           - Active account: true
           - Git operations protocol: https
           - Token: gho_************************************
           - Token scopes: 'gist', 'read:org', 'repo', 'workflow'
 
-          ✓ Logged in to github.com account small2kuo (keyring)
+          ✓ Logged in to github.com account eevee-lab (keyring)
           - Active account: false
         OUT
         """)
-        #expect(try await gh.source().logins() == ["ckuo_LinkedIn", "small2kuo"])
+        #expect(try await gh.source().logins() == ["pikachu-dev", "eevee-lab"])
     }
 }

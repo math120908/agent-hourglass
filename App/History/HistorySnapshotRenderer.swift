@@ -23,7 +23,7 @@ enum HistorySnapshotRenderer {
         let now = Fixtures.now
         let id = AccountID(kind: .claude, remoteID: "happy-hippo")
         await seed(store, id: id, now: now)
-        let entry = AccountEntry(id: id, kind: .claude, displayName: "Happy Hippo", remoteLogin: nil, order: 0, addedAt: now, status: "ok")
+        let entry = AccountEntry(id: id, kind: .claude, displayName: "Snorlax", remoteLogin: nil, order: 0, addedAt: now, status: "ok")
         let cases: [(String, HistoryRange, Int)] = [("24h", .day, 0), ("7d", .week, 0), ("empty", .day, 40)]
         for (name, range, offset) in cases {
             for (mode, ap) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {

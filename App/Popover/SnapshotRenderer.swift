@@ -29,7 +29,7 @@ enum SnapshotRenderer {
         state.snapshots[copilot.id] = copilot.snapshot
         let engine = UsageEngine(appState: state)
         for (name, setup) in [
-            ("pick", { (m: AddAccountModel) in m.step = .copilotPick; m.logins = ["ckuo_LinkedIn", "small2kuo"] }),
+            ("pick", { (m: AddAccountModel) in m.step = .copilotPick; m.logins = ["pikachu-dev", "eevee-lab"] }),
             ("ghmissing", { (m: AddAccountModel) in m.step = .copilotPick; m.logins = [] }),
             ("added", { (m: AddAccountModel) in m.step = .flow; m.state = .success(copilot.id) }),
         ] {

@@ -90,7 +90,7 @@ import Testing
         }
         #expect(cp(.needsLogin, nil) == "Run `gh auth login`")
         #expect(cp(.ghMissing, nil) == "Install gh (Homebrew)")
-        #expect(cp(.ghLoginRemoved, "ckuo_LinkedIn") == "Login `ckuo_LinkedIn` not in gh; run `gh auth login`")
+        #expect(cp(.ghLoginRemoved, "pikachu-dev") == "Login `pikachu-dev` not in gh; run `gh auth login`")
     }
     @Test func spendEnabled() {
         let m = make(claude([], spend: Money(usedMinor: 85, limitMinor: 2000, currency: "EUR", exponent: 2)))

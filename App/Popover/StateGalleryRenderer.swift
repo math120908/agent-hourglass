@@ -60,7 +60,7 @@ enum StateGalleryRenderer {
             Case(name: "needslogin-claude", account: with(claude, .needsLogin) { $0.snapshot?.fetchedAt = old }),
             Case(name: "needslogin-copilot", account: with(copilot, .needsLogin)),
             Case(name: "ghmissing", account: with(copilot, .ghMissing) { $0.snapshot = nil }),
-            Case(name: "ghloginremoved", account: with(copilot, .ghLoginRemoved) { $0.login = "ckuo_LinkedIn" }),
+            Case(name: "ghloginremoved", account: with(copilot, .ghLoginRemoved) { $0.login = "pikachu-dev" }),
             Case(name: "schemaerror", account: with(claude, .schemaError)),
             Case(name: "nodata", account: with(claude, .noData) { $0.snapshot = nil }),
             Case(name: "cantsave", account: with(claude, .stale) { $0.saveFailed = true }),

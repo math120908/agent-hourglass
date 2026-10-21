@@ -20,7 +20,7 @@ enum Fixtures {
     static func content(now: Date = Fixtures.now) -> PopoverContent {
         let fetched = now.addingTimeInterval(-40)
         let claudeID = AccountID(kind: .claude, remoteID: "happy-hippo")
-        let copilotID = AccountID(kind: .copilot, remoteID: "ckuo_LinkedIn")
+        let copilotID = AccountID(kind: .copilot, remoteID: "pikachu-dev")
         let week = Duration.seconds(7 * 86_400)
         let claude = UsageSnapshot(
             accountID: claudeID,
@@ -62,9 +62,9 @@ enum Fixtures {
         )
         return PopoverContent(
             accounts: [
-                PopoverAccount(id: claudeID, name: "Happy Hippo", kind: .claude, snapshot: claude, status: .fresh),
-                PopoverAccount(id: copilotID, name: "ckuo_LinkedIn", kind: .copilot, snapshot: copilot, status: .fresh),
-                PopoverAccount(id: codexID, name: "Codex", kind: .codex, snapshot: codex, status: .fresh),
+                PopoverAccount(id: claudeID, name: "Snorlax", kind: .claude, snapshot: claude, status: .fresh),
+                PopoverAccount(id: copilotID, name: "pikachu-dev", kind: .copilot, snapshot: copilot, status: .fresh),
+                PopoverAccount(id: codexID, name: "Mewtwo", kind: .codex, snapshot: codex, status: .fresh),
             ],
             isOffline: false,
             now: now,

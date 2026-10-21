@@ -2,6 +2,26 @@
 
 macOS menu bar app that shows plan usage for Claude, GitHub Copilot, and OpenAI Codex accounts: current session and weekly meters in a popover, a menu bar icon for one chosen account, and a History window with charts and export.
 
+## Demo
+
+Screenshots use fixture data with placeholder account names (Snorlax, pikachu-dev, Mewtwo).
+
+| Popover (Glass, expanded) | Popover (Glass, dark, collapsed) |
+|---|---|
+| <img src="docs/screenshots/popover-glass-light.png" width="340"> | <img src="docs/screenshots/popover-glass-dark-collapsed.png" width="340"> |
+
+**Usage History**, Glass theme (dark):
+
+<img src="docs/screenshots/history-glass-dark.png" width="760">
+
+**Usage History**, Instrument theme (light):
+
+<img src="docs/screenshots/history-instrument-light.png" width="760">
+
+**Settings > Accounts**:
+
+<img src="docs/screenshots/settings-accounts.png" width="520">
+
 ## Install
 
 ```bash
