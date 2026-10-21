@@ -35,9 +35,15 @@ struct AccountsTab: View {
                 Text("Drag to reorder. The popover follows this order.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                 Spacer()
-                Button("Add Claude account…", action: addClaude)
-                Button("Add Copilot account…", action: addCopilot)
-                Button("Add Codex account…", action: addCodex)
+                // One menu instead of a button per provider, so new providers don't widen the bar.
+                Menu {
+                    Button("Claude", action: addClaude)
+                    Button("GitHub Copilot", action: addCopilot)
+                    Button("Codex", action: addCodex)
+                } label: {
+                    Label("Add Account", systemImage: "plus")
+                }
+                .fixedSize()
             }
         }
         .padding(16)
