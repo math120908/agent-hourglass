@@ -41,6 +41,8 @@ struct AccountsTab: View {
             }
         }
         .padding(16)
+        // Accounts added from the Add Account sheet land in appState first; refresh the list then.
+        .onChange(of: model.appState.accounts) { model.reload() }
         .confirmationDialog(
             "Remove \(pendingRemoval?.displayName ?? "account")?",
             isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
