@@ -10,7 +10,7 @@ Requires Xcode, XcodeGen, and a **Developer ID Application** identity in the log
 make test      # swift test + secret-scan + source-guards
 make app       # xcodegen + Release build + version bump + GitCommit stamp + codesign
 make install   # make app, quit the running app, copy to ~/Applications/AgentHourglass.app
-make release   # make app, notarize, staple, zip to dist/AgentHourglass-<version>.zip
+make release   # make app, notarize, staple, zip to dist/AgentHourglass-<version>.zip, tag v<version>
 make icon      # regenerate App/Resources/AppIcon.icns from AppIcon.svg
 ```
 
@@ -37,7 +37,7 @@ make release
 gh release create v<version> dist/AgentHourglass-<version>.zip --title "v<version>" --generate-notes
 ```
 
-`make release` checks the result with `stapler validate` and `spctl` (expect `source=Notarized Developer ID`).
+`make release` also creates and pushes an annotated `v<version>` tag on the built commit (it never moves an existing tag), so `gh release create v<version>` reuses it. It checks the result with `stapler validate` and `spctl` (expect `source=Notarized Developer ID`).
 
 ## Dev-only tools
 
