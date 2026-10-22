@@ -1,7 +1,8 @@
-ID ?= FA3D8189AA4D9C1371B314CBDD1278672754EE99
+ID ?= 11D5CDDF2B4CC1D70C994AAD3DEDFD29562C5F51
+NOTARY_PROFILE ?= agent-hourglass
 APP := build/Build/Products/Release/AgentHourglass.app
 
-.PHONY: test app sign install hooks icon
+.PHONY: test app sign install hooks icon release
 
 icon:
 	scripts/make-icon.sh
@@ -21,7 +22,12 @@ app:
 	$(MAKE) sign ID=$(ID)
 
 sign:
-	codesign --force -s "$(ID)" "$(APP)"
+	codesign --force --options runtime --timestamp -s "$(ID)" "$(APP)"
+	codesign --verify --strict "$(APP)"
+	@codesign -dvv "$(APP)" 2>&1 | grep -q '^TeamIdentifier=[A-Z0-9]\{10\}$$' || { echo "sign: no TeamIdentifier (not a Developer ID build)"; exit 1; }
+
+release: app
+	scripts/release.sh "$(APP)" "$(NOTARY_PROFILE)"
 
 install: app
 	pkill -x ClaudeUsage || true

@@ -4,15 +4,13 @@
 
 ## Build
 
-Requires Xcode, XcodeGen, and the self-signed code-signing identity `Claude Usage Dev` in the login keychain:
-
-- SHA-1: `FA3D8189AA4D9C1371B314CBDD1278672754EE99`
-- Valid until 2036-10-17
+Requires Xcode, XcodeGen, and a **Developer ID Application** identity in the login keychain (default `ID` in the `Makefile`; override with `make app ID=<sha1>`). `make sign` fails if the signature has no TeamIdentifier.
 
 ```bash
 make test      # swift test + secret-scan + source-guards
 make app       # xcodegen + Release build + version bump + GitCommit stamp + codesign
 make install   # make app, quit the running app, copy to ~/Applications/AgentHourglass.app
+make release   # make app, notarize, staple, zip to dist/AgentHourglass-<version>.zip
 make icon      # regenerate App/Resources/AppIcon.icns from AppIcon.svg
 ```
 
@@ -20,9 +18,26 @@ make icon      # regenerate App/Resources/AppIcon.icns from AppIcon.svg
 
 Each build on `master` bumps the patch version (`1.0.1`, `1.0.2`, ...). The counter lives in the untracked `.build-number`; builds on other branches reuse it with a `-dev` suffix.
 
-## Signing and Keychain prompts
+## Signing, notarization, release
 
-The build is self-signed, so it has no Team ID and every rebuild changes the signature macOS checks. After each rebuild macOS may ask once for Keychain access; click **Allow**, never **Always Allow**. Other Macs need their own identity (`make app ID=<sha1>`). Not notarized.
+Builds are signed with Developer ID, hardened runtime, and a secure timestamp. Because the signature carries a Team ID, Keychain access granted once survives rebuilds; the first launch after switching certificates asks once more (click **Allow**).
+
+Notarization uses the notarytool keychain profile `agent-hourglass` (`NOTARY_PROFILE` in the `Makefile`). One-time setup per Mac:
+
+```bash
+xcrun notarytool store-credentials agent-hourglass --apple-id <apple-id> --team-id <team-id>
+```
+
+It asks for an app-specific password from account.apple.com. Credentials and the `.p12` backup live in 1Password under "Apple Developer - ...".
+
+To publish:
+
+```bash
+make release
+gh release create v<version> dist/AgentHourglass-<version>.zip --title "v<version>" --generate-notes
+```
+
+`make release` checks the result with `stapler validate` and `spctl` (expect `source=Notarized Developer ID`).
 
 ## Dev-only tools
 

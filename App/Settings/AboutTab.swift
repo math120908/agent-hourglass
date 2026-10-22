@@ -7,7 +7,7 @@ struct AboutTab: View {
     var model: SettingsModel
     @State private var copied = false
 
-    static let repo = URL(string: "https://github.com/math120908/claude-usage")!
+    static let repo = URL(string: "https://github.com/math120908/agent-hourglass")!
 
     static var version: String {
         let info = Bundle.main.infoDictionary ?? [:]
@@ -26,7 +26,7 @@ struct AboutTab: View {
             Text("Version \(Self.version)")
                 .font(.system(size: 12).monospacedDigit()).foregroundStyle(.secondary)
                 .textSelection(.enabled)
-            Link("github.com/math120908/claude-usage", destination: Self.repo)
+            Link("github.com/math120908/agent-hourglass", destination: Self.repo)
                 .font(.system(size: 12))
             Spacer()
             HStack {
