@@ -90,7 +90,7 @@ public struct ClaudeCodeKeychainReader: ClaudeCodeLoginReading {
         let status = SecItemCopyMatching(q as CFDictionary, &out)
         let mod = modified.map { ISO8601DateFormatter().string(from: $0) } ?? "unknown"
         let outcome: String
-        defer { Self.log.info("claude-code read outcome=\(outcome, privacy: .public) itemModified=\(mod, privacy: .public)") }
+        defer { Self.log.notice("claude-code read outcome=\(outcome, privacy: .public) itemModified=\(mod, privacy: .public)") }
         switch status {
         case errSecSuccess:
             guard let data = out as? Data else { outcome = "malformed"; throw ClaudeCodeKeychainError.malformed }

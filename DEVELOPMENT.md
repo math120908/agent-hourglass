@@ -41,7 +41,7 @@ gh release create v<version> dist/AgentHourglass-<version>.zip --title "v<versio
 
 ## Claude Code (local) Keychain experiment
 
-The Claude Code (local) account reads the generic Keychain item `Claude Code-credentials` (account = `$USER`) with `SecItemCopyMatching` only, in `ClaudeCodeKeychainReader.swift` (the only file besides `CredentialStore.swift` allowed to import Security; `source-guards.sh` rejects any write, ACL, `security` CLI, or refresh-token reference there). Each read logs its outcome (`ok`, `notFound`, `userCanceled(<OSStatus>)`, `interactionNotAllowed`, `malformed`, `other(<OSStatus>)`) and the item's modification date from an attribute-only query. No secrets are logged.
+The Claude Code (local) account reads the generic Keychain item `Claude Code-credentials` (account = `$USER`) with `SecItemCopyMatching` only, in `ClaudeCodeKeychainReader.swift` (the only file besides `CredentialStore.swift` allowed to import Security; `source-guards.sh` rejects any write, ACL, `security` CLI, or refresh-token reference there). Each read logs (at `notice` level, so it persists) its outcome (`ok`, `notFound`, `userCanceled(<OSStatus>)`, `interactionNotAllowed`, `malformed`, `other(<OSStatus>)`) and the item's modification date from an attribute-only query. No secrets are logged.
 
 To see whether **Always Allow** survives Claude Code token refreshes:
 
