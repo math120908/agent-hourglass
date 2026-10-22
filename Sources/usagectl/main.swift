@@ -1,7 +1,7 @@
 import Foundation
 import UsageCore
 
-let service = "cc.kuoc.claude-usage.cli"
+let service = "cc.kuoc.agent-hourglass.cli"
 let store = CredentialStore(service: service)
 
 struct AccountsFile: Codable { var accounts: [String] }

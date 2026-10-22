@@ -9,7 +9,7 @@ extension HistoryStore {
     public static let shrinkThreshold: Int64 = 100 * 1024 * 1024
     public static let diskBudget: Int64 = 50 * 1024 * 1024
     static let vacuumInterval: Int64 = 7 * 86400
-    private static let log = Logger(subsystem: "cc.kuoc.claude-usage", category: "history")
+    private static let log = Logger(subsystem: "cc.kuoc.agent-hourglass", category: "history")
 
     /// Returns true when maintenance ran. `fileSize` overrides the measured size (tests).
     @discardableResult

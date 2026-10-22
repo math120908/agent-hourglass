@@ -21,7 +21,7 @@ targets:
         CFBundleIconFile: AppIcon
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: cc.kuoc.claude-usage
+        PRODUCT_BUNDLE_IDENTIFIER: cc.kuoc.agent-hourglass
         PRODUCT_NAME: AgentHourglass
         SWIFT_VERSION: "6.0"
         CODE_SIGN_IDENTITY: "-"

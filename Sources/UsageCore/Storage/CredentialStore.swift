@@ -15,7 +15,7 @@ public enum CredentialStoreError: Error, Sendable, Equatable {
 
 /// The only Keychain gateway. Every query is scoped to `service` via `query(for:)`.
 public struct CredentialStore: CredentialStoring {
-    public static let service = "cc.kuoc.claude-usage"
+    public static let service = "cc.kuoc.agent-hourglass"
     static let maxAccounts = 64
 
     public let service: String

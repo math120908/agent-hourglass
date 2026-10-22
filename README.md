@@ -46,7 +46,7 @@ When macOS asks for Keychain access, click **Allow**, never **Always Allow**. Th
 
 Settings > Accounts > **Add Account** menu (the list refreshes as soon as an account is added). Settings > History has an **Open Usage History** link.
 
-- **Claude** opens the browser OAuth login. The token is stored in the Keychain under service `cc.kuoc.claude-usage`. The app never reads Claude Code's own credential.
+- **Claude** opens the browser OAuth login. The token is stored in the Keychain under service `cc.kuoc.agent-hourglass`. The app never reads Claude Code's own credential.
 - **GitHub Copilot** uses the GitHub CLI. Install `gh` (Homebrew) and run `gh auth login` first; the app asks `gh` for the token on each poll and does not store it.
 - **Claude Code (local, read-only)** (Add Account > Claude > Claude Code (local, read-only)) reuses the login Claude Code keeps in your Keychain. macOS asks once for access: click **Always Allow**. The app only reads that item on each poll, keeps the token in memory, and never writes, refreshes, or changes it. When the token is near expiry it shows "Run `claude` to refresh login"; using Claude Code refreshes it. Experimental.
 - **Codex** reads the Codex CLI login from `~/.codex/auth.json` (read-only; run `codex login` first). The app never refreshes or writes that file. Meters are labelled by window length (for example `30-day`).
@@ -58,7 +58,7 @@ Two looks, switchable at any time in Settings > General > **Theme**:
 - **Glass** (default): frosted cards per account.
 - **Instrument**: ring gauges in a hairline list, larger figures in History.
 
-The choice is stored in `UserDefaults` key `theme` and applies immediately to the menu bar icon, the popover, and an open History window. From a shell: `defaults write cc.kuoc.claude-usage theme instrument` (or `glass`).
+The choice is stored in `UserDefaults` key `theme` and applies immediately to the menu bar icon, the popover, and an open History window. From a shell: `defaults write cc.kuoc.agent-hourglass theme instrument` (or `glass`).
 
 ## History and export
 
@@ -70,21 +70,28 @@ The History window shows 24 Hours, 7 Days, 30 Days, or 90 Days. **Export Data** 
 
 | Path | Mode | Content |
 |---|---|---|
-| `~/Library/Application Support/cc.kuoc.claude-usage/` | 700 | app support dir |
+| `~/Library/Application Support/cc.kuoc.agent-hourglass/` | 700 | app support dir |
 | `.../accounts.json` | 600 | account list (display names, ids, gh login) |
 | `.../history.sqlite` (+ `-wal`, `-shm`) | 600 | usage history |
 | `.../instance.lock` | 600 | single-instance lock |
-| Keychain, service `cc.kuoc.claude-usage` | | Claude OAuth tokens |
+| Keychain, service `cc.kuoc.agent-hourglass` | | Claude OAuth tokens |
 
-Logs go to the unified log, subsystem `cc.kuoc.claude-usage`. Tokens are never logged. About > **Copy diagnostics** hashes account ids and contains no tokens, emails, or names.
+Versions before the rename used `cc.kuoc.claude-usage`. On first launch the app moves the old app support dir (if the new one is absent), copies missing `UserDefaults` keys, moves each Claude token to the new Keychain service (read, write, read back, then delete the old item; a denied read leaves the old item and the account shows "needs sign-in"), and re-registers launch at login if it was on. It runs once; outcomes are logged under category `Migration`.
+
+Logs go to the unified log, subsystem `cc.kuoc.agent-hourglass`. Tokens are never logged. About > **Copy diagnostics** hashes account ids and contains no tokens, emails, or names.
 
 ## Uninstall
 
 ```bash
 pkill -x AgentHourglass
 rm -rf ~/Applications/AgentHourglass.app
-rm -rf ~/Library/Application\ Support/cc.kuoc.claude-usage
+rm -rf ~/Library/Application\ Support/cc.kuoc.agent-hourglass
 # Keychain items (repeat until "could not be found"):
+security delete-generic-password -s cc.kuoc.agent-hourglass
+security delete-generic-password -s cc.kuoc.agent-hourglass.cli
+# Leftovers from the old cc.kuoc.claude-usage id, if present:
+rm -rf ~/Library/Application\ Support/cc.kuoc.claude-usage
+defaults delete cc.kuoc.claude-usage
 security delete-generic-password -s cc.kuoc.claude-usage
 security delete-generic-password -s cc.kuoc.claude-usage.cli
 ```

@@ -5,7 +5,7 @@ import UsageCore
 /// Wires AccountRegistry → AccountService → Poller → AppState, plus sleep/wake and offline.
 @MainActor
 final class UsageEngine {
-    nonisolated private static let log = Logger(subsystem: "cc.kuoc.claude-usage", category: "Engine")
+    nonisolated private static let log = Logger(subsystem: "cc.kuoc.agent-hourglass", category: "Engine")
 
     private let appState: AppState
     private let poller: Poller
@@ -43,6 +43,7 @@ final class UsageEngine {
             await MainActor.run { appState.apply(id, outcome) }
             Self.log.info("result id=\(id.kind == .codex ? "codex" : String(id.rawValue.prefix(14)), privacy: .public) \(Self.summary(outcome), privacy: .public)")
         }
+        LegacyMigration.migrateDefaults(old: UserDefaults.standard.persistentDomain(forName: LegacyMigration.oldID), target: .standard)
         guard let dir = try? AppSupport.directory() else {
             Self.log.error("no app support directory")
             registry = nil
@@ -114,6 +115,15 @@ final class UsageEngine {
             Self.log.error("registry load failed: \(String(describing: error), privacy: .public)")
             entries = []
         }
+        let claudeIDs = entries.filter { $0.kind == .claude }.map(\.id)
+        let kc = LegacyMigration.migrateKeychain(
+            ids: claudeIDs,
+            old: CredentialStore(service: LegacyMigration.oldID),
+            new: CredentialStore(),
+            label: { id in AccountService.keychainLabel(kind: .claude, number: (entries.first { $0.id == id }?.order ?? 0) + 1) },
+            defaults: .standard
+        )
+        if kc.failed > 0 { Self.log.error("keychain migration left \(kc.failed, privacy: .public) account(s) needing sign-in") }
         do {
             try await service.cleanupOrphans()
         } catch {

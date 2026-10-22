@@ -46,7 +46,7 @@ The Claude Code (local) account reads the generic Keychain item `Claude Code-cre
 To see whether **Always Allow** survives Claude Code token refreshes:
 
 ```bash
-log show --last 1d --info --predicate 'subsystem == "cc.kuoc.claude-usage" AND category == "ClaudeCodeKeychain"'
+log show --last 1d --info --predicate 'subsystem == "cc.kuoc.agent-hourglass" AND category == "ClaudeCodeKeychain"'
 ```
 
 A new `itemModified` value followed by `ok` with no prompt means the grant survived the rewrite. A prompt (or `userCanceled`) right after a new `itemModified` means Claude Code recreated the item and dropped the grant. Use `log stream` with the same predicate to watch live.
@@ -55,8 +55,16 @@ A new `itemModified` value followed by `ok` with no prompt means the grant survi
 
 Not part of a normal install. These exist for testing and must not be used with shipped builds:
 
-- `usagectl` (CLI harness and soak, `swift build -c release --product usagectl`). Uses its own Keychain service `cc.kuoc.claude-usage.cli` and writes `soak.log`, `usagectl-accounts.json`, `usagectl.lock` (all 600) into the app support dir.
+- `usagectl` (CLI harness and soak, `swift build -c release --product usagectl`). Uses its own Keychain service `cc.kuoc.agent-hourglass.cli` and writes `soak.log`, `usagectl-accounts.json`, `usagectl.lock` (all 600) into the app support dir.
 - App launch args `--fixture`, `--render-*` (snapshot renderers), `--simulate-keychain-write-failure`. `--theme instrument` (or `glass`) selects which theme the `--render-states` and `--render-history` renderers draw; default Glass. Debug-only paths; not for daily use.
 - `make sign ID=<sha1>`, `make hooks` (pre-commit secret-scan + source-guards).
 
 Release checks: `docs/release-checklist.md`.
+
+## Legacy id migration
+
+`Sources/UsageCore/Storage/LegacyMigration.swift` moves data from the old `cc.kuoc.claude-usage` id once per install (dir, defaults, Keychain via `CredentialStoring`; flags `migratedFromClaudeUsage`, `migratedKeychainFromClaudeUsage`). Check outcomes:
+
+```bash
+log show --last 1h --info --predicate 'subsystem == "cc.kuoc.agent-hourglass" AND category == "Migration"'
+```

@@ -19,7 +19,7 @@ protocol SettingsBackend: AnyObject {
 final class SettingsModel {
     static let intervalKey = "refreshIntervalMinutes"
     static let intervals = [1, 2, 5, 10, 15]
-    nonisolated private static let log = Logger(subsystem: "cc.kuoc.claude-usage", category: "Settings")
+    nonisolated private static let log = Logger(subsystem: "cc.kuoc.agent-hourglass", category: "Settings")
 
     var entries: [AccountEntry] = []
     /// Read by the status item to pick the icon's account.

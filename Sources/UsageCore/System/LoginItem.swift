@@ -53,7 +53,17 @@ public final class LoginItem {
 
     public func refresh() { status = service.status }
 
+    /// Registration is tied to the bundle id: if the user last chose "on" but this bundle is not
+    /// registered (e.g. after the id change), register again. Returns true when it re-registered.
+    @discardableResult
+    public func reconcile(defaults: UserDefaults = .standard) -> Bool {
+        guard defaults.bool(forKey: LegacyMigration.launchAtLoginKey), status == .notRegistered else { return false }
+        set(true)
+        return true
+    }
+
     public func set(_ on: Bool) {
+        UserDefaults.standard.set(on, forKey: LegacyMigration.launchAtLoginKey)
         do {
             if on { try service.register() } else { try service.unregister() }
             lastError = nil

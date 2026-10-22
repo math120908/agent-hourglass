@@ -1,7 +1,7 @@
 #!/bin/bash
 # Summarize a usagectl soak log: line count, non-200s, 429s, max gap between lines.
 set -euo pipefail
-log="${1:-$HOME/Library/Application Support/cc.kuoc.claude-usage/soak.log}"
+log="${1:-$HOME/Library/Application Support/cc.kuoc.agent-hourglass/soak.log}"
 [ -f "$log" ] || { echo "no log: $log" >&2; exit 1; }
 echo "log: $log"
 echo "lines: $(wc -l < "$log" | tr -d ' ')"

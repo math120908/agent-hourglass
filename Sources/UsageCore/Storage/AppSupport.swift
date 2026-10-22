@@ -1,9 +1,9 @@
 import Foundation
 
 public enum AppSupport {
-    public static let folderName = "cc.kuoc.claude-usage"
+    public static let folderName = "cc.kuoc.agent-hourglass"
 
-    /// `<base>/cc.kuoc.claude-usage`, created (or tightened) to 0700. Default base is Application Support.
+    /// `<base>/cc.kuoc.agent-hourglass`, created (or tightened) to 0700. Default base is Application Support.
     public static func directory(base: URL? = nil) throws -> URL {
         let fm = FileManager.default
         let root = try base ?? fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)

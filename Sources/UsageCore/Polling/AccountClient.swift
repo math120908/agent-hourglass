@@ -9,7 +9,7 @@ public enum FetchOutcome: Sendable, Equatable {
 /// Owns one account's credential, refresh, and 429 backoff.
 public actor AccountClient {
     static let proactiveWindow: TimeInterval = 300
-    private static let log = Logger(subsystem: "cc.kuoc.claude-usage", category: "AccountClient")
+    private static let log = Logger(subsystem: "cc.kuoc.agent-hourglass", category: "AccountClient")
 
     public let id: AccountID
     private let provider: UsageProvider

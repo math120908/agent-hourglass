@@ -8,6 +8,9 @@ MainActor.assumeIsolated {
     HistorySnapshotRenderer.runIfRequested()
 }
 
+// Must run before InstanceLock, which creates the new app support dir.
+LegacyMigration.migrateDirectory()
+
 let lock: InstanceLock
 do {
     lock = try InstanceLock.acquire()

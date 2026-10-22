@@ -61,7 +61,7 @@ public protocol ClaudeCodeLoginReading: Sendable {
 /// No caching: every call re-reads so a token refreshed by Claude Code is picked up.
 public struct ClaudeCodeKeychainReader: ClaudeCodeLoginReading {
     public static let service = "Claude Code-credentials"
-    private static let log = Logger(subsystem: "cc.kuoc.claude-usage", category: "ClaudeCodeKeychain")
+    private static let log = Logger(subsystem: "cc.kuoc.agent-hourglass", category: "ClaudeCodeKeychain")
 
     public let account: String
 

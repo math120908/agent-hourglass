@@ -11,7 +11,7 @@ struct AppSupportTests {
         let base = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: base) }
         let dir = try AppSupport.directory(base: base)
-        #expect(dir.lastPathComponent == "cc.kuoc.claude-usage")
+        #expect(dir.lastPathComponent == "cc.kuoc.agent-hourglass")
         #expect(try mode(dir) == 0o700)
         let file = dir.appendingPathComponent("state.json")
         try AppSupport.secureWrite(Data("{}".utf8), to: file)
