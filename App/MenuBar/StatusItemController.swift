@@ -10,6 +10,9 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private let engine: UsageEngine
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
+    /// Closes the popover on clicks in other apps. A menu bar (accessory) app is often not active,
+    /// so `.transient` alone misses those clicks.
+    private var outsideClickMonitor: Any?
     private var lastIcon: IconState?
     private var lastTheme: Theme?
     private let addAccount: AddAccountWindowController
@@ -183,7 +186,10 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         }
         NotificationCenter.default.post(name: .popoverWillOpen, object: nil)
         fitToContent()
+        NSApp.activate(ignoringOtherApps: true)
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
+        popover.contentViewController?.view.window?.makeKey()
+        startOutsideClickMonitor()
         logGap(button: sender, tag: "open")
     }
 
@@ -229,7 +235,25 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
     func popoverWillShow(_ notification: Notification) { engine.setForeground(true) }
 
-    func popoverDidClose(_ notification: Notification) { engine.setForeground(false) }
+    func popoverDidClose(_ notification: Notification) {
+        stopOutsideClickMonitor()
+        engine.setForeground(false)
+    }
+
+    private func startOutsideClickMonitor() {
+        stopOutsideClickMonitor()
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.popover.isShown else { return }
+                self.popover.performClose(nil)
+            }
+        }
+    }
+
+    private func stopOutsideClickMonitor() {
+        if let m = outsideClickMonitor { NSEvent.removeMonitor(m) }
+        outsideClickMonitor = nil
+    }
 
     private func logGap(button: NSStatusBarButton, tag: String) {
         guard ProcessInfo.processInfo.environment["CU_LOG_POPOVER_GAP"] != nil,
