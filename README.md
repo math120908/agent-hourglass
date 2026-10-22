@@ -24,7 +24,13 @@ Screenshots use fixture data with placeholder account names (Snorlax, pikachu-de
 
 ## Install
 
-Download the notarized zip from [Releases](https://github.com/math120908/agent-hourglass/releases), unzip, and move `AgentHourglass.app` to `~/Applications` or `/Applications`. Or build from source:
+Requires macOS 14 or later.
+
+1. Download `AgentHourglass-<version>.zip` from [Releases](https://github.com/math120908/agent-hourglass/releases) (latest: v1.0.9).
+2. Unzip and move `AgentHourglass.app` to `~/Applications` or `/Applications`.
+3. Open it. The app is signed with Developer ID and notarized by Apple, so it opens without a Gatekeeper warning. It lives in the menu bar (no Dock icon).
+
+Or build from source:
 
 ```bash
 make install   # builds and copies to ~/Applications/AgentHourglass.app
@@ -32,7 +38,7 @@ make install   # builds and copies to ~/Applications/AgentHourglass.app
 
 Build requirements, signing, and versioning are in [DEVELOPMENT.md](DEVELOPMENT.md).
 
-The app installs as `~/Applications/AgentHourglass.app`. Older builds were named `ClaudeUsage.app`; `make install` removes that copy. It is a different app from Anthropic's `/Applications/Claude Usage.app` (note the space); never overwrite or delete that one.
+The app installs as `~/Applications/AgentHourglass.app`. It is a different app from Anthropic's `/Applications/Claude Usage.app` (note the space); never overwrite or delete that one.
 
 When macOS asks for Keychain access, click **Allow**, never **Always Allow**. The app only reads its own items.
 
