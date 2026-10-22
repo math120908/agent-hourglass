@@ -88,6 +88,9 @@ public struct CardModel: Equatable, Sendable {
             case .claude: return "Sign in again"
             }
         case .codexNotSignedIn: return "Run `codex` to sign in"
+        case .claudeCodeNotSignedIn: return "Claude Code not signed in"
+        case .claudeCodeExpired: return "Run `claude` to refresh login"
+        case .claudeCodeDenied: return "Keychain access denied"
         case .ghMissing: return "Install gh (Homebrew)"
         case .ghLoginRemoved: return "Login \(login.map { "`\($0)` " } ?? "")not in gh; run `gh auth login`"
         case .schemaError: return "Response format changed"

@@ -39,6 +39,18 @@ gh release create v<version> dist/AgentHourglass-<version>.zip --title "v<versio
 
 `make release` also creates and pushes an annotated `v<version>` tag on the built commit (it never moves an existing tag), so `gh release create v<version>` reuses it. It checks the result with `stapler validate` and `spctl` (expect `source=Notarized Developer ID`).
 
+## Claude Code (local) Keychain experiment
+
+The Claude Code (local) account reads the generic Keychain item `Claude Code-credentials` (account = `$USER`) with `SecItemCopyMatching` only, in `ClaudeCodeKeychainReader.swift` (the only file besides `CredentialStore.swift` allowed to import Security; `source-guards.sh` rejects any write, ACL, `security` CLI, or refresh-token reference there). Each read logs its outcome (`ok`, `notFound`, `userCanceled(<OSStatus>)`, `interactionNotAllowed`, `malformed`, `other(<OSStatus>)`) and the item's modification date from an attribute-only query. No secrets are logged.
+
+To see whether **Always Allow** survives Claude Code token refreshes:
+
+```bash
+log show --last 1d --info --predicate 'subsystem == "cc.kuoc.claude-usage" AND category == "ClaudeCodeKeychain"'
+```
+
+A new `itemModified` value followed by `ok` with no prompt means the grant survived the rewrite. A prompt (or `userCanceled`) right after a new `itemModified` means Claude Code recreated the item and dropped the grant. Use `log stream` with the same predicate to watch live.
+
 ## Dev-only tools
 
 Not part of a normal install. These exist for testing and must not be used with shipped builds:

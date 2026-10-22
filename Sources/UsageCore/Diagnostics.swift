@@ -54,6 +54,9 @@ public enum Diagnostics {
         case .schemaError: "schemaError"
         case .noData: "noData"
         case .codexNotSignedIn: "codexNotSignedIn"
+        case .claudeCodeNotSignedIn: "claudeCodeNotSignedIn"
+        case .claudeCodeExpired: "claudeCodeExpired"
+        case .claudeCodeDenied: "claudeCodeDenied"
         }
     }
 }

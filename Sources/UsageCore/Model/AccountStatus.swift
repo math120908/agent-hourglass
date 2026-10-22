@@ -12,4 +12,10 @@ public enum AccountStatus: Codable, Sendable, Equatable {
     case noData
     /// No usable ChatGPT login in ~/.codex/auth.json (missing, API-key mode, unsafe permissions, malformed).
     case codexNotSignedIn
+    /// Claude Code (local): no Claude Code Keychain item.
+    case claudeCodeNotSignedIn
+    /// Claude Code (local): token within 5 min of expiry, or a 401. Claude Code refreshes it when used.
+    case claudeCodeExpired
+    /// Claude Code (local): Keychain access denied or unavailable. No further reads until re-added or relaunched.
+    case claudeCodeDenied
 }

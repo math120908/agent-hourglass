@@ -61,8 +61,27 @@ final class AddAccountModel {
 
     private(set) var isCodex = false
 
+    private(set) var isClaudeCode = false
+
+    /// Adds Claude Code (local, read-only): reads Claude Code's own Keychain login on each poll.
+    func addClaudeCodeLocal() {
+        isClaudeCode = true
+        guard state.begin() else {
+            state = .failed("Sign-in already in progress")
+            return
+        }
+        step = .flow
+        task = Task { [engine] in
+            do {
+                state = .success(try await engine.addClaudeCodeLocal())
+            } catch {
+                state = AddFlowState.failure(error)
+            }
+        }
+    }
+
     func retry() {
-        if isCodex { addCodex() } else if let copilotLogin { addCopilot(copilotLogin) } else { start() }
+        if isClaudeCode { addClaudeCodeLocal() } else if isCodex { addCodex() } else if let copilotLogin { addCopilot(copilotLogin) } else { start() }
     }
 
     /// Adds the Codex CLI's ChatGPT login from ~/.codex/auth.json (read-only, no browser).

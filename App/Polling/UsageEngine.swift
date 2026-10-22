@@ -160,6 +160,14 @@ final class UsageEngine {
         return id
     }
 
+    /// Adds the read-only Claude Code (local) account. The first poll triggers the Keychain prompt.
+    func addClaudeCodeLocal() async throws -> AccountID {
+        guard let service, let registry else { throw AccountServiceError.unknownAccount }
+        let id = try await service.addClaudeCodeLocal()
+        publish(await registry.accounts())
+        return id
+    }
+
     private func publish(_ entries: [AccountEntry]) {
         appState.accounts = entries.map(\.id)
         appState.names = Dictionary(entries.map { ($0.id, $0.displayName) }, uniquingKeysWith: { a, _ in a })
@@ -226,6 +234,17 @@ final class UsageEngine {
         codex: CodexAuthSource,
         login: String? = nil
     ) -> AccountClient {
+        if id.isClaudeCodeLocal {
+            return AccountClient(
+                id: id,
+                provider: ClaudeProvider(),
+                http: HTTPClient(),
+                store: store,
+                clock: ContinuousClock(),
+                now: { Date() },
+                claudeCode: ClaudeCodeKeychainReader()
+            )
+        }
         if id.kind == .codex {
             return AccountClient(
                 id: id,

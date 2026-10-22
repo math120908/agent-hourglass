@@ -115,9 +115,37 @@ public actor AccountService {
         return id
     }
 
+    /// Adds the read-only Claude Code (local) account. Writes only the registry; the first poll reads the Keychain.
+    @discardableResult
+    public func addClaudeCodeLocal() async throws -> AccountID {
+        let id = AccountID.claudeCodeLocal
+        let existing = await registry.accounts().first { $0.id == id }
+        try await registry.upsert(AccountEntry(
+            id: id,
+            kind: .claude,
+            displayName: existing?.displayName ?? "Claude Code",
+            remoteLogin: "Claude Code (local, read-only)",
+            order: existing?.order ?? 0,
+            addedAt: existing?.addedAt ?? now(),
+            status: "ok"
+        ))
+        if existing != nil { await poller.remove(client: id) }
+        await poller.add(client: makeClient(id))
+        await poller.refreshAll(force: false)
+        return id
+    }
+
+    /// "Try again" for Claude Code (local): a fresh client clears a denied state; still read-only.
+    private func readdClaudeCodeLocal() async throws {
+        await poller.remove(client: .claudeCodeLocal)
+        await poller.add(client: makeClient(.claudeCodeLocal))
+        await poller.refreshAll(force: false)
+    }
+
     /// Re-auths `id`. A login that resolves to another account is dropped without any write.
     public func reauth(_ id: AccountID) async throws {
         guard let entry = await registry.accounts().first(where: { $0.id == id }) else { throw AccountServiceError.unknownAccount }
+        if id.isClaudeCodeLocal { return try await readdClaudeCodeLocal() }
         let remote = String(id.rawValue.dropFirst(entry.kind.rawValue.count + 1))
         let (cred, remoteID) = try await signIn(entry.remoteLogin, remote)
         guard AccountID(kind: entry.kind, remoteID: remoteID) == id else { throw AccountServiceError.differentAccount }
@@ -127,7 +155,8 @@ public actor AccountService {
     /// Deletes credential, registry entry (promoting the next menu bar account) and history.
     public func remove(_ id: AccountID) async throws {
         await poller.remove(client: id)
-        if id.kind == .claude { try store.delete(id) }
+        // Our own service only; Claude Code's item is never touched.
+        if id.kind == .claude, !id.isClaudeCodeLocal { try store.delete(id) }
         try await registry.remove(id)
         try await history.deleteAccount(id)
     }

@@ -30,7 +30,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             model: SettingsModel(appState: appState, backend: settingsBackend),
             addClaude: { addAccount.show() },
             addCopilot: { addAccount.show(copilot: true) },
-            addCodex: { addAccount.show(codex: true) }
+            addCodex: { addAccount.show(codex: true) },
+            addClaudeCode: { addAccount.show(claudeCode: true) }
         )
         let backend = settingsBackend
         historyWindow = HistoryWindowController(engine: engine) { await backend.load().entries }

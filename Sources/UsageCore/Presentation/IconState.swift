@@ -49,7 +49,7 @@ public struct IconState: Equatable, Sendable {
             .map { Int(min(100, max(0, $0)).rounded()) }
         let level: Level
         switch statuses[id] ?? .fresh {
-        case .stale, .needsLogin, .codexNotSignedIn: level = .outline
+        case .stale, .needsLogin, .codexNotSignedIn, .claudeCodeNotSignedIn, .claudeCodeExpired, .claudeCodeDenied: level = .outline
         default:
             guard let percent else { level = .outline; break }
             level = percent >= 90 ? .critical : percent >= 75 ? .warning : .normal

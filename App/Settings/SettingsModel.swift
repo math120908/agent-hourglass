@@ -120,6 +120,9 @@ extension AccountStatus {
         case .schemaError: "Unexpected response"
         case .noData: "No data yet"
         case .codexNotSignedIn: "Codex not signed in"
+        case .claudeCodeNotSignedIn: "Claude Code not signed in"
+        case .claudeCodeExpired: "Run `claude` to refresh login"
+        case .claudeCodeDenied: "Keychain access denied"
         }
     }
 

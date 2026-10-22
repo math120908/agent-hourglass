@@ -7,6 +7,7 @@ struct AccountsTab: View {
     var addClaude: () -> Void
     var addCopilot: () -> Void = {}
     var addCodex: () -> Void = {}
+    var addClaudeCode: () -> Void = {}
     @State private var pendingRemoval: AccountEntry?
 
     var body: some View {
@@ -37,7 +38,10 @@ struct AccountsTab: View {
                 Spacer()
                 // One menu instead of a button per provider, so new providers don't widen the bar.
                 Menu {
-                    Button(action: addClaude) { Label { Text("Claude") } icon: { ProviderIcon(kind: .claude) } }
+                    Menu {
+                        Button("Claude account (sign in)", action: addClaude)
+                        Button("Claude Code (local, read-only)", action: addClaudeCode)
+                    } label: { Label { Text("Claude") } icon: { ProviderIcon(kind: .claude) } }
                     Button(action: addCopilot) { Label { Text("GitHub Copilot") } icon: { ProviderIcon(kind: .copilot) } }
                     Button(action: addCodex) { Label { Text("Codex") } icon: { ProviderIcon(kind: .codex) } }
                 } label: {
@@ -57,12 +61,15 @@ struct AccountsTab: View {
             Button("Remove", role: .destructive) { model.remove(e.id) }
             Button("Cancel", role: .cancel) {}
         } message: { e in
-            Text(Self.removeMessage(e.kind))
+            Text(Self.removeMessage(e))
         }
     }
 
-    static func removeMessage(_ kind: ProviderKind) -> String {
-        switch kind {
+    static func removeMessage(_ e: AccountEntry) -> String {
+        if e.id.isClaudeCodeLocal {
+            return "This deletes the account's usage history from this Mac. Claude Code's Keychain login is not touched."
+        }
+        return switch e.kind {
         case .claude:
             "This deletes the account's saved sign-in and its usage history from this Mac. "
                 + "Claude has no revoke endpoint, so the token stays valid on Anthropic's side until it expires."
@@ -105,7 +112,11 @@ private struct AccountRow: View {
             if model.busy == entry.id {
                 ProgressView().controlSize(.small)
             }
-            if entry.kind == .claude {
+            if entry.id.isClaudeCodeLocal {
+                Button("Try again") { model.reauth(entry.id) }
+                    .controlSize(.small)
+                    .disabled(model.busy != nil)
+            } else if entry.kind == .claude {
                 Button("Sign in again") { model.reauth(entry.id) }
                     .controlSize(.small)
                     .disabled(model.busy != nil)

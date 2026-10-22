@@ -21,6 +21,8 @@ public actor AccountClient {
     private let label: String
     /// Copilot only: borrows the token from gh for `login`. No Keychain item.
     private let gh: (source: GhTokenSource, login: String)?
+    /// Claude Code (local) only: re-reads Claude Code's Keychain item on every fetch. Never refreshes or writes.
+    private let claudeCode: ClaudeCodeLoginReading?
 
     public private(set) var status: AccountStatus = .noData
     public private(set) var nextEarliestFetch: Date = .distantPast
@@ -41,8 +43,10 @@ public actor AccountClient {
         backoff: Backoff = Backoff(),
         label: String? = nil,
         tokenSource: GhTokenSource? = nil,
-        login: String? = nil
+        login: String? = nil,
+        claudeCode: ClaudeCodeLoginReading? = nil
     ) {
+        self.claudeCode = claudeCode
         self.gh = tokenSource.flatMap { src in login.map { (src, $0) } }
         self.id = id
         self.label = label ?? AccountService.keychainLabel(kind: id.kind ?? .claude, number: 1)
@@ -56,6 +60,8 @@ public actor AccountClient {
 
     public func fetch() async -> FetchOutcome {
         if status == .needsLogin { return .failure(.needsLogin) }
+        if status == .claudeCodeDenied { return .failure(.claudeCodeDenied) }
+        if let claudeCode { return await fetchClaudeCode(claudeCode) }
         if let gh { return await fetchCopilot(gh.source, login: gh.login) }
         if provider.kind == .codex { return await fetchBorrowed() }
         if saveFailed, let credential { persist(credential) }
@@ -76,6 +82,38 @@ public actor AccountClient {
                 }
             }
             return succeed(snap)
+        } catch {
+            return .failure(fail(error))
+        }
+    }
+
+    /// Claude Code (local): fresh read each poll, token in memory for this request only.
+    /// Near expiry or 401 shows "run `claude`"; no refresh and no retry until the next poll.
+    private func fetchClaudeCode(_ reader: ClaudeCodeLoginReading) async -> FetchOutcome {
+        let login: ClaudeCodeLogin
+        do {
+            login = try reader.read()
+        } catch let e as ClaudeCodeKeychainError {
+            let s: AccountStatus = switch e {
+            case .notFound, .malformed: .claudeCodeNotSignedIn
+            case .userCanceled, .interactionNotAllowed: .claudeCodeDenied
+            case .other: .stale
+            }
+            status = s
+            return .failure(s)
+        } catch {
+            return .failure(fail(error))
+        }
+        if login.isExpired(now: now()) {
+            status = .claudeCodeExpired
+            return .failure(.claudeCodeExpired)
+        }
+        let cred = Credential(kind: .claude, access: login.access, refresh: nil, expiresAt: login.expiresAt, refreshExpiresAt: nil, scopes: [])
+        do {
+            return succeed(try await provider.fetch(credential: cred, http: http))
+        } catch ProviderError.unauthorized {
+            status = .claudeCodeExpired
+            return .failure(.claudeCodeExpired)
         } catch {
             return .failure(fail(error))
         }

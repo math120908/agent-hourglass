@@ -48,6 +48,7 @@ Settings > Accounts > **Add Account** menu (the list refreshes as soon as an acc
 
 - **Claude** opens the browser OAuth login. The token is stored in the Keychain under service `cc.kuoc.claude-usage`. The app never reads Claude Code's own credential.
 - **GitHub Copilot** uses the GitHub CLI. Install `gh` (Homebrew) and run `gh auth login` first; the app asks `gh` for the token on each poll and does not store it.
+- **Claude Code (local, read-only)** (Add Account > Claude > Claude Code (local, read-only)) reuses the login Claude Code keeps in your Keychain. macOS asks once for access: click **Always Allow**. The app only reads that item on each poll, keeps the token in memory, and never writes, refreshes, or changes it. When the token is near expiry it shows "Run `claude` to refresh login"; using Claude Code refreshes it. Experimental.
 - **Codex** reads the Codex CLI login from `~/.codex/auth.json` (read-only; run `codex login` first). The app never refreshes or writes that file. Meters are labelled by window length (for example `30-day`).
 
 ## Themes

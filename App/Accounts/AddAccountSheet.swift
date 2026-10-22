@@ -25,7 +25,14 @@ struct AddAccountSheet: View {
 
     private var providerStep: some View {
         HStack(spacing: 10) {
-            bigButton("Claude", "sparkle", enabled: true) { model.step = .claudeEmail }
+            Menu {
+                Button("Claude account (sign in)") { model.step = .claudeEmail }
+                Button("Claude Code (local, read-only)") { model.addClaudeCodeLocal() }
+            } label: {
+                Label("Claude", systemImage: "sparkle")
+            }
+            .menuStyle(.borderedButton)
+            .frame(maxWidth: .infinity, minHeight: 44)
             bigButton("Copilot", "chevron.left.forwardslash.chevron.right", enabled: true) { model.loadLogins() }
             bigButton("Codex", "terminal", enabled: true) { model.addCodex() }
         }
@@ -89,9 +96,9 @@ struct AddAccountSheet: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text(model.isCodex ? "Adding Codex account…" : model.isCopilot ? "Adding Copilot account…" : "Waiting for sign-in in your browser…").font(.system(size: 12))
+                    Text(model.isClaudeCode ? "Adding Claude Code (local)…" : model.isCodex ? "Adding Codex account…" : model.isCopilot ? "Adding Copilot account…" : "Waiting for sign-in in your browser…").font(.system(size: 12))
                 }
-                if !model.isCopilot && !model.isCodex { HStack {
+                if !model.isCopilot && !model.isCodex && !model.isClaudeCode { HStack {
                     Button("Didn't open? Copy link") { model.copyLink() }.buttonStyle(.link)
                     Spacer()
                     Button("Cancel") { model.cancel() }
@@ -101,7 +108,7 @@ struct AddAccountSheet: View {
             VStack(alignment: .leading, spacing: 10) {
                 Label(id.kind != .claude ? "Added" : "Signed in", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                 // Codex ids carry the ChatGPT account_id: never shown.
-                Text(id.kind == .codex ? "Codex CLI login" : id.rawValue.split(separator: ":", maxSplits: 1).last.map(String.init) ?? id.rawValue)
+                Text(id.isClaudeCodeLocal ? "Claude Code (local, read-only). macOS will ask once for Keychain access: click Always Allow." : id.kind == .codex ? "Codex CLI login" : id.rawValue.split(separator: ":", maxSplits: 1).last.map(String.init) ?? id.rawValue)
                     .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
                 if let snap = appState.snapshots[id] {
                     ForEach(Array(snap.meters.enumerated()), id: \.offset) { _, m in
@@ -165,7 +172,7 @@ final class AddAccountWindowController {
         self.appState = appState
     }
 
-    func show(copilot: Bool = false, pick: String? = nil, codex: Bool = false) {
+    func show(copilot: Bool = false, pick: String? = nil, codex: Bool = false, claudeCode: Bool = false) {
         if let window, model?.state.isWaiting == true || window.isVisible {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -173,7 +180,7 @@ final class AddAccountWindowController {
         }
         let model = AddAccountModel(engine: engine)
         self.model = model
-        if codex { model.addCodex() } else if let pick { model.addCopilot(pick) } else if copilot { model.loadLogins() }
+        if claudeCode { model.addClaudeCodeLocal() } else if codex { model.addCodex() } else if let pick { model.addCopilot(pick) } else if copilot { model.loadLogins() }
         let view = AddAccountSheet(model: model, appState: appState) { [weak self] in self?.window?.close() }
         let w = NSWindow(contentViewController: NSHostingController(rootView: view))
         w.title = "Add Account"
