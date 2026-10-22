@@ -101,3 +101,7 @@ If launch at login was on, turn it off in Settings first (or remove AgentHourgla
 This is an unofficial personal tool. It is not affiliated with, endorsed by, or sponsored by Anthropic, GitHub, Microsoft, or OpenAI.
 Claude, GitHub Copilot, Codex, and OpenAI are trademarks of their respective owners. The provider logos are used only to show which service an account belongs to.
 Provider icon SVGs come from [Simple Icons](https://simpleicons.org) (CC0-1.0); the trademarks themselves remain with their owners.
+
+## License
+
+[MIT](LICENSE). The license covers this project's code only; provider names and logos remain trademarks of their owners (see above).
