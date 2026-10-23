@@ -25,11 +25,21 @@ KC_GROUP=$TEAM.cc.kuoc.agent-hourglass.shared
 
 die() { echo "testflight: $*" >&2; exit 1; }
 plist() { /usr/libexec/PlistBuddy -c "Print :$1" "$2" 2>/dev/null || true; }
+# MARKETING_VERSION from project.yml; the bundles must carry it.
+version=$(rg -o -r '$1' '^\s*MARKETING_VERSION:\s*(\S+)' project.yml | head -1 || true)
+[ -n "$version" ] || die "no MARKETING_VERSION in project.yml"
 
-# Bundle checks on <app> (and its widget appex). <gta>=1 also requires get-task-allow false: only the
-# exported .ipa is distribution-signed; automatic signing archives with the development identity.
-verify_bundles() { # <app> <build> <commit> <gta> <label>
-  local app=$1 build=$2 commit=$3 gta=$4 label=$5 appex a w ent
+# ent_is <entitlements xml> <escaped plutil keypath> <raw|json> <want> <bundle name>: exact value check.
+ent_is() {
+  local got key=${2//\\/}
+  got=$(printf '%s' "$1" | /usr/bin/plutil -extract "$2" "$3" -o - - 2>/dev/null) || got=missing
+  [ "$got" = "$4" ] || die "verify: $5 $key is $got, want $4"
+}
+
+# Bundle checks on <app> (and its widget appex). <dist>=1 (the exported .ipa) also requires get-task-allow
+# false and an Apple Distribution signature: automatic signing archives with the development identity.
+verify_bundles() { # <app> <build> <commit> <dist> <label>
+  local app=$1 build=$2 commit=$3 dist=$4 label=$5 appex a w b id name ent sig l team auth
   appex=$(echo "$app"/PlugIns/*.appex)
   [ -d "$app" ] || die "verify: no app in $label"
   [ -d "$appex" ] || die "verify: no widget appex in $label"
@@ -37,15 +47,28 @@ verify_bundles() { # <app> <build> <commit> <gta> <label>
   [ "$a" = "$build" ] && [ "$w" = "$build" ] || die "verify: CFBundleVersion mismatch (app $a, widget $w, want $build)"
   a=$(plist CFBundleShortVersionString "$app/Info.plist"); w=$(plist CFBundleShortVersionString "$appex/Info.plist")
   [ -n "$a" ] && [ "$a" = "$w" ] || die "verify: CFBundleShortVersionString mismatch (app $a, widget $w)"
+  [ "$a" = "$version" ] || die "verify: CFBundleShortVersionString $a is not project.yml MARKETING_VERSION $version"
   [ "$(plist CFBundleIdentifier "$app/Info.plist")" = "$APP_ID" ] || die "verify: app bundle id"
   [ "$(plist CFBundleIdentifier "$appex/Info.plist")" = "$WIDGET_ID" ] || die "verify: widget bundle id"
   [ "$(plist GitCommit "$app/Info.plist")" = "$commit" ] || die "verify: GitCommit is not $commit"
-  for b in "$app" "$appex"; do
-    ent=$(codesign -d --entitlements - --xml "$b" 2>/dev/null | plutil -convert xml1 -o - - 2>/dev/null || true)
-    [[ "$ent" == *"$GROUP"* ]] || die "verify: $(basename "$b") lacks $GROUP"
-    [[ "$ent" == *"$KC_GROUP"* ]] || die "verify: $(basename "$b") lacks keychain group"
-    if [ "$gta" = 1 ] && ! echo "$ent" | rg -q -U '<key>get-task-allow</key>\s*<false/>'; then
-      die "verify: $(basename "$b") get-task-allow is not false"
+  for b in "$app:$APP_ID" "$appex:$WIDGET_ID"; do
+    id=${b##*:}; b=${b%:*}; name=$(basename "$b")
+    ent=$(codesign -d --entitlements :- "$b" 2>/dev/null || true)
+    ent_is "$ent" application-identifier raw "$TEAM.$id" "$name"
+    ent_is "$ent" 'com\.apple\.developer\.team-identifier' raw "$TEAM" "$name"
+    ent_is "$ent" 'com\.apple\.security\.application-groups' json "[\"$GROUP\"]" "$name"
+    ent_is "$ent" keychain-access-groups json "[\"$KC_GROUP\"]" "$name"
+    [ "$dist" = 1 ] && ent_is "$ent" get-task-allow raw false "$name"
+    sig=$(codesign -dvv "$b" 2>&1 || true); team=; auth=
+    while IFS= read -r l; do
+      case $l in
+        TeamIdentifier=*) team=${l#*=} ;;
+        Authority=*) [ -n "$auth" ] || auth=${l#*=} ;;
+      esac
+    done <<< "$sig"
+    [ "$team" = "$TEAM" ] || die "verify: $name signing team is $team, want $TEAM"
+    if [ "$dist" = 1 ] && [[ "$auth" != "Apple Distribution: "*" ($TEAM)" ]]; then
+      die "verify: $name is not signed by Apple Distribution ($TEAM): $auth"
     fi
   done
   echo "testflight: $label verified $a ($build) $commit"
@@ -96,7 +119,6 @@ p8="$HOME/.appstoreconnect/private_keys/AuthKey_${kid}.p8"
 security find-identity -v -p codesigning | rg -q 'Apple Distribution' || die "no Apple Distribution identity in the keychain"
 # 2. Version and output dir (before the test runs, which log into it).
 build=$(scripts/build-number.sh); commit=$(git rev-parse --short HEAD)
-version=$(rg -o -r '$1' '^\s*MARKETING_VERSION:\s*(\S+)' project.yml | head -1)
 out=build/testflight/$build
 mkdir -p "$out"; chmod 700 "$out"
 # tail_log <log>: last 30 lines to stderr, with any asc.env value lines dropped.

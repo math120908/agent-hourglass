@@ -5,6 +5,9 @@
 #               bundles that existed before the run alone. Real xcodebuild writes them to
 #               `getconf DARWIN_USER_TEMP_DIR` even when TMPDIR is overridden; the fake writes to
 #               AH_DARWIN_TEMP_DIR, which testflight.sh reads in place of getconf.
+#   verify-*:   --verify-archive / --verify-ipa pass a good fixture; each mutated fixture (versions vs each
+#               other and project.yml, bundle ids, GitCommit, entitlements compared as exact plist values,
+#               signing identity and team) exits 1 with a message naming the failed check.
 #   relpath:    --verify-archive resolves a relative path against the caller's cwd.
 #   rsync:      export runs with rsync resolving to /usr/bin/rsync. Xcode's IPA step runs /usr/bin/rsync
 #               (openrsync), which starts its local server as `rsync` from PATH; Homebrew rsync 3.x there
@@ -29,7 +32,27 @@ printf '# App Store Connect API key\n\nASC_KEY_ID=%s\nASC_ISSUER_ID=%s\n' "$KEY"
 export FAKE_CALLS=$t/calls
 : > "$t/home/.appstoreconnect/private_keys/AuthKey_$KEY.p8"; chmod 600 "$t/home/.appstoreconnect/private_keys/AuthKey_$KEY.p8"
 
-# make_app <app> <build> <commit>: minimal app + widget bundle with the Info.plist keys verify reads.
+# sign_fake <bundle> <dev|dist> <bundle id>: the signature the fake codesign reports for <bundle>, kept as
+# files inside it. dev = the automatic-signing archive (Apple Development, get-task-allow true); dist = the
+# cloud-signed export (Apple Distribution, get-task-allow false, or FAKE_EXPORT_GTA).
+cat > "$bin/sign_fake" <<'EOF'
+#!/bin/bash
+set -e
+b=$1; id=$3; e=$b/_fake_ent.plist; rm -f "$e"
+if [ "$2" = dist ]; then gta=${FAKE_EXPORT_GTA:-false}; auth="Apple Distribution: Fake Name (R7V5X99HYA)"
+else gta=true; auth="Apple Development: Fake Name (J3BB4FRPJR)"; fi
+/usr/libexec/PlistBuddy -c "Add :application-identifier string R7V5X99HYA.$id" \
+  -c 'Add :com.apple.developer.team-identifier string R7V5X99HYA' \
+  -c 'Add :com.apple.security.application-groups array' \
+  -c 'Add :com.apple.security.application-groups:0 string group.cc.kuoc.agent-hourglass' \
+  -c "Add :get-task-allow bool $gta" \
+  -c 'Add :keychain-access-groups array' \
+  -c 'Add :keychain-access-groups:0 string R7V5X99HYA.cc.kuoc.agent-hourglass.shared' "$e" >/dev/null
+printf 'Identifier=%s\nAuthority=%s\nAuthority=Apple Worldwide Developer Relations Certification Authority\nAuthority=Apple Root CA\nTeamIdentifier=R7V5X99HYA\n' \
+  "$id" "$auth" > "$b/_fake_sig.txt"
+EOF
+# make_app <app> <build> <commit> [dev|dist]: minimal app + widget bundle with the Info.plist keys verify
+# reads and a fake signature (default dev, like the archive).
 cat > "$bin/make_app" <<'EOF'
 #!/bin/bash
 set -e
@@ -38,19 +61,19 @@ for p in "$app:cc.kuoc.agent-hourglass.ios" "$app/PlugIns/W.appex:cc.kuoc.agent-
   d=${p%%:*}; f=$d/Info.plist; rm -f "$f"
   /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string ${p#*:}" -c "Add :CFBundleVersion string $2" \
     -c 'Add :CFBundleShortVersionString string 1.0.0' -c "Add :GitCommit string $3" "$f" >/dev/null
+  sign_fake "$d" "${4:-dev}" "${p#*:}"
 done
 EOF
+# Fake codesign: `-d --entitlements ... <bundle>` prints <bundle>/_fake_ent.plist (stdout, like real);
+# `-dvv <bundle>` prints <bundle>/_fake_sig.txt (stderr, like real).
 cat > "$bin/codesign" <<'EOF'
 #!/bin/bash
-cat <<X
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>com.apple.security.application-groups</key><array><string>group.cc.kuoc.agent-hourglass</string></array>
-<key>get-task-allow</key><false/>
-<key>keychain-access-groups</key><array><string>R7V5X99HYA.cc.kuoc.agent-hourglass.shared</string></array>
-</dict></plist>
-X
+b=${!#}
+case " $* " in
+  *" -dvv "*) cat "$b/_fake_sig.txt" >&2 ;;
+  *" --entitlements "*) cat "$b/_fake_ent.plist" ;;
+  *) exit 2 ;;
+esac
 EOF
 cat > "$bin/git" <<'EOF'
 #!/bin/bash
@@ -85,6 +108,8 @@ case "$1" in
     if [ "$(/usr/libexec/PlistBuddy -c 'Print :destination' "$(val -exportOptionsPlist)")" = export ]; then
       arc=$(val -archivePath); exp=$(val -exportPath); s=$(mktemp -d)
       mkdir -p "$s/Payload" "$exp"; cp -R "$arc"/Products/Applications/*.app "$s/Payload/"
+      sign_fake "$s/Payload/AgentHourglass.app" dist cc.kuoc.agent-hourglass.ios
+      sign_fake "$s/Payload/AgentHourglass.app/PlugIns/W.appex" dist cc.kuoc.agent-hourglass.ios.widget
       ditto -c -k "$s" "$exp/AgentHourglass.ipa"; rm -rf "$s"
     fi ;;
 esac
@@ -179,4 +204,61 @@ rm -rf "$pdir"
 mkdir -p "$t/cwd"; PATH="$bin:$PATH" make_app "$t/cwd/rel.xcarchive/Products/Applications/AgentHourglass.app" 1.1 abc1234
 code=0; out=$(cd "$t/cwd" && PATH="$bin:$PATH" "$script" --verify-archive rel.xcarchive 1.1 abc1234 2>&1) || code=$?
 [ $code = 0 ] && pass relpath || bad relpath "exit $code: $out"
+
+# verify-*: one mutation per case on a fresh fixture.
+# pbe <plist> <PlistBuddy cmd...>; gsub_sig <bundle> <from> <to> edits the fake `codesign -dvv` output.
+pbe() { local f=$1 c; shift; for c in "$@"; do /usr/libexec/PlistBuddy -c "$c" "$f" >/dev/null; done; }
+gsub_sig() { local f=$1/_fake_sig.txt x; x=$(cat "$f"); printf '%s\n' "${x//"$2"/"$3"}" > "$f"; }
+# vcase <name> <archive|ipa> <want: 0, or a substring of the failure message> <mutation on $A app / $W widget>
+vcase() {
+  local name=$1 mode=$2 want=$3 mut=$4 d=$t/v-$1 code=0 out A W sig=dev
+  rm -rf "$d"; A=$d/x.xcarchive/Products/Applications/AgentHourglass.app
+  [ "$mode" = ipa ] && { A=$d/s/Payload/AgentHourglass.app; sig=dist; }
+  W=$A/PlugIns/W.appex
+  PATH="$bin:$PATH" make_app "$A" 1.1 abc1234 "$sig"
+  eval "$mut"
+  if [ "$mode" = ipa ]; then ditto -c -k "$d/s" "$d/x.ipa"; set -- --verify-ipa "$d/x.ipa"
+  else set -- --verify-archive "$d/x.xcarchive"; fi
+  out=$(PATH="$bin:$PATH" "$script" "$@" 1.1 abc1234 2>&1) || code=$?
+  if [ "$want" = 0 ]; then if [ $code = 0 ]; then pass "$name"; else bad "$name" "exit $code: $out"; fi
+  elif [ $code != 1 ]; then bad "$name" "exit $code want 1: $out"
+  elif [[ "$out" != *"$want"* ]]; then bad "$name" "message lacks '$want': $out"
+  else pass "$name"; fi
+}
+EA='$A/_fake_ent.plist'; EW='$W/_fake_ent.plist'
+vcase verify-archive-ok archive 0 ':'
+vcase verify-ipa-ok ipa 0 ':'
+vcase verify-widget-build archive 'CFBundleVersion mismatch' 'pbe $W/Info.plist "Set :CFBundleVersion 1.2"'
+vcase verify-app-build ipa 'CFBundleVersion mismatch' 'pbe $A/Info.plist "Set :CFBundleVersion 1.2"'
+vcase verify-widget-short-version archive 'CFBundleShortVersionString mismatch' \
+  'pbe $W/Info.plist "Set :CFBundleShortVersionString 1.0.1"'
+vcase verify-project-version ipa 'project.yml' \
+  'pbe $A/Info.plist "Set :CFBundleShortVersionString 9.9.9"; pbe $W/Info.plist "Set :CFBundleShortVersionString 9.9.9"'
+vcase verify-app-bundle-id archive 'app bundle id' 'pbe $A/Info.plist "Set :CFBundleIdentifier cc.kuoc.other"'
+vcase verify-widget-bundle-id ipa 'widget bundle id' \
+  'pbe $W/Info.plist "Set :CFBundleIdentifier cc.kuoc.agent-hourglass.ios.other"'
+vcase verify-git-commit archive 'GitCommit' 'pbe $A/Info.plist "Set :GitCommit deadbee"'
+vcase verify-gta-app ipa 'get-task-allow' "pbe $EA 'Set :get-task-allow true'"
+vcase verify-gta-widget ipa 'get-task-allow' "pbe $EW 'Set :get-task-allow true'"
+vcase verify-gta-missing ipa 'get-task-allow' "pbe $EA 'Delete :get-task-allow'"
+vcase verify-appid-team ipa 'application-identifier' \
+  "pbe $EA 'Set :application-identifier OTHERTEAM1.cc.kuoc.agent-hourglass.ios'"
+vcase verify-appid-widget archive 'application-identifier' \
+  "pbe $EW 'Set :application-identifier R7V5X99HYA.cc.kuoc.agent-hourglass.ios'"
+vcase verify-team-id ipa 'team-identifier' "pbe $EW 'Set :com.apple.developer.team-identifier OTHERTEAM1'"
+vcase verify-group-missing archive 'application-groups' "pbe $EA 'Delete :com.apple.security.application-groups'"
+vcase verify-group-similar ipa 'application-groups' \
+  "pbe $EW 'Set :com.apple.security.application-groups:0 group.cc.kuoc.agent-hourglass.dev'"
+vcase verify-group-extra ipa 'application-groups' \
+  "pbe $EA 'Add :com.apple.security.application-groups:1 string group.cc.kuoc.other'"
+vcase verify-group-wrong-key archive 'application-groups' \
+  "pbe $EA 'Delete :com.apple.security.application-groups' 'Add :com.apple.other array' 'Add :com.apple.other:0 string group.cc.kuoc.agent-hourglass'"
+vcase verify-keychain-missing ipa 'keychain-access-groups' "pbe $EW 'Delete :keychain-access-groups'"
+vcase verify-keychain-other archive 'keychain-access-groups' \
+  "pbe $EA 'Set :keychain-access-groups:0 R7V5X99HYA.cc.kuoc.other'"
+vcase verify-sign-team-archive archive 'signing team' 'gsub_sig $A TeamIdentifier=R7V5X99HYA TeamIdentifier=OTHERTEAM1'
+vcase verify-sign-team-ipa ipa 'signing team' 'gsub_sig $W TeamIdentifier=R7V5X99HYA TeamIdentifier=OTHERTEAM1'
+vcase verify-sign-development ipa 'Apple Distribution' \
+  'gsub_sig $A "Apple Distribution: Fake Name (R7V5X99HYA)" "Apple Development: Fake Name (J3BB4FRPJR)"'
+vcase verify-sign-other-team ipa 'Apple Distribution' 'gsub_sig $W "Fake Name (R7V5X99HYA)" "Fake Name (OTHERTEAM1)"'
 exit $fail
