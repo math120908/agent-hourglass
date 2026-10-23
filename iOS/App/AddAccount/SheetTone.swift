@@ -104,7 +104,8 @@ struct SheetStatus: View {
 
 /// Disabled primary: a faded provider capsule with a readable label, so the user sees where the
 /// action will appear. Enabled callers use `.borderedProminent`; this only draws the disabled look.
-/// `compact` matches a regular-size capsule (the Codex `Copy` pill) instead of a large button.
+/// `compact` matches a regular-size capsule (the Codex `Copy` pill; the system one renders 37 pt)
+/// instead of a large button.
 struct FadedProminentStyle: ButtonStyle {
     var kind: ProviderKind = .claude
     let tint: Color
@@ -116,7 +117,7 @@ struct FadedProminentStyle: ButtonStyle {
             .font(.body)
             .foregroundStyle(scheme == .dark ? Color.white.opacity(0.78) : SheetTone.accentText(kind, .light))
             .padding(.horizontal, compact ? 14 : 20)
-            .frame(minHeight: compact ? 34 : 50)
+            .frame(minHeight: compact ? 37 : 50)
             .background {
                 // Light: a white base keeps the faded tint (and its label contrast) the same on
                 // the lilac Glass gradient and on white.
