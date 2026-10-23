@@ -5,7 +5,8 @@
 #               bundles that existed before the run, and other schemes' bundles, alone. Real xcodebuild
 #               writes them to `getconf DARWIN_USER_TEMP_DIR` even when TMPDIR is overridden; the fake
 #               xcodebuild does the same through a fake `getconf` (FAKE_GETCONF). A stray
-#               AH_DARWIN_TEMP_DIR export is ignored.
+#               AH_DARWIN_TEMP_DIR export is ignored. A new bundle named otherwise (the prefix is a guess)
+#               is kept and reported as a count-only warning.
 #   verify-*:   --verify-archive / --verify-ipa pass a good fixture; each mutated fixture (versions vs each
 #               other and project.yml, bundle ids, GitCommit, entitlements compared as exact plist values,
 #               signing identity and team) exits 1 with a message naming the failed check.
@@ -152,6 +153,7 @@ dt=$(getconf DARWIN_USER_TEMP_DIR); logs=$(mktemp -d "${dt%/}/AgentHourglassiOS_
 mv "$logs" "$logs.xcdistributionlogs"; echo "key $(val -authenticationKeyID) $(val -authenticationKeyIssuerID)" > "$logs.xcdistributionlogs/IDEDistribution.log"
 [ "${FAKE_DISTLOGS_UCHG:-0}" = 0 ] || chflags uchg "$logs.xcdistributionlogs/IDEDistribution.log"
 [ "${FAKE_OTHER_LOGS:-0}" = 0 ] || mkdir -p "${dt%/}/OtherApp_run.xcdistributionlogs"
+[ -z "${FAKE_LOGS_NAME:-}" ] || { mkdir -p "${dt%/}/$FAKE_LOGS_NAME${1#-}.xcdistributionlogs"; echo "key $(val -authenticationKeyID)" > "${dt%/}/$FAKE_LOGS_NAME${1#-}.xcdistributionlogs/IDEDistribution.log"; }
 build=; for a in "$@"; do case $a in CURRENT_PROJECT_VERSION=*) build=${a#*=} ;; esac; done
 case "$1" in
   archive) make_app "$(val -archivePath)/Products/Applications/AgentHourglass.app" "$build" abc1234
@@ -281,6 +283,10 @@ mkdir -p "$t/stray"; RUN_TMPDIR=other AH_DARWIN_TEMP_DIR=$t/stray/ run_flow dist
 # Only this scheme's bundles: another scheme's bundle written during the run stays.
 o2="AgentHourglassiOS_older.xcdistributionlogs Older_1.xcdistributionlogs OtherApp_run.xcdistributionlogs "
 RUN_LEFT="$o2$o2" FAKE_OTHER_LOGS=1 run_flow distlogs-other-scheme-kept 0 --dry-run
+# Xcode names its bundle differently from the AgentHourglassiOS_ guess: kept, and a count-only warning.
+o3="AgentHourglassiOS_older.xcdistributionlogs Older_1.xcdistributionlogs Xcode_archive.xcdistributionlogs Xcode_exportArchive.xcdistributionlogs "
+RUN_LEFT="$o3$o3" RUN_WANT_MSG='warning: 2 new *.xcdistributionlogs bundle(s) not named AgentHourglassiOS_*' FAKE_LOGS_NAME=Xcode_ \
+  run_flow distlogs-unexpected-name-warns 0 --dry-run
 
 # tree-*: the tree and HEAD are checked again before archive and before export.
 RUN_WANT_MSG='tree changed during run' RUN_NO_CALL='xcodebuild archive' FAKE_MAKE_TOUCH=dirty \

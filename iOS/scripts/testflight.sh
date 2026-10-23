@@ -254,13 +254,25 @@ distlogs() {
   for t in "${tdirs[@]}"; do for d in "$t"/AgentHourglassiOS_*.xcdistributionlogs; do [ -e "$d" ] && echo "$d"; done; done
   return 0
 }
-pre_logs=$(distlogs)
+# all_distlogs: every bundle in the scanned dirs. The AgentHourglassiOS_ prefix is [inferred] from the scheme
+# name; a new bundle named otherwise is counted (never named) so a wrong guess does not go unnoticed.
+all_distlogs() {
+  local d t
+  for t in "${tdirs[@]}"; do for d in "$t"/*.xcdistributionlogs; do [ -e "$d" ] && echo "$d"; done; done
+  return 0
+}
+pre_logs=$(distlogs); pre_all=$(all_distlogs)
 rm_distlogs() {
-  local d
+  local d n=0
   while IFS= read -r d; do
     printf '%s\n' "$pre_logs" | rg -q -x -F -- "$d" || rm -rf "$d" 2>/dev/null \
       || echo "testflight: could not remove $d (holds the key id and issuer id); remove it by hand" >&2
   done < <(distlogs)
+  while IFS= read -r d; do
+    case $(basename "$d") in AgentHourglassiOS_*) continue ;; esac
+    printf '%s\n' "$pre_all" | rg -q -x -F -- "$d" || n=$((n + 1))
+  done < <(all_distlogs)
+  [ $n = 0 ] || echo "testflight: warning: $n new *.xcdistributionlogs bundle(s) not named AgentHourglassiOS_* appeared during this run; they may hold the key id and issuer id. Check \`getconf DARWIN_USER_TEMP_DIR\` and \$TMPDIR and remove them by hand." >&2
 }
 distlogs_armed=1
 # Xcode's IPA step runs /usr/bin/rsync (openrsync), which starts its local server as `rsync` from PATH.
