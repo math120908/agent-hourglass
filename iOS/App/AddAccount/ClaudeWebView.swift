@@ -32,6 +32,8 @@ struct ClaudeWebView: UIViewRepresentable {
         if context.coordinator.loaded != url {
             context.coordinator.loaded = url
             context.coordinator.captured = false
+            // A torn-down view has no delegate; never load without the allowlist and capture.
+            web.navigationDelegate = context.coordinator
             web.load(URLRequest(url: url))
         }
     }

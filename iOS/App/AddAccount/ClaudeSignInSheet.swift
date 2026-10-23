@@ -31,6 +31,8 @@ struct ClaudeSignInSheet<Web: View>: View {
         switch model.state {
         case .browsing, .exchanging:
             web
+                // A new authorize URL gets a fresh web view; a torn-down one is never reused.
+                .id(model.authorizeURL)
                 .ignoresSafeArea(edges: .bottom)
                 .overlay {
                     if model.state == .exchanging {

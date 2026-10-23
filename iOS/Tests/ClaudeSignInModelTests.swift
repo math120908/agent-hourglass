@@ -39,6 +39,15 @@ struct ClaudeSignInModelTests {
         #expect(m.state == .success(AccountID(kind: .claude, remoteID: "acct-uuid")))
     }
 
+    @Test func testSecondReceiveNeverExchangesAgain() async throws {
+        let calls = Counter()
+        let m = ClaudeSignInModel(app: try app(), flow: ClaudePKCEFlow { _, _, _ in calls.bump(); return (Self.cred, "acct-uuid") })
+        let s = try #require(query(m.authorizeURL, "state"))
+        await m.receive(code: "c", state: s)
+        await m.receive(code: "c", state: s)
+        #expect(calls.value == 1)
+    }
+
     @Test func testRestartChangesState() throws {
         let m = ClaudeSignInModel(app: try app())
         let before = query(m.authorizeURL, "state")
