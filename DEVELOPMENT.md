@@ -4,10 +4,10 @@
 
 ## Build
 
-Requires Xcode, XcodeGen, and a **Developer ID Application** identity in the login keychain (default `ID` in the `Makefile`; override with `make app ID=<sha1>`). `make sign` fails if the signature has no TeamIdentifier.
+Requires Xcode, XcodeGen, and a **Developer ID Application** identity in the login keychain (found by team R7V5X99HYA via `security find-identity`, see `scripts/mac-sign-id.sh`; override with `make app ID=<sha1>`). `make sign` fails if the signature has no TeamIdentifier.
 
 ```bash
-make test      # swift test + check-ios + secret-scan + source-guards
+make test      # swift test + check-ios + secret-scan + test-mac-sign-id + source-guards
 make check-ios  # build UsageCore for iOS Simulator
 make app       # xcodegen + Release build + version bump + GitCommit stamp + codesign
 make install   # make app, quit the running app, copy to ~/Applications/AgentHourglass.app
