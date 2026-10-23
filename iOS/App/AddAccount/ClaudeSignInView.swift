@@ -17,11 +17,9 @@ struct ClaudeSignInView: View {
 
     @Environment(\.appTheme) private var theme
     @Environment(\.colorScheme) private var scheme
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @ScaledMetric(relativeTo: .headline) private var markSize: CGFloat = 20
 
     init(model: ClaudeSignInModel, onDone: @escaping (AccountID) -> Void) {
         self.init(model: model, form: ClaudeSignInForm(), onDone: onDone)
@@ -35,7 +33,7 @@ struct ClaudeSignInView: View {
     }
 
     private var state: ClaudeSignInModel.State { model.state }
-    private var steps: [ClaudeSignInForm.Step] { form.steps(state) }
+    private var steps: [SignInStep] { form.steps(state) }
     private var isGlass: Bool { theme == .glass }
     private var isSuccess: Bool { if case .success = state { true } else { false } }
     private var isFinished: Bool {
@@ -46,32 +44,12 @@ struct ClaudeSignInView: View {
     }
 
     var body: some View {
-        // Scrolls only when it must (AX type sizes); otherwise everything is pinned top.
-        ScrollView {
-            VStack(spacing: 0) {
-                header
-                secondary(Text("Sign in on claude.ai, then paste the code here.").font(.subheadline))
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 6)
-                card.padding(.top, 24)
-                result.padding(.top, 20)
-            }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 24)
-            .frame(maxWidth: .infinity)
+        SignInSheetLayout(kind: .claude, title: "Add Claude account", lead: "Sign in on claude.ai, then paste the code here.") {
+            card
+        } primary: {
+            result
         }
-        .scrollBounceBehavior(.basedOnSize)
-        .background { AppBackdrop().ignoresSafeArea() }
-        .tint(GlassStyle.claude)
         .animation(reduceMotion ? nil : .snappy, value: steps)
-        // Cancel stays in every state (as on the Codex sheet) so the layout never jumps.
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                // Provider accent on every theme, in its readable variant (the stock accent is ~3:1 on
-                // the light toolbar pill).
-                Button("Cancel") { dismiss() }.tint(SheetTone.accentText(.claude, scheme))
-            }
-        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active, form.opened, form.text.isEmpty, state == .browsing {
                 form.hasStrings = UIPasteboard.general.hasStrings
@@ -88,34 +66,20 @@ struct ClaudeSignInView: View {
         }
     }
 
-    // MARK: Header
-
-    private var header: some View {
-        HStack(spacing: 8) {
-            ProviderIcon(kind: .claude, size: markSize)
-                .foregroundStyle(GlassStyle.claude)
-                .accessibilityHidden(true)
-            Text("Add Claude account").font(.headline)
-        }
-        .padding(.top, 24)
-        .accessibilityAddTraits(.isHeader)
-    }
-
     // MARK: Steps card
 
-    @ViewBuilder private var card: some View {
-        let rows = VStack(spacing: 0) {
-            row(1, "Open sign-in page", combine: true) { openControl }
-            divider
-            row(2, "Sign in and copy the code", combine: true) { EmptyView() }
-            divider
-            row(3, "Paste the code", combine: false) { pasteControl }
+    private var card: some View {
+        VStack(spacing: 0) {
+            SignInStepRow(number: 1, label: "Open sign-in page", step: steps[0], kind: .claude) { openControl }
+            SignInDivider()
+            SignInStepRow(number: 2, label: "Sign in and copy the code", step: steps[1], kind: .claude) { EmptyView() }
+            SignInDivider()
+            SignInStepRow(number: 3, label: "Paste the code", step: steps[2], kind: .claude, combine: false) { pasteControl }
             if isFinished {
-                divider
+                SignInDivider()
                 outcome.padding(14)
             }
         }
-        rows.sheetCard()
     }
 
     /// Success / failure line, on the card so the status glyph keeps its contrast.
@@ -133,40 +97,6 @@ struct ClaudeSignInView: View {
         case .browsing, .exchanging:
             EmptyView()
         }
-    }
-
-    @ViewBuilder private var divider: some View {
-        if isGlass {
-            GlassDivider()
-        } else {
-            Rectangle().fill(Color.primary.opacity(0.12)).frame(height: 0.5)
-        }
-    }
-
-    private func row<C: View>(_ n: Int, _ label: String, combine: Bool, @ViewBuilder control: () -> C) -> some View {
-        let step = steps[n - 1]
-        let layout = typeSize.isAccessibilitySize
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
-            : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
-        return layout {
-            StepIndicator(number: n, step: step, glass: isGlass, scheme: scheme)
-            VStack(alignment: .leading, spacing: 10) {
-                Group {
-                    switch step {
-                    case .todo: Text(label).font(.body).foregroundStyle(SheetTone.secondary(scheme, glass: isGlass))
-                    case .current: Text(label).font(.body.weight(.semibold))
-                    case .done: Text(label).font(.body)
-                    }
-                }
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(minHeight: 28)
-                control()
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(14)
-        .frame(minHeight: 56)
-        .accessibilityElement(children: combine ? .combine : .contain)
     }
 
     @ViewBuilder private var openControl: some View {
@@ -372,49 +302,5 @@ struct ClaudeSignInView: View {
         debounce?.cancel()
         form.reset()
         model.restart()
-    }
-}
-
-/// 28 pt step marker: number in a soft disc (todo), Claude ring (current), filled check (done).
-private struct StepIndicator: View {
-    let number: Int
-    let step: ClaudeSignInForm.Step
-    let glass: Bool
-    let scheme: ColorScheme
-
-    @ScaledMetric(relativeTo: .body) private var size: CGFloat = 28
-
-    var body: some View {
-        ZStack {
-            switch step {
-            case .todo:
-                if glass {
-                    // Dark: a darker disc keeps the light number at 4.5:1; light: unchanged.
-                    Circle().fill(scheme == .dark ? Color.black.opacity(0.12) : Color.primary.opacity(0.10))
-                    Text("\(number)").font(.subheadline.weight(.semibold)).foregroundStyle(SheetTone.secondary(scheme, glass: true))
-                } else {
-                    Circle().strokeBorder(Color.primary.opacity(0.18), lineWidth: 2)
-                    Text("\(number)").font(.subheadline.weight(.semibold)).foregroundStyle(SheetTone.secondary(scheme, glass: false))
-                }
-            case .current:
-                // Lifted (dark) / deepened (light) ring clears 3:1 on every card; the number stays primary.
-                Circle().strokeBorder(SheetTone.claude(scheme), lineWidth: 2.5)
-                Text("\(number)").font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
-            case .done:
-                Circle().fill(GlassStyle.claude)
-                Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(.white)
-            }
-        }
-        .frame(width: size, height: size)
-        .accessibilityElement()
-        .accessibilityLabel("Step \(number), \(phrase)")
-    }
-
-    private var phrase: String {
-        switch step {
-        case .todo: "not started"
-        case .current: "current"
-        case .done: "done"
-        }
     }
 }

@@ -41,7 +41,7 @@ struct AddFlowSheet: View {
             case .codex: CodexFlowView(model: CodexAddFlow.model(app: app), onDone: onDone)
             }
         }
-        .tint(GlassStyle.accent(flow.kind))
+        .tint(GlassStyle.fill(flow.kind))
     }
 }
 
@@ -62,7 +62,7 @@ private struct CodexFlowView: View {
 
     var body: some View {
         NavigationStack {
-            DeviceCodeSheet(model: model, provider: .codex, onDone: onDone)
+            DeviceCodeSheet(model: model, onDone: onDone)
         }
         .task { model.begin() }
     }

@@ -95,4 +95,22 @@ private final class Flag: @unchecked Sendable {
         await waitUntil { if case .failed = m.state { true } else { false } }
         #expect(m.state == .failed("Sign-in failed"))
     }
+
+    @Test func testForegroundWakesPollOnlyWhileWaiting() async {
+        let wakes = Counter()
+        let p = prompt()
+        let m = DeviceCodeFlowModel(
+            title: "T",
+            start: { p },
+            complete: { _ in try await Task.sleep(for: .seconds(30)); return id },
+            wake: { wakes.bump() },
+        )
+        m.foreground()
+        #expect(wakes.value == 0, "nothing to wake before begin")
+        m.begin()
+        await waitUntil { m.state == .waiting(p) }
+        m.foreground()
+        #expect(wakes.value == 1)
+        m.cancel()
+    }
 }
