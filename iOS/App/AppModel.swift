@@ -223,3 +223,18 @@ final class AppModel {
         if task != .invalid { app.endBackgroundTask(task) }
     }
 }
+
+#if DEBUG
+extension AppModel {
+    /// Snapshot/preview model: fixture entries and state, backed by a throwaway temp environment.
+    static func preview() -> AppModel {
+        let tmp = FileManager.default.temporaryDirectory.appending(path: "preview-\(UUID().uuidString)")
+        let env = try! UsageEnvironment.make(base: tmp, service: "cc.kuoc.agent-hourglass.preview", accessGroup: AppGroup.keychainAccessGroup)
+        let defaults = UserDefaults(suiteName: "preview-\(UUID().uuidString)")!
+        let model = AppModel(env: env, displayStore: DisplaySettingsStore(defaults: defaults), now: { [fixed = Fixtures.now] in fixed })
+        model.entries = Fixtures.entries
+        for (id, s) in Fixtures.appState().statuses { model.appState.statuses[id] = s }
+        return model
+    }
+}
+#endif
