@@ -16,7 +16,8 @@ let package = Package(
         .target(name: "UsageCore", dependencies: [.product(name: "GRDB", package: "GRDB.swift")]),
         .target(name: "UsageCoreMac", dependencies: ["UsageCore"]),
         .executableTarget(name: "usagectl", dependencies: ["UsageCore", "UsageCoreMac"]),
-        .testTarget(name: "UsageCoreTests", dependencies: ["UsageCore", "UsageCoreMac"], resources: [.copy("Fixtures")]),
+        .testTarget(name: "UsageCoreTests", dependencies: ["UsageCore"], resources: [.copy("Fixtures")]),
+        .testTarget(name: "UsageCoreMacTests", dependencies: ["UsageCoreMac", "UsageCore"]),
         .testTarget(name: "UsagectlTests", dependencies: ["usagectl", "UsageCore"]),
     ]
 )

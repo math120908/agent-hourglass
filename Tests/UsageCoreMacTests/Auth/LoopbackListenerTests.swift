@@ -146,3 +146,17 @@ final class Counter: @unchecked Sendable {
     func bump() { lock.withLock { n += 1 } }
     var value: Int { lock.withLock { n } }
 }
+
+struct AddFlowCancelTests {
+    @Test func cancelClosesListener() async throws {
+        let listener = try await LoopbackListener.bind()
+        let port = listener.port
+        let wait = Task { try await listener.awaitCallback(expectedState: "s", timeout: .seconds(30)) }
+        try await Task.sleep(for: .milliseconds(100))
+        wait.cancel()
+        _ = await wait.result
+        let again = try await LoopbackListener.bind(maxAttempts: 1, portPicker: { port })
+        #expect(again.port == port)
+        await again.close()
+    }
+}
