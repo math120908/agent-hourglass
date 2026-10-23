@@ -33,7 +33,10 @@ enum RenderHarness {
             view
         }
         .frame(width: size.width, height: size.height)
-        .environment(\.locale, WidgetFixtures.locale)
+        // Explicit locale and calendar so renders ignore the simulator's region and 24-hour settings
+        // (a fixed-identifier Locale carries no user overrides such as AppleICUForce24HourTime).
+        .environment(\.locale, WidgetFixtures.renderLocale)
+        .environment(\.calendar, WidgetFixtures.calendar)
         .environment(\.timeZone, WidgetFixtures.calendar.timeZone)
         let renderer = ImageRenderer(content: content)
         renderer.scale = scale
