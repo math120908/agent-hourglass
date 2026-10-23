@@ -9,6 +9,9 @@
 #   rsync:      export runs with rsync resolving to /usr/bin/rsync. Xcode's IPA step runs /usr/bin/rsync
 #               (openrsync), which starts its local server as `rsync` from PATH; Homebrew rsync 3.x there
 #               rejects --extended-attributes and the export fails with "Copy failed".
+#   asc-*:      asc.env is parsed, never sourced: only ASC_KEY_ID=<10 [A-Z0-9]> and ASC_ISSUER_ID=<uuid>
+#               lines (plus blanks and comments). Anything else exits 1 before make or xcodebuild run,
+#               without executing it; the values never reach a child's environment.
 #   preflight-log: a failing preflight `make test` leaves its output in <out>/preflight.log (mode 600)
 #               and the failure message shows the log's tail and path.
 set -euo pipefail
@@ -21,8 +24,9 @@ bad() { echo "FAIL $1: $2"; fail=1; }
 
 t=$(mktemp -d); trap 'rm -rf "$t"' EXIT
 bin=$t/bin; mkdir -p "$bin" "$t/home/.appstoreconnect/private_keys"
-KEY=FAKEKEY123; ISS=fake-issuer-0000
-printf 'ASC_KEY_ID=%s\nASC_ISSUER_ID=%s\n' "$KEY" "$ISS" > "$t/asc.env"; chmod 600 "$t/asc.env"
+KEY=FAKEKEY123; ISS=0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0
+printf '# App Store Connect API key\n\nASC_KEY_ID=%s\nASC_ISSUER_ID=%s\n' "$KEY" "$ISS" > "$t/asc.env"; chmod 600 "$t/asc.env"
+export FAKE_CALLS=$t/calls
 : > "$t/home/.appstoreconnect/private_keys/AuthKey_$KEY.p8"; chmod 600 "$t/home/.appstoreconnect/private_keys/AuthKey_$KEY.p8"
 
 # make_app <app> <build> <commit>: minimal app + widget bundle with the Info.plist keys verify reads.
@@ -57,6 +61,8 @@ printf '#!/bin/bash\nexit 0\n' > "$bin/xcodegen"
 # Fake make: FAKE_MAKE_FAIL=1 prints a marker line after some noise and fails.
 cat > "$bin/make" <<'EOF2'
 #!/bin/bash
+echo "make $*" >> "$FAKE_CALLS"
+[ -z "${ASC_KEY_ID:-}${ASC_ISSUER_ID:-}" ] || { echo "ASC_* in make env"; exit 3; }
 [ "${FAKE_MAKE_FAIL:-0}" = 1 ] || exit 0
 for i in $(seq 1 50); do echo "noise $i"; done
 echo "FAKE-MARKER killedHolderReleasesLock failed"; exit 2
@@ -65,6 +71,8 @@ EOF2
 # Darwin user temp dir (AH_DARWIN_TEMP_DIR here), not in $TMPDIR.
 cat > "$bin/xcodebuild" <<'EOF'
 #!/bin/bash
+echo "xcodebuild $1" >> "$FAKE_CALLS"
+[ -z "${ASC_KEY_ID:-}${ASC_ISSUER_ID:-}" ] || { echo "ASC_* in xcodebuild env"; exit 3; }
 args=("$@"); val() { local i; for ((i=0; i<${#args[@]}; i++)); do [ "${args[i]}" = "$1" ] && echo "${args[i+1]}"; done; }
 logs=$(mktemp -d "${AH_DARWIN_TEMP_DIR%/}/AgentHourglassiOS_XXXX")
 mv "$logs" "$logs.xcdistributionlogs"; echo "key $(val -authenticationKeyID) $(val -authenticationKeyIssuerID)" > "$logs.xcdistributionlogs/IDEDistribution.log"
@@ -85,6 +93,12 @@ EOF
 printf '#!/bin/bash\nexit 1\n' > "$bin/rsync"
 chmod +x "$bin"/*
 
+# snap_out / clean_out: remove the <out> dirs a run creates under build/testflight.
+snap_out() { out_before=$(ls "$outroot" 2>/dev/null || true); }
+clean_out() {
+  local d
+  for d in "$outroot"/*; do [ -e "$d" ] || continue; printf '%s\n' "$out_before" | rg -q -x -F -- "$(basename "$d")" || rm -rf "$d"; done
+}
 # run_flow <name> <want exit> [script args...]: full flow with a scratch Darwin temp dir holding one
 # older bundle. RUN_TMPDIR=other runs with TMPDIR set to a different scratch dir (also holding one).
 run_flow() {
@@ -92,10 +106,10 @@ run_flow() {
   local tmpdir=$tmp/
   [ "${RUN_TMPDIR:-}" = other ] && tmpdir=$t/tmpdir-$name/
   mkdir -p "$tmp/Older_1.xcdistributionlogs" "${tmpdir}Older_1.xcdistributionlogs"
-  local before; before=$(ls "$outroot" 2>/dev/null || true)
+  snap_out
   out=$(env PATH="$bin:$PATH" HOME="$t/home" ASC_ENV="$t/asc.env" AH_DARWIN_TEMP_DIR="$tmp/" TMPDIR="$tmpdir" \
     "$script" "$@" 2>&1) || code=$?
-  for d in "$outroot"/*; do [ -e "$d" ] || continue; printf '%s\n' "$before" | rg -q -x -F -- "$(basename "$d")" || rm -rf "$d"; done
+  clean_out
   left=
   for d in "$tmp" "$tmpdir"; do left="$left$(cd "$d" && ls -d -- *.xcdistributionlogs 2>/dev/null | tr '\n' ' ' || true)"; done
   if [ "$code" != "$want" ]; then bad "$name" "exit $code want $want: $out"
@@ -107,6 +121,44 @@ run_flow distlogs-upload 0
 run_flow distlogs-dry-run 0 --dry-run
 FAKE_EXPORT_FAIL=1 run_flow distlogs-export-fail 1
 RUN_TMPDIR=other run_flow distlogs-tmpdir-override 0 --dry-run
+
+# asc_case <name> <asc.env content> [env...]: must exit 1 before any make/xcodebuild call, no marker.
+asc_case() {
+  local name=$1 body=$2 f=$t/asc-$1.env m=$t/marker code=0 out; shift 2
+  rm -f "$m"; : > "$FAKE_CALLS"; printf '%s\n' "$body" > "$f"; chmod 600 "$f"
+  snap_out
+  out=$(cd "$t" && env PATH="$bin:$PATH" HOME="$t/home" ASC_ENV="$f" AH_DARWIN_TEMP_DIR="$t/" "$@" "$script" --dry-run 2>&1) || code=$?
+  clean_out
+  if [ $code != 1 ]; then bad "$name" "exit $code want 1: $out"
+  elif [ -e "$m" ]; then bad "$name" "asc.env code ran"
+  elif [ -s "$FAKE_CALLS" ]; then bad "$name" "ran: $(tr '\n' ' ' < "$FAKE_CALLS")"
+  elif [[ "$out" == *"$KEY"* || "$out" == *"$ISS"* ]]; then bad "$name" "key id or issuer id in output"
+  else pass "$name"; fi
+}
+ok="ASC_KEY_ID=$KEY
+ASC_ISSUER_ID=$ISS"
+asc_case asc-cmdsubst "ASC_KEY_ID=\$(touch $t/marker)
+ASC_ISSUER_ID=$ISS"
+asc_case asc-backtick "ASC_KEY_ID=$KEY
+ASC_ISSUER_ID=\`touch $t/marker\`"
+asc_case asc-extra-cmd "$ok
+touch $t/marker"
+asc_case asc-extra-var "$ok
+GROUP=x"
+asc_case asc-setx "set -x
+$ok"
+asc_case asc-export "export ASC_KEY_ID=$KEY
+ASC_ISSUER_ID=$ISS"
+asc_case asc-trailing "$ok; touch $t/marker"
+asc_case asc-dup "$ok
+ASC_KEY_ID=$KEY"
+asc_case asc-bad-keyid "ASC_KEY_ID=../x
+ASC_ISSUER_ID=$ISS"
+asc_case asc-bad-issuer "ASC_KEY_ID=$KEY
+ASC_ISSUER_ID=fake-issuer-0000"
+asc_case asc-missing "ASC_KEY_ID=$KEY"
+# A caller that exported the names must not leak them into make/xcodebuild (checked by the fakes).
+ASC_KEY_ID=$KEY ASC_ISSUER_ID=$ISS run_flow asc-not-exported 0 --dry-run
 
 # preflight-log: the build number is pinned so the run's output dir is known.
 pb=261023.120000; pdir=$outroot/$pb; plog=$pdir/preflight.log

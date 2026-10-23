@@ -4,8 +4,9 @@
 #   testflight.sh --dry-run       same, but export with destination=export (no upload); checks the .ipa
 #   testflight.sh --verify-archive <xcarchive> <build> <commit>   verify only (tests)
 #   testflight.sh --verify-ipa <ipa> <build> <commit>             verify an exported ipa (tests)
-# Env: ASC_ENV (default ~/.config/agent-hourglass/asc.env) defining ASC_KEY_ID and ASC_ISSUER_ID;
-# key at ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8. Both files must be mode 600.
+# Env: ASC_ENV (default ~/.config/agent-hourglass/asc.env) holding exactly the lines ASC_KEY_ID=<id> and
+# ASC_ISSUER_ID=<uuid> (parsed, not sourced); key at ~/.appstoreconnect/private_keys/AuthKey_<id>.p8.
+# Both files must be mode 600.
 # Key ID, issuer ID and the key path are never echoed. Preflight test output goes to <out>/preflight.log, xcodebuild output to <out>/xcodebuild.log (both 600).
 # Upload fallback (manual, not automatic): if destination=upload fails after a good export, run
 #   xcrun altool --upload-app -f <out>/export/*.ipa -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
@@ -73,10 +74,23 @@ dry=0; [ "${1:-}" = --dry-run ] && dry=1
 asc=${ASC_ENV:-$HOME/.config/agent-hourglass/asc.env}
 [ -f "$asc" ] || die "missing App Store Connect env file (set ASC_ENV or create ~/.config/agent-hourglass/asc.env)"
 [ "$(stat -f '%Lp' "$asc")" = 600 ] || die "App Store Connect env file must be mode 600"
-# shellcheck disable=SC1090
-source "$asc"
-[ -n "${ASC_KEY_ID:-}" ] && [ -n "${ASC_ISSUER_ID:-}" ] || die "env file must define ASC_KEY_ID and ASC_ISSUER_ID"
-p8="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
+# Parse asc.env, never source it: only ASC_KEY_ID=<10 [A-Z0-9]> and ASC_ISSUER_ID=<uuid>, each once, plus
+# blank and # comment lines. The values live in unexported shell vars; a caller's exported ASC_* are dropped.
+unset ASC_KEY_ID ASC_ISSUER_ID
+kid=; iss=; n=0
+re_kid='^ASC_KEY_ID=([A-Z0-9]{10})$'
+re_iss='^ASC_ISSUER_ID=([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})$'
+while IFS= read -r line || [ -n "$line" ]; do
+  n=$((n + 1))
+  if [[ -z "$line" || "$line" == '#'* ]]; then continue
+  elif [[ "$line" =~ $re_kid ]] && [ -z "$kid" ]; then kid=${BASH_REMATCH[1]}
+  elif [[ "$line" =~ $re_iss ]] && [ -z "$iss" ]; then iss=${BASH_REMATCH[1]}
+  else die "App Store Connect env file line $n: only ASC_KEY_ID=<10 chars A-Z0-9> and ASC_ISSUER_ID=<uuid>, once each"
+  fi
+done < "$asc"
+unset line
+[ -n "$kid" ] && [ -n "$iss" ] || die "env file must define ASC_KEY_ID and ASC_ISSUER_ID"
+p8="$HOME/.appstoreconnect/private_keys/AuthKey_${kid}.p8"
 [ -f "$p8" ] || die "missing API key file in ~/.appstoreconnect/private_keys/"
 [ "$(stat -f '%Lp' "$p8")" = 600 ] || die "API key file must be mode 600"
 security find-identity -v -p codesigning | rg -q 'Apple Distribution' || die "no Apple Distribution identity in the keychain"
@@ -86,7 +100,7 @@ version=$(rg -o -r '$1' '^\s*MARKETING_VERSION:\s*(\S+)' project.yml | head -1)
 out=build/testflight/$build
 mkdir -p "$out"; chmod 700 "$out"
 # tail_log <log>: last 30 lines to stderr, with any asc.env value lines dropped.
-tail_log() { tail -n 30 "$1" | rg -v -F -e "$ASC_KEY_ID" -e "$ASC_ISSUER_ID" >&2 || true; }
+tail_log() { tail -n 30 "$1" | rg -v -F -e "$kid" -e "$iss" >&2 || true; }
 plog=$out/preflight.log; ( umask 077; : > "$plog" )
 pre() { local what=$1; shift; "$@" >>"$plog" 2>&1 || { tail_log "$plog"; die "$what failed (log: $plog)"; }; }
 pre "make test" make -C .. test
@@ -95,7 +109,7 @@ pre "make -C iOS test" make test
 # 3. Project.
 log=$out/xcodebuild.log; ( umask 077; : > "$log" )
 xcodegen generate --spec project.yml --quiet
-auth=(-allowProvisioningUpdates -authenticationKeyPath "$p8" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+auth=(-allowProvisioningUpdates -authenticationKeyPath "$p8" -authenticationKeyID "$kid" -authenticationKeyIssuerID "$iss")
 # xcodebuild with -authenticationKey* writes the key id and issuer id into *.xcdistributionlogs bundles
 # in `getconf DARWIN_USER_TEMP_DIR`, even when TMPDIR is overridden. Scan that dir, and $TMPDIR too when it
 # differs. Remove the bundles that appear during this run (success or failure); keep any that existed
