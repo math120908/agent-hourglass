@@ -139,7 +139,7 @@ struct InstrumentAccountRow: View {
             Button(action: actions.signIn) { StatusChipView(text: "Sign in again", tint: GlassStyle.critical) }
                 .buttonStyle(.plain)
         case .rateLimited(let at):
-            StatusChipView(text: "Retry " + Self.clock(at, calendar: calendar), tint: GlassStyle.critical)
+            StatusChipView(text: Self.retryText(at, options: options), tint: GlassStyle.critical)
         case .formatChanged:
             Button(action: actions.copyDiagnostics) { StatusChipView(text: "Copy diagnostics", tint: GlassStyle.critical) }
                 .buttonStyle(.plain)
@@ -148,10 +148,7 @@ struct InstrumentAccountRow: View {
         }
     }
 
-    static func clock(_ date: Date, calendar: Calendar) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        f.timeZone = calendar.timeZone
-        return f.string(from: date)
+    nonisolated static func retryText(_ date: Date, options: MeterDisplayOptions) -> String {
+        "Retry " + MeterDisplay.clockText(date, options: options)
     }
 }
