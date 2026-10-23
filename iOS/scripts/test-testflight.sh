@@ -24,6 +24,13 @@
 #   All flows run with a GNU-style fake `stat` first on PATH; the mode checks must use /usr/bin/stat.
 #   preflight-log: a failing preflight `make test` leaves its output in <out>/preflight.log (mode 600)
 #               and the failure message shows the log's tail and path.
+#   key-* / op-*: the Admin .p8 lives only in 1Password. A fake `op` serves the item; the run copies the key
+#               into a mode 700 mktemp dir (file mode 600), hands that path to xcodebuild and the dir to
+#               altool (API_PRIVATE_KEYS_DIR), and the dir is gone after success, failure and SIGTERM.
+#               op missing, not signed in, a non-PEM file, no p8 file or a Key ID mismatch exit 1.
+#               The fake HOME holds a valid-looking key in ~/.appstoreconnect/private_keys that must never
+#               be used. ASC_KEY_PATH=<AuthKey_<id>.p8, mode 600> is the only local fallback.
+#   Every flow runs with a PATH that cannot reach the real `op`.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 script=$here/testflight.sh
@@ -33,11 +40,18 @@ pass() { echo "PASS $1"; }
 bad() { echo "FAIL $1: $2"; fail=1; }
 
 t=$(mktemp -d); trap 'rm -rf "$t"' EXIT
-bin=$t/bin; mkdir -p "$bin" "$t/home/.appstoreconnect/private_keys"
+bin=$t/bin; mkdir -p "$bin" "$t/home/.appstoreconnect/private_keys" "$t/sys"
 KEY=FAKEKEY123; ISS=0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0
 printf '# App Store Connect API key\n\nASC_KEY_ID=%s\nASC_ISSUER_ID=%s\n' "$KEY" "$ISS" > "$t/asc.env"; chmod 600 "$t/asc.env"
 export FAKE_CALLS=$t/calls FAKE_KEY=$KEY FAKE_ISS=$ISS
-: > "$t/home/.appstoreconnect/private_keys/AuthKey_$KEY.p8"; chmod 600 "$t/home/.appstoreconnect/private_keys/AuthKey_$KEY.p8"
+# A real PEM key for the fake op to serve, and a decoy (also a PEM key) where altool used to look.
+/usr/bin/openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$t/fake.pem" 2>/dev/null
+home_key=$t/home/.appstoreconnect/private_keys/AuthKey_$KEY.p8
+cp "$t/fake.pem" "$home_key"; chmod 600 "$home_key"
+export FAKE_PEM=$t/fake.pem FAKE_HOME_KEY=$home_key FAKE_KEYS=$t/keypaths
+# Test PATH: fakes, then only rg and jq from Homebrew (never the real op), then the system.
+for x in rg jq; do ln -s "$(command -v "$x")" "$t/sys/$x"; done
+tpath=$bin:$t/sys:/usr/bin:/bin:/usr/sbin:/sbin
 
 # sign_fake <bundle> <dev|dist> <bundle id>: the signature the fake codesign reports for <bundle>, kept as
 # files inside it. dev = the automatic-signing archive (Apple Development, get-task-allow true); dist = the
@@ -115,6 +129,14 @@ cat > "$bin/xcodebuild" <<'EOF'
 echo "xcodebuild $1" >> "$FAKE_CALLS"
 [ -z "${ASC_KEY_ID:-}${ASC_ISSUER_ID:-}" ] || { echo "ASC_* in xcodebuild env"; exit 3; }
 args=("$@"); val() { local i; for ((i=0; i<${#args[@]}; i++)); do [ "${args[i]}" = "$1" ] && echo "${args[i+1]}"; done; }
+k=$(val -authenticationKeyPath)
+[ -n "$k" ] && [ -f "$k" ] || { echo "error: no key file"; exit 4; }
+[ "$k" != "$FAKE_HOME_KEY" ] && [[ "$k" != "$HOME"/* ]] || { echo "error: key from HOME"; exit 4; }
+[ "$(/usr/bin/stat -f '%Lp' "$k")" = 600 ] || { echo "error: key mode"; exit 4; }
+[ "$k" = "${FAKE_KEEP_KEY:-}" ] || [ "$(/usr/bin/stat -f '%Lp' "$(dirname "$k")")" = 700 ] || { echo "error: key dir mode"; exit 4; }
+[ "$(head -n 1 "$k")" = '-----BEGIN PRIVATE KEY-----' ] || { echo "error: key not PEM"; exit 4; }
+echo "$k" >> "$FAKE_KEYS"
+[ "${FAKE_ARCHIVE_HANG:-0}" = 1 ] && [ "$1" = archive ] && { echo $$ > "$FAKE_STATE/../hang.pid"; sleep 30; }
 logs=$(mktemp -d "${AH_DARWIN_TEMP_DIR%/}/AgentHourglassiOS_XXXX")
 mv "$logs" "$logs.xcdistributionlogs"; echo "key $(val -authenticationKeyID) $(val -authenticationKeyIssuerID)" > "$logs.xcdistributionlogs/IDEDistribution.log"
 build=; for a in "$@"; do case $a in CURRENT_PROJECT_VERSION=*) build=${a#*=} ;; esac; done
@@ -141,15 +163,43 @@ cat > "$bin/xcrun" <<'EOF'
 [ "$1" = altool ] || exit 2
 a="$*"; a=${a//$FAKE_KEY/KEYID}; a=${a//$FAKE_ISS/ISSID}; echo "xcrun $a" >> "$FAKE_CALLS"
 [ "$2" = --upload-package ] && [ -f "$3" ] || { echo "no package"; exit 2; }
+d=${API_PRIVATE_KEYS_DIR:-}; [ -n "$d" ] && [ -f "$d/AuthKey_$FAKE_KEY.p8" ] || { echo "ERROR no key in API_PRIVATE_KEYS_DIR"; exit 4; }
+[ "$d/AuthKey_$FAKE_KEY.p8" != "$FAKE_HOME_KEY" ] || { echo "ERROR key from HOME"; exit 4; }
+echo "$d/AuthKey_$FAKE_KEY.p8" >> "$FAKE_KEYS"; echo "xcrun altool key ok" >> "$FAKE_CALLS"
 echo "Authenticating with key $FAKE_KEY issuer $FAKE_ISS"
 [ "${FAKE_UPLOAD_FAIL:-0}" = 1 ] && { echo "ERROR fake upload error"; exit 1; }
 echo "UPLOAD SUCCEEDED"
+EOF
+# Fake 1Password CLI. FAKE_OP_FAIL=auth: not signed in. FAKE_OP_KID: the item's Key ID (default the
+# asc.env one). FAKE_OP_FILE: the item's file name (default p8). FAKE_OP_CONTENT=junk: op read writes a
+# non-PEM file. `op read` prints the written path (it holds the key id) like the real one.
+cat > "$bin/op" <<'EOF'
+#!/bin/bash
+echo "op $1 $2" >> "$FAKE_CALLS"
+[ "${FAKE_OP_FAIL:-}" != auth ] || { echo "[ERROR] account is not signed in for $FAKE_KEY" >&2; exit 1; }
+case "$1 $2" in
+  "item get")
+    [ "$3" = "Apple Developer - App Store Connect API key (agent-hourglass)" ] && [ "$4 $5 $6 $7" = "--vault Personal --format json" ] \
+      || { echo "[ERROR] item isn't in vault" >&2; exit 1; }
+    printf '{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaa","title":"%s","vault":{"id":"vvvvvvvvvvvvvvvvvvvvvvvvvv","name":"Personal"},"fields":[{"id":"k","label":"Key ID","value":"%s"},{"id":"i","label":"Issuer ID","value":"%s"}],"files":[{"id":"f","name":"%s","size":241}]}\n' \
+      "$3" "${FAKE_OP_KID:-$FAKE_KEY}" "$FAKE_ISS" "${FAKE_OP_FILE:-p8}" ;;
+  "read "*)
+    shift; out=; mode=; ref=
+    while [ $# -gt 0 ]; do case $1 in --out-file) out=$2; shift ;; --file-mode) mode=$2; shift ;; op://*) ref=$1 ;; esac; shift; done
+    [ "$ref" = op://vvvvvvvvvvvvvvvvvvvvvvvvvv/aaaaaaaaaaaaaaaaaaaaaaaaaa/p8 ] || { echo "[ERROR] bad reference" >&2; exit 1; }
+    [ -n "$out" ] || { echo "[ERROR] no --out-file" >&2; exit 1; }
+    if [ "${FAKE_OP_CONTENT:-}" = junk ]; then echo "not a key" > "$out"; else cat "$FAKE_PEM" > "$out"; fi
+    [ -z "$mode" ] || chmod "${mode#0}" "$out"; echo "$out" ;;
+  *) exit 2 ;;
+esac
 EOF
 # Fake GNU stat first on PATH (coreutils gnubin): `stat -f` means filesystem status there.
 printf '#!/bin/bash\necho "  File: GNU stat"\n' > "$bin/stat"
 # Fake Homebrew rsync shadowing /usr/bin/rsync, as /opt/homebrew/bin does on this Mac.
 printf '#!/bin/bash\nexit 1\n' > "$bin/rsync"
 chmod +x "$bin"/*
+# bin2: the same fakes without op.
+mkdir -p "$t/bin2"; for x in "$bin"/*; do [ "$(basename "$x")" = op ] || ln -s "$x" "$t/bin2/"; done
 
 # snap_out / clean_out: remove the <out> dirs a run creates under build/testflight.
 snap_out() { out_before=$(ls "$outroot" 2>/dev/null || true); }
@@ -164,16 +214,25 @@ run_flow() {
   local tmpdir=$tmp/
   [ "${RUN_TMPDIR:-}" = other ] && tmpdir=$t/tmpdir-$name/
   mkdir -p "$tmp/Older_1.xcdistributionlogs" "${tmpdir}Older_1.xcdistributionlogs"
-  : > "$FAKE_CALLS"; rm -f "$FAKE_STATE"/*
+  : > "$FAKE_CALLS"; : > "$FAKE_KEYS"; rm -f "$FAKE_STATE"/*
   snap_out
-  out=$(env PATH="$bin:$PATH" HOME="$t/home" ASC_ENV="$t/asc.env" AH_DARWIN_TEMP_DIR="$tmp/" TMPDIR="$tmpdir" \
+  out=$(env PATH="${RUN_PATH:-$tpath}" HOME="$t/home" ASC_ENV="$t/asc.env" AH_DARWIN_TEMP_DIR="$tmp/" TMPDIR="$tmpdir" \
     "$script" "$@" 2>&1) || code=$?
   clean_out
   left=
+  # Every key copy the fakes saw must be gone with its dir (an owner's ASC_KEY_PATH file stays).
+  local kleft= k kuse
+  while IFS= read -r k; do
+    [ -n "$k" ] && [ "$k" != "${FAKE_KEEP_KEY:-}" ] || continue
+    [ ! -e "$k" ] && [ ! -e "$(dirname "$k")" ] || kleft="$kleft $k"
+  done < "$FAKE_KEYS"
+  kuse=$({ rg -v -F -x -- "${FAKE_KEEP_KEY:-/nonexistent}" "$FAKE_KEYS" || true; } | wc -l | tr -d ' ')
   for d in "$tmp" "$tmpdir"; do left="$left$(cd "$d" && ls -d -- *.xcdistributionlogs 2>/dev/null | tr '\n' ' ' || true)"; done
   if [ "$code" != "$want" ]; then bad "$name" "exit $code want $want: $out"
   elif [ "$left" != "Older_1.xcdistributionlogs Older_1.xcdistributionlogs " ]; then bad "$name" "bundles left: '$left'"
   elif [[ "$out" == *"$KEY"* || "$out" == *"$ISS"* ]]; then bad "$name" "key id or issuer id in output"
+  elif [ -n "$kleft" ]; then bad "$name" "key copies left:$kleft"
+  elif [ -n "${RUN_KEY:-}" ] && [ "$kuse" != "$RUN_KEY" ]; then bad "$name" "want $RUN_KEY key copy uses, got $kuse"
   elif [ -n "${RUN_WANT_MSG:-}" ] && [[ "$out" != *"$RUN_WANT_MSG"* ]]; then bad "$name" "message lacks '$RUN_WANT_MSG': $out"
   elif [ -n "${RUN_NO_CALL:-}" ] && rg -q -F -- "$RUN_NO_CALL" "$FAKE_CALLS"; then bad "$name" "called $RUN_NO_CALL"
   elif [ -n "${RUN_CALL:-}" ] && ! rg -q -F -- "$RUN_CALL" "$FAKE_CALLS"; then bad "$name" "did not call $RUN_CALL"
@@ -202,6 +261,49 @@ RUN_WANT_MSG='fake upload error' FAKE_UPLOAD_FAIL=1 run_flow upload-fail-redacte
 # build-number-now-upload: BUILD_NUMBER_NOW is for --dry-run only.
 RUN_WANT_MSG='BUILD_NUMBER_NOW' RUN_NO_CALL=make BUILD_NUMBER_NOW=2026-10-23T12:00:00Z run_flow build-number-now-upload 1
 
+# key-*: the key is copied from 1Password for the run, used by archive, export and altool, then removed.
+RUN_KEY=3 RUN_CALL='op read' run_flow key-removed-upload 0
+RUN_KEY=2 RUN_NO_CALL=xcrun run_flow key-removed-dry-run 0 --dry-run
+RUN_KEY=2 FAKE_EXPORT_FAIL=1 run_flow key-removed-export-fail 1
+# op-*: every failure stops before the key is used, with a message and no secret in the output.
+RUN_WANT_MSG="'op' not found" RUN_NO_CALL=xcodebuild RUN_PATH="$t/bin2:$t/sys:/usr/bin:/bin:/usr/sbin:/sbin" \
+  run_flow op-missing 1 --dry-run
+RUN_WANT_MSG='1Password' RUN_NO_CALL=make FAKE_OP_FAIL=auth run_flow op-not-signed-in 1 --dry-run
+RUN_WANT_MSG='Key ID' RUN_NO_CALL=make FAKE_OP_KID=OTHERKEY12 run_flow op-kid-mismatch 1 --dry-run
+RUN_WANT_MSG='p8' RUN_NO_CALL=make FAKE_OP_FILE=AuthKey.p8 run_flow op-no-p8-file 1 --dry-run
+RUN_WANT_MSG='not a PEM private key' RUN_NO_CALL=xcodebuild FAKE_OP_CONTENT=junk run_flow op-non-pem 1 --dry-run
+# key-path-*: ASC_KEY_PATH is the only local fallback; the owner's file is used, not removed, op never runs.
+mkdir -p "$t/local"; lk=$t/local/AuthKey_$KEY.p8; cp "$t/fake.pem" "$lk"; chmod 600 "$lk"
+RUN_KEY=0 RUN_NO_CALL='op ' FAKE_KEEP_KEY=$lk ASC_KEY_PATH=$lk RUN_PATH="$t/bin2:$t/sys:/usr/bin:/bin:/usr/sbin:/sbin" \
+  run_flow key-path-fallback 0
+[ -f "$lk" ] && pass key-path-kept || bad key-path-kept "ASC_KEY_PATH file removed"
+chmod 644 "$lk"
+RUN_WANT_MSG='mode 600' RUN_NO_CALL=make FAKE_KEEP_KEY=$lk ASC_KEY_PATH=$lk run_flow key-path-mode 1 --dry-run
+chmod 600 "$lk"; cp "$lk" "$t/local/other.p8"
+RUN_WANT_MSG='AuthKey_' RUN_NO_CALL=make ASC_KEY_PATH=$t/local/other.p8 run_flow key-path-name 1 --dry-run
+
+# key-removed-sigterm: TERM to the script and its running xcodebuild (as a terminal or process-group kill
+# does) mid-archive; the key copy and the run's distribution logs are gone afterwards.
+: > "$FAKE_KEYS"; : > "$FAKE_CALLS"; rm -f "$FAKE_STATE"/* "$t/hang.pid"; snap_out
+st=$t/tmp-sigterm; mkdir -p "$st"
+env PATH="$tpath" HOME="$t/home" ASC_ENV="$t/asc.env" AH_DARWIN_TEMP_DIR="$st/" TMPDIR="$st/" FAKE_ARCHIVE_HANG=1 \
+  "$script" --dry-run > "$t/sigterm.out" 2>&1 &
+spid=$!; i=0
+while [ ! -s "$t/hang.pid" ] && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
+if [ ! -s "$t/hang.pid" ]; then kill "$spid" 2>/dev/null || true; wait "$spid" || true; clean_out; bad key-removed-sigterm "archive never started: $(cat "$t/sigterm.out")"
+else
+  k=$(head -n 1 "$FAKE_KEYS")
+  if [ -z "$k" ] || [ ! -f "$k" ]; then kw="no key during archive"; else kw=; fi
+  kill -TERM "$spid" "$(cat "$t/hang.pid")" 2>/dev/null || true
+  code=0; wait "$spid" || code=$?
+  clean_out
+  if [ -n "$kw" ]; then bad key-removed-sigterm "$kw"
+  elif [ "$code" = 0 ]; then bad key-removed-sigterm "exit 0 after TERM"
+  elif [ -e "$k" ] || [ -e "$(dirname "$k")" ]; then bad key-removed-sigterm "key copy left after TERM"
+  elif rg -q -F -e "$KEY" -e "$ISS" "$t/sigterm.out"; then bad key-removed-sigterm "key id or issuer id in output"
+  else pass key-removed-sigterm; fi
+fi
+
 # exportoptions-*: --check-export-options guards the export plist's keys.
 eo_case() { # <name> <want 0|1> [PlistBuddy cmd]
   local f=$t/eo-$1.plist code=0 out
@@ -222,7 +324,7 @@ asc_case() {
   local name=$1 body=$2 f=$t/asc-$1.env m=$t/marker code=0 out; shift 2
   rm -f "$m"; : > "$FAKE_CALLS"; printf '%s\n' "$body" > "$f"; chmod 600 "$f"
   snap_out
-  out=$(cd "$t" && env PATH="$bin:$PATH" HOME="$t/home" ASC_ENV="$f" AH_DARWIN_TEMP_DIR="$t/" "$@" "$script" --dry-run 2>&1) || code=$?
+  out=$(cd "$t" && env PATH="$tpath" HOME="$t/home" ASC_ENV="$f" AH_DARWIN_TEMP_DIR="$t/" "$@" "$script" --dry-run 2>&1) || code=$?
   clean_out
   if [ $code != 1 ]; then bad "$name" "exit $code want 1: $out"
   elif [ -e "$m" ]; then bad "$name" "asc.env code ran"
@@ -258,7 +360,7 @@ ASC_KEY_ID=$KEY ASC_ISSUER_ID=$ISS run_flow asc-not-exported 0 --dry-run
 # preflight-log: the build number is pinned so the run's output dir is known.
 pb=261023.120000; pdir=$outroot/$pb; plog=$pdir/preflight.log
 [ ! -e "$pdir" ] || bad preflight-log "$pdir already exists"
-code=0; out=$(env PATH="$bin:$PATH" HOME="$t/home" ASC_ENV="$t/asc.env" AH_DARWIN_TEMP_DIR="$t/" TMPDIR="$t/" FAKE_MAKE_FAIL=1 \
+code=0; out=$(env PATH="$tpath" HOME="$t/home" ASC_ENV="$t/asc.env" AH_DARWIN_TEMP_DIR="$t/" TMPDIR="$t/" FAKE_MAKE_FAIL=1 \
   BUILD_NUMBER_NOW=2026-10-23T12:00:00Z "$script" --dry-run 2>&1) || code=$?
 if [ $code = 0 ]; then bad preflight-log "exit 0"
 elif [[ "$out" != *"FAKE-MARKER killedHolderReleasesLock failed"* ]]; then bad preflight-log "no tail in output: $out"

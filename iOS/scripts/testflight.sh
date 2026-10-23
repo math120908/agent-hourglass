@@ -5,10 +5,15 @@
 #   testflight.sh --verify-archive <xcarchive> <build> <commit>   verify only (tests)
 #   testflight.sh --verify-ipa <ipa> <build> <commit>             verify an exported ipa (tests)
 #   testflight.sh --check-export-options <plist>                  assert the export plist keys (tests)
-# Env: ASC_ENV (default ~/.config/agent-hourglass/asc.env) holding exactly the lines ASC_KEY_ID=<id> and
-# ASC_ISSUER_ID=<uuid> (parsed, not sourced); key at ~/.appstoreconnect/private_keys/AuthKey_<id>.p8.
-# Both files must be mode 600.
-# Key ID, issuer ID and the key path are never echoed. Preflight test output goes to <out>/preflight.log,
+# Env: ASC_ENV (default ~/.config/agent-hourglass/asc.env, mode 600) holding exactly the lines
+# ASC_KEY_ID=<id> and ASC_ISSUER_ID=<uuid> (parsed, not sourced).
+# The Admin API key (.p8) lives only in 1Password: vault ASC_OP_VAULT (default Personal), item ASC_OP_ITEM
+# (default below), file field p8, text field Key ID equal to ASC_KEY_ID. Preflight checks the item; right
+# before the archive `op read` copies the key into a mode 700 mktemp dir (file mode 600) for xcodebuild
+# (-authenticationKeyPath) and altool (API_PRIVATE_KEYS_DIR), and the EXIT trap removes the dir on success,
+# failure, HUP, INT and TERM. 1Password asks for Touch ID. ASC_KEY_PATH=/abs/AuthKey_<id>.p8 (mode 600) uses
+# a local file instead; ~/.appstoreconnect/private_keys is never read.
+# Key ID, issuer ID, the key and its path are never echoed. Preflight test output goes to <out>/preflight.log,
 # xcodebuild and altool output to <out>/xcodebuild.log (both 600); failures show a redacted tail.
 set -euo pipefail
 # --verify-* paths are relative to the caller's cwd, not iOS/.
@@ -111,6 +116,19 @@ case "${1:-}" in
   *) die "usage: testflight.sh [--dry-run]" ;;
 esac
 
+# Cleanup for every exit of a run (the --verify-* modes above exit before this). Each part is armed once
+# its state exists. HUP/INT/TERM exit through it too.
+rsbin=; keydir=; distlogs_armed=0
+cleanup() {
+  [ "$distlogs_armed" = 0 ] || rm_distlogs
+  [ -z "$rsbin" ] || rm -rf "$rsbin"
+  [ -z "$keydir" ] || rm -rf "$keydir"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM
+ASC_OP_VAULT=${ASC_OP_VAULT:-Personal}
+ASC_OP_ITEM=${ASC_OP_ITEM:-Apple Developer - App Store Connect API key (agent-hourglass)}
+
 # 1. Preflight. Cheap checks first so a missing key fails in seconds.
 # A pinned build number would repeat across uploads; it is for --dry-run and tests only.
 [ $dry -eq 1 ] || [ -z "${BUILD_NUMBER_NOW:-}" ] || die "BUILD_NUMBER_NOW is only allowed with --dry-run"
@@ -134,11 +152,54 @@ while IFS= read -r line || [ -n "$line" ]; do
 done < "$asc"
 unset line
 [ -n "$kid" ] && [ -n "$iss" ] || die "env file must define ASC_KEY_ID and ASC_ISSUER_ID"
-p8="$HOME/.appstoreconnect/private_keys/AuthKey_${kid}.p8"
-[ -f "$p8" ] || die "missing API key file in ~/.appstoreconnect/private_keys/"
-[ "$(/usr/bin/stat -f '%Lp' "$p8")" = 600 ] || die "API key file must be mode 600"
+# tail_log <log>: last 30 lines to stderr, with any asc.env value lines dropped.
+tail_log() { tail -n 30 "$1" | rg -v -F -e "$kid" -e "$iss" >&2 || true; }
 check_export_options ExportOptions.plist
 security find-identity -v -p codesigning | rg -q 'Apple Distribution' || die "no Apple Distribution identity in the keychain"
+
+# API key. check_p8 <file> <label>: a regular file (not a symlink), mode 600, a PEM private key; never printed.
+check_p8() {
+  [ -f "$1" ] && [ ! -L "$1" ] || die "$2: no API key file"
+  [ "$(/usr/bin/stat -f '%Lp' "$1")" = 600 ] || die "$2: API key file must be mode 600"
+  [ "$(head -n 1 "$1")" = '-----BEGIN PRIVATE KEY-----' ] && /usr/bin/openssl pkey -in "$1" -noout >/dev/null 2>&1 \
+    || die "$2: API key file is not a PEM private key"
+}
+keyfile=AuthKey_${kid}.p8; p8=; opref=
+if [ -n "${ASC_KEY_PATH:-}" ]; then
+  [[ "$ASC_KEY_PATH" == /* ]] && [ "$(basename "$ASC_KEY_PATH")" = "$keyfile" ] \
+    || die "ASC_KEY_PATH must be an absolute path to AuthKey_<ASC_KEY_ID>.p8"
+  check_p8 "$ASC_KEY_PATH" ASC_KEY_PATH; p8=$ASC_KEY_PATH
+else
+  # The item is checked now (Touch ID prompt); the key itself is copied only right before the archive, so
+  # it is not on disk during the minutes of `make test`, which run repo and package code as this user.
+  command -v op >/dev/null || die "1Password CLI 'op' not found: install it and enable the 1Password app integration, or set ASC_KEY_PATH"
+  keydir=$(mktemp -d); chmod 700 "$keydir"
+  [ "$(/usr/bin/stat -f '%Lp' "$keydir")" = 700 ] || die "key dir must be mode 700"
+  operr=$keydir/op.log
+  item=$( (umask 077; op item get "$ASC_OP_ITEM" --vault "$ASC_OP_VAULT" --format json 2>"$operr") ) \
+    || { tail_log "$operr"; die "1Password: cannot read item \"$ASC_OP_ITEM\" in vault $ASC_OP_VAULT (unlock 1Password and approve Touch ID)"; }
+  # Count-only checks; prints only a status word and the vault and item ids for the op:// reference.
+  opref=$(printf '%s' "$item" | AH_KID=$kid jq -r '
+    if ([.files[]? | select(.name == "p8")] | length) != 1 then "nofile"
+    elif [.fields[]? | select(.label == "Key ID") | .value] != [env.AH_KID] then "kid"
+    elif (.vault.id | type) != "string" or (.id | type) != "string" then "noid"
+    else "op://\(.vault.id)/\(.id)/p8" end' 2>/dev/null) || opref=badjson
+  unset item
+  case $opref in
+    nofile) die "1Password: item \"$ASC_OP_ITEM\" needs exactly one file named p8" ;;
+    kid) die "1Password: item \"$ASC_OP_ITEM\" Key ID does not match ASC_KEY_ID in the env file" ;;
+    op://*/*/p8) ;;
+    *) die "1Password: cannot parse item \"$ASC_OP_ITEM\"" ;;
+  esac
+fi
+# fetch_key: copy the key from 1Password into the private dir (no-op with ASC_KEY_PATH).
+fetch_key() {
+  [ -z "$p8" ] || return 0
+  local f=$keydir/$keyfile
+  ( umask 077; op read --file-mode 0600 --out-file "$f" "$opref" ) >>"$operr" 2>&1 \
+    || { tail_log "$operr"; die "1Password: op read of the p8 file failed (approve Touch ID)"; }
+  check_p8 "$f" 1Password; p8=$f
+}
 # 2. Version and output dir (before the test runs, which log into it).
 build=$(scripts/build-number.sh); head=$(git rev-parse HEAD); commit=$(git rev-parse --short "$head")
 # check_tree: the shared worktree can change during the minutes-long tests and archive. Re-check that it
@@ -149,8 +210,6 @@ check_tree() {
 }
 out=build/testflight/$build
 mkdir -p "$out"; chmod 700 "$out"
-# tail_log <log>: last 30 lines to stderr, with any asc.env value lines dropped.
-tail_log() { tail -n 30 "$1" | rg -v -F -e "$kid" -e "$iss" >&2 || true; }
 plog=$out/preflight.log; ( umask 077; : > "$plog" )
 pre() { local what=$1; shift; "$@" >>"$plog" 2>&1 || { tail_log "$plog"; die "$what failed (log: $plog)"; }; }
 pre "make test" make -C .. test
@@ -159,7 +218,6 @@ pre "make -C iOS test" make test
 # 3. Project.
 log=$out/xcodebuild.log; ( umask 077; : > "$log" )
 xcodegen generate --spec project.yml --quiet
-auth=(-allowProvisioningUpdates -authenticationKeyPath "$p8" -authenticationKeyID "$kid" -authenticationKeyIssuerID "$iss")
 # xcodebuild with -authenticationKey* writes the key id and issuer id into *.xcdistributionlogs bundles
 # in `getconf DARWIN_USER_TEMP_DIR`, even when TMPDIR is overridden. Scan that dir, and $TMPDIR too when it
 # differs. Remove the bundles that appear during this run (success or failure); keep any that existed
@@ -170,16 +228,17 @@ tdirs=("$dtmp"); [ -n "${TMPDIR:-}" ] && [ "${TMPDIR%/}" != "$dtmp" ] && tdirs+=
 distlogs() { local d t; for t in "${tdirs[@]}"; do for d in "$t"/*.xcdistributionlogs; do [ -e "$d" ] && echo "$d"; done; done; return 0; }
 pre_logs=$(distlogs)
 rm_distlogs() { local d; distlogs | while IFS= read -r d; do printf '%s\n' "$pre_logs" | rg -q -x -F -- "$d" || rm -rf "$d"; done; }
+distlogs_armed=1
 # Xcode's IPA step runs /usr/bin/rsync (openrsync), which starts its local server as `rsync` from PATH.
 # Homebrew rsync 3.x there rejects --extended-attributes and export fails with only "Copy failed".
 # Pin `rsync` to the system one for this run.
-rsbin=
-trap 'rm_distlogs; [ -z "$rsbin" ] || rm -rf "$rsbin"' EXIT
 rsbin=$(mktemp -d); ln -s /usr/bin/rsync "$rsbin/rsync"; PATH="$rsbin:$PATH"
 run() { "$@" >>"$log" 2>&1 || { tail_log "$log"; die "$2 failed (log: $log)"; }; }
 
-# 4. Archive.
+# 4. Archive. The key reaches disk here, for archive, export and upload only.
 check_tree
+fetch_key
+auth=(-allowProvisioningUpdates -authenticationKeyPath "$p8" -authenticationKeyID "$kid" -authenticationKeyIssuerID "$iss")
 arc=$out/AgentHourglass.xcarchive
 run xcodebuild archive -project AgentHourglassiOS.xcodeproj -scheme AgentHourglassiOS -configuration Release \
   -destination 'generic/platform=iOS' -archivePath "$arc" "${auth[@]}" \
@@ -200,7 +259,9 @@ if [ $dry -eq 1 ]; then
   exit 0
 fi
 
-# 7. Upload the verified ipa. altool reads AuthKey_<id>.p8 from ~/.appstoreconnect/private_keys (checked above).
+# 7. Upload the verified ipa. altool finds AuthKey_<id>.p8 in $API_PRIVATE_KEYS_DIR (`xcrun altool --help`,
+# --api-key); iOS/private_keys, which altool searches first, is not in the clean tree.
 check_tree
+export API_PRIVATE_KEYS_DIR; API_PRIVATE_KEYS_DIR=$(dirname "$p8")
 run xcrun altool --upload-package "$ipa" --api-key "$kid" --api-issuer "$iss"
 echo "testflight: uploaded $version ($build) $commit"
