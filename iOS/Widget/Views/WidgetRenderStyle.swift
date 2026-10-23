@@ -62,22 +62,29 @@ struct WidgetRenderStyle: Sendable {
     var critical: Color { isFullColor ? GlassStyle.critical : (previewAccent ?? .white) }
 }
 
+/// The full-color widget background, shared by the container background and the render harness.
+struct WidgetBackground: View {
+    var style: WidgetRenderStyle
+
+    var body: some View {
+        switch style.theme {
+        case .glass:
+            LinearGradient(
+                colors: style.colorScheme == .dark
+                    ? [Color(white: 0.20), Color(white: 0.11)]
+                    : [Color(white: 0.98), Color(white: 0.90)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .instrument:
+            style.colorScheme == .dark ? Color(white: 0.12) : Color(white: 0.96)
+        }
+    }
+}
+
 extension View {
     /// The only background a widget draws; the system removes it in tinted and clear modes.
     func widgetContainerBackground(style: WidgetRenderStyle) -> some View {
-        containerBackground(for: .widget) {
-            switch style.theme {
-            case .glass:
-                LinearGradient(
-                    colors: style.colorScheme == .dark
-                        ? [Color(white: 0.20), Color(white: 0.11)]
-                        : [Color(white: 0.98), Color(white: 0.90)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            case .instrument:
-                style.colorScheme == .dark ? Color(white: 0.12) : Color(white: 0.96)
-            }
-        }
+        containerBackground(for: .widget) { WidgetBackground(style: style) }
     }
 }

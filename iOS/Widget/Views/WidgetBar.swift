@@ -18,10 +18,11 @@ struct WidgetBar: View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
                 RoundedRectangle(cornerRadius: radius).fill(style.track())
+                    .frame(height: height)
                 if let fraction {
                     RoundedRectangle(cornerRadius: radius)
                         .fill(style.fill(severity, kind))
-                        .frame(width: max(height, geo.size.width * fraction))
+                        .frame(width: max(height, geo.size.width * fraction), height: height)
                         .widgetAccentable()
                 }
                 if let paceTick {
