@@ -14,15 +14,20 @@ rm -rf "$out"
 # Launch directly: reinstalling via run-sim.sh can move the data container.
 xcrun simctl terminate "$udid" cc.kuoc.agent-hourglass.ios 2>/dev/null || true
 xcrun simctl launch "$udid" cc.kuoc.agent-hourglass.ios --render latest
-for _ in $(seq 60); do
-    [ -n "$(ls -A "$out" 2>/dev/null)" ] && break
-    sleep 1
+# The app writes into subfolders (e.g. app/) and exits; wait until the PNG count stops changing.
+pngs() { { find "$out" -name '*.png' 2>/dev/null || true; } | wc -l | tr -d ' '; }
+prev=-1
+for _ in $(seq 120); do
+    n="$(pngs)"
+    [ "$n" -gt 0 ] && [ "$n" = "$prev" ] && break
+    prev="$n"
+    sleep 2
 done
-if [ -z "$(ls -A "$out" 2>/dev/null)" ]; then
-    echo "render: no output in $out after 60s" >&2
+if [ "$(pngs)" -eq 0 ]; then
+    echo "render: no PNGs in $out after 240s" >&2
     exit 1
 fi
-sleep 1  # let the last file finish writing
 mkdir -p "$ios/docs/screenshots"
 cp -R "$out/." "$ios/docs/screenshots/"
-(cd "$out" && find . -name '*.png' | sed "s|^\./|$ios/docs/screenshots/|")
+(cd "$out" && find . -name '*.png' | sort | sed "s|^\./|$ios/docs/screenshots/|")
+echo "render: $(pngs) PNGs"

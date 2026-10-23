@@ -32,7 +32,7 @@ public struct PKCE: Sendable {
 }
 
 /// Constant-time comparison of two strings' UTF-8 bytes.
-package func constantTimeEqual(_ a: String, _ b: String) -> Bool {
+public func constantTimeEqual(_ a: String, _ b: String) -> Bool {
     let x = Array(a.utf8), y = Array(b.utf8)
     // Length is not secret; an early exit avoids UInt8-folded length collisions.
     guard x.count == y.count else { return false }
