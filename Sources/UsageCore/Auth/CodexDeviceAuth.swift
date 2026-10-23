@@ -48,7 +48,8 @@ public struct CodexDeviceAuth: Sendable {
         )
     }
 
-    public func poll(_ p: DeviceCodePrompt) async throws -> Credential {
+    /// `wake` (foreground return) polls at once when the interval has already elapsed.
+    public func poll(_ p: DeviceCodePrompt, wake: DevicePollWake? = nil) async throws -> Credential {
         let deadline = min(p.expiresAt, now().addingTimeInterval(Self.maxLifetime))
         var interval = max(p.interval, Self.minInterval)
         let body = ["device_auth_id": p.deviceCode.reveal(), "user_code": p.userCode]
@@ -58,6 +59,7 @@ public struct CodexDeviceAuth: Sendable {
                 Self.log.info("device login expired")
                 throw DeviceFlowError.expired
             }
+            let polledAt = now()
             do {
                 let data = try await post("api/accounts/deviceauth/token", json: body, step: "poll")
                 guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
@@ -82,7 +84,28 @@ public struct CodexDeviceAuth: Sendable {
             } catch ProviderError.unauthorized {
                 throw DeviceFlowError.unexpected(status: 401)
             }
-            try await sleep(interval)
+            try await pause(interval, since: polledAt, wake: wake)
+        }
+    }
+
+    /// Sleeps `interval` after the poll at `since`. A wake ends the wait early only when the
+    /// whole interval has elapsed by the clock; otherwise the rest of it is slept.
+    private func pause(_ interval: Duration, since: Date, wake: DevicePollWake?) async throws {
+        guard let wake else { return try await sleep(interval) }
+        var remaining = interval
+        while true {
+            let sleep = self.sleep, wait = remaining
+            let woke = try await withThrowingTaskGroup(of: Bool.self) { group in
+                group.addTask { try await sleep(wait); return false }
+                group.addTask { await wake.wait(); return true }
+                defer { group.cancelAll() }
+                return try await group.next() ?? false
+            }
+            try Task.checkCancellation()
+            guard woke else { return }
+            let elapsed = Duration.seconds(now().timeIntervalSince(since))
+            if elapsed >= interval { return }
+            remaining = interval - elapsed
         }
     }
 
