@@ -70,14 +70,17 @@ struct UsageTimelineProvider: AppIntentTimelineProvider {
         let once = ResumeOnce<(UsageSnapshot?, AccountStatus?)>()
         return await withCheckedContinuation { cont in
             once.set(cont)
-            let work = Task { once.resume(await fetch(id)) }
-            Task {
+            let timer = TimerBox()
+            let work = Task {
+                if once.resume(await fetch(id)) { timer.cancel() }
+            }
+            timer.set(Task {
                 try? await Task.sleep(for: .seconds(timeout))
                 if once.resume((cacheRead(id), nil)) {
                     work.cancel()
                     Self.log.info("fetch kind=\(id.kind.map { "\($0)" } ?? "none", privacy: .public) outcome=timeout")
                 }
-            }
+            })
         }
     }
 
@@ -133,5 +136,23 @@ private final class ResumeOnce<T: Sendable>: @unchecked Sendable {
         done = true
         if let cont { cont.resume(returning: value); self.cont = nil } else { pending = value }
         return true
+    }
+}
+
+/// Holds the timeout timer so a winning fetch can cancel it, whichever is set first.
+private final class TimerBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var task: Task<Void, Never>?
+    private var cancelled = false
+
+    func set(_ t: Task<Void, Never>) {
+        lock.lock(); defer { lock.unlock() }
+        if cancelled { t.cancel() } else { task = t }
+    }
+
+    func cancel() {
+        lock.lock(); defer { lock.unlock() }
+        cancelled = true
+        task?.cancel()
     }
 }

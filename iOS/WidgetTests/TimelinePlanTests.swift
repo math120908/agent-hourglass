@@ -59,6 +59,14 @@ final class TimelinePlanTests: XCTestCase {
         XCTAssertFalse(dates.contains(now.addingTimeInterval(1800)))
     }
 
+    func testStaleAtBeatsResetWithin60s() {
+        let stale = now.addingTimeInterval(2 * 3600 + 400)
+        let reset = stale.addingTimeInterval(-30)
+        let dates = TimelinePlan.entryDates(now: now, resets: [reset], staleAt: stale)
+        XCTAssertTrue(dates.contains(stale))
+        for a in dates { for b in dates where a != b { XCTAssertGreaterThanOrEqual(abs(a.timeIntervalSince(b)), 60) } }
+    }
+
     func testCountAtMost45() {
         let resets = (1...6).map { now.addingTimeInterval(Double($0) * 3000 + 450) }
         let dates = TimelinePlan.entryDates(now: now, resets: resets, staleAt: now.addingTimeInterval(4000))

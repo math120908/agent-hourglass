@@ -18,15 +18,16 @@ enum TimelinePlan {
         let grid = offsets.map { now.addingTimeInterval($0) }
 
         let end = now.addingTimeInterval(horizon)
-        let extras = (resets + (staleAt.map { [$0] } ?? [])).filter { $0 > now && $0 <= end }
+        func inRange(_ d: Date) -> Bool { d > now && d <= end }
+        func clear(_ d: Date, of list: [Date]) -> Bool { !list.contains { abs($0.timeIntervalSince(d)) < minGap } }
 
-        // Inserted (reset/stale) dates win over grid dates within minGap, so a stale value
-        // never shows as fresh; among same-kind dates the earlier wins.
-        var kept: [Date] = []
-        for date in extras.sorted() where kept.last.map({ date.timeIntervalSince($0) >= minGap }) ?? true {
+        // Priority: staleAt, then resets (earlier wins), then grid. A date within minGap of a
+        // higher-priority date is dropped, so a stale value never shows as fresh.
+        var kept: [Date] = staleAt.map { inRange($0) ? [$0] : [] } ?? []
+        for date in resets.filter(inRange).sorted() where clear(date, of: kept) {
             kept.append(date)
         }
-        let gridKept = grid.filter { g in !kept.contains { abs($0.timeIntervalSince(g)) < minGap } }
+        let gridKept = grid.filter { clear($0, of: kept) }
         var result: [Date] = []
         for date in (kept + gridKept).sorted() {
             if let last = result.last, date.timeIntervalSince(last) < minGap { continue }
