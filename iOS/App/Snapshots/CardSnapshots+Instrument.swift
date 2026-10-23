@@ -4,13 +4,13 @@ import UsageCore
 
 extension CardSnapshots {
     static let instrumentScenes: [SnapshotScene] = [
-        SnapshotScene(name: "card-instrument-fresh", size: .fitting(width: 402)) { _ in
+        SnapshotScene(name: "card-instrument-fresh", size: .fitting(width: 402), themes: [.instrument]) { _ in
             AnyView(InstrumentList(rows: [InstrumentList.Row(entry: Fixtures.entries[0], expanded: true)]))
         },
-        SnapshotScene(name: "card-instrument-collapsed", size: .fitting(width: 402)) { _ in
+        SnapshotScene(name: "card-instrument-collapsed", size: .fitting(width: 402), themes: [.instrument]) { _ in
             AnyView(InstrumentList(rows: Fixtures.entries.map { InstrumentList.Row(entry: $0) }))
         },
-        SnapshotScene(name: "card-instrument-states", size: .fitting(width: 402)) { _ in
+        SnapshotScene(name: "card-instrument-states", size: .fitting(width: 402), themes: [.instrument]) { _ in
             AnyView(InstrumentList(rows: InstrumentList.stateRows))
         },
     ]

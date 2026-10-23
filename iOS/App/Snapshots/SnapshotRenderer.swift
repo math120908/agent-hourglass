@@ -10,7 +10,7 @@ enum SnapshotRenderer {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var count = 0
         for scene in scenes {
-            for theme in Theme.allCases {
+            for theme in scene.themes {
                 for style in [UIUserInterfaceStyle.light, .dark] {
                     let name = "\(scene.name)-\(theme.rawValue)-\(style == .dark ? "dark" : "light")"
                     guard let data = await snapshot(scene, theme: theme, style: style) else {
