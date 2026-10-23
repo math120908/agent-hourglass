@@ -1,6 +1,5 @@
 import Foundation
 import Observation
-import WidgetKit
 
 /// App-side owner of `DisplaySettings`. Every change is saved and the widget timelines reload.
 @MainActor @Observable
@@ -11,7 +10,7 @@ final class DisplaySettingsStore {
         didSet {
             guard settings != oldValue else { return }
             settings.save(to: defaults)
-            WidgetCenter.shared.reloadAllTimelines()
+            WidgetReloader.reloadAll()
         }
     }
 

@@ -1,7 +1,6 @@
 import SwiftUI
 import UIKit
 import UsageCore
-import WidgetKit
 
 /// Settings screen (spec §10.5): Accounts, Appearance, Refresh, About. No section footers.
 struct SettingsView: View {
@@ -61,7 +60,7 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .toolbar { EditButton() }
         .environment(\.editMode, $editMode)
-        .onChange(of: themes.theme) { WidgetCenter.shared.reloadAllTimelines() }
+        .onChange(of: themes.theme) { WidgetReloader.reloadAll() }
     }
 
     private var refreshMinutes: Binding<Int> {

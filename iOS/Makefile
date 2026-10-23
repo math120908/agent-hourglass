@@ -7,7 +7,7 @@ XCB = xcodebuild -project AgentHourglassiOS.xcodeproj -scheme AgentHourglassiOS 
 APP = $(DD)/Build/Products/Debug-iphonesimulator/AgentHourglass.app
 export SIM_NAME SIM_OS
 
-.PHONY: generate build test run-sim render mac-ref icon testflight
+.PHONY: generate build test run-sim render render-widgets mac-ref icon testflight
 
 generate:
 	xcodegen generate --quiet
@@ -21,8 +21,13 @@ test: generate
 run-sim: build
 	scripts/run-sim.sh $(APP)
 
-render: build
+render: render-widgets build
 	scripts/render.sh $(APP)
+
+# Headless widget snapshots via ImageRenderer in XCTest; PNGs land in docs/screenshots/widgets.
+render-widgets: generate
+	rm -rf docs/screenshots/widgets && mkdir -p docs/screenshots/widgets
+	TEST_RUNNER_RENDER_OUT=$(abspath docs/screenshots/widgets) $(XCB) test -only-testing:AgentHourglassWidgetTests/RenderMatrixTests
 
 MAC_APP = $(HOME)/Applications/AgentHourglass.app/Contents/MacOS/AgentHourglass
 
