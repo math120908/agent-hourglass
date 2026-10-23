@@ -10,16 +10,17 @@ struct SettingsView: View {
     @Bindable var themes: ThemeStore
     @Environment(\.appTheme) private var theme
     @State private var pendingRemove: AccountEntry?
+    @State private var editMode: EditMode
 
     init(model: AppModel, display: DisplaySettingsStore, themes: ThemeStore) {
-        self.init(model: model, display: display, themes: themes, pendingRemove: nil)
+        self.init(model: model, display: display, themes: themes, editMode: .inactive)
     }
 
-    init(model: AppModel, display: DisplaySettingsStore, themes: ThemeStore, pendingRemove: AccountEntry?) {
+    init(model: AppModel, display: DisplaySettingsStore, themes: ThemeStore, editMode: EditMode) {
         self.model = model
         self.display = display
         self.themes = themes
-        _pendingRemove = State(initialValue: pendingRemove)
+        _editMode = State(initialValue: editMode)
     }
 
     var body: some View {
@@ -60,6 +61,7 @@ struct SettingsView: View {
         .tint(theme == .instrument ? GlassStyle.claude : Color.accentColor)
         .navigationTitle("Settings")
         .toolbar { EditButton() }
+        .environment(\.editMode, $editMode)
         .onChange(of: themes.theme) { WidgetCenter.shared.reloadAllTimelines() }
     }
 
