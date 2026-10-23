@@ -19,7 +19,7 @@ struct CodexSignInFormTests {
         #expect(f.steps(.starting) == [.current, .todo, .todo])
         #expect(f.steps(waiting) == [.current, .todo, .todo])
         #expect(f.copyProminent(waiting))
-        #expect(!f.openProminent(waiting))
+        #expect(!f.openProminent(waiting, now: t0))
         #expect(f.waitLine(waiting, now: t0) == nil)
     }
 
@@ -28,14 +28,14 @@ struct CodexSignInFormTests {
         f.copy()
         #expect(f.steps(waiting) == [.done, .current, .todo])
         #expect(!f.copyProminent(waiting))
-        #expect(f.openProminent(waiting))
+        #expect(f.openProminent(waiting, now: t0))
     }
 
     @Test func testOpenWithoutCopyMarksStepOneDone() {
         var f = CodexSignInForm()
         f.open()
         #expect(f.steps(waiting) == [.done, .current, .todo])
-        #expect(!f.openProminent(waiting), "Open goes quiet once the browser was shown")
+        #expect(!f.openProminent(waiting, now: t0), "Open goes quiet once the browser was shown")
     }
 
     @Test func testReturnAfterOpenShowsFinishing() {
@@ -55,6 +55,17 @@ struct CodexSignInFormTests {
         #expect(f.stillWaitingAt == t0.addingTimeInterval(30))
         #expect(f.waitLine(waiting, now: t0.addingTimeInterval(30)) == .stillWaiting)
         #expect(f.waitLine(waiting, now: t0.addingTimeInterval(300)) == .stillWaiting)
+    }
+
+    @Test func testStillWaitingMakesOpenProminentAgain() {
+        var f = CodexSignInForm()
+        f.copy()
+        f.open()
+        f.cameBack(at: t0, state: waiting)
+        #expect(!f.openProminent(waiting, now: t0.addingTimeInterval(29.9)), "quiet while finishing")
+        #expect(f.openProminent(waiting, now: t0.addingTimeInterval(30)), "the hint says open it again")
+        #expect(f.steps(waiting) == [.done, .done, .current], "step 2 stays done")
+        #expect(!f.copyProminent(waiting))
     }
 
     @Test func testReopenAndReturnRestartsTheThirtySeconds() {
@@ -95,7 +106,7 @@ struct CodexSignInFormTests {
             #expect(f.steps(s) == [.done, .done, .done])
             #expect(f.waitLine(s, now: t0.addingTimeInterval(60)) == nil)
             #expect(!f.copyProminent(s))
-            #expect(!f.openProminent(s))
+            #expect(!f.openProminent(s, now: t0.addingTimeInterval(60)))
         }
     }
 

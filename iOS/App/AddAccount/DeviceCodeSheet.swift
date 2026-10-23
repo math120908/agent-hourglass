@@ -17,6 +17,7 @@ struct DeviceCodeSheet: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     init(model: DeviceCodeFlowModel, onDone: @escaping (AccountID) -> Void) {
         self.init(model: model, form: CodexSignInForm(), onDone: onDone)
@@ -42,7 +43,7 @@ struct DeviceCodeSheet: View {
     }
 
     var body: some View {
-        SignInSheetLayout(kind: .codex, title: "Add \(model.title) account", lead: "Enter this code on auth.openai.com, then come back here.") {
+        SignInSheetLayout(kind: .codex, title: "Add \(model.title) account", lead: Self.lead) {
             card
         } primary: {
             primary
@@ -70,6 +71,8 @@ struct DeviceCodeSheet: View {
         .onDisappear { model.cancel() }
     }
 
+    /// Broken by hand into two balanced lines; the natural wrap left "back here." alone.
+    private static let lead = "Enter this code on auth.openai.com,\nthen come back here."
     private static let finishing = "Finishing sign-in. This can take up to 15 seconds."
     private static let stillWaiting = "Still waiting. If the browser didn't say signed in, open it again."
 
@@ -101,20 +104,27 @@ struct DeviceCodeSheet: View {
     @ViewBuilder private var code: some View {
         if let prompt {
             // Useless without the device_auth_id and dead in 15 min, so not privacy-sensitive.
-            Text(prompt.userCode)
-                .font(.system(.title, design: .monospaced).weight(.semibold))
-                .monospacedDigit()
-                .kerning(1)
+            codeText(prompt.userCode)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
                 .opacity(waitLine == nil ? 1 : 0.7)
                 .accessibilityLabel(Text(prompt.userCode).speechSpellsOutCharacters())
         } else {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.primary.opacity(0.10))
-                .frame(width: 184, height: 34)
+            // Takes the code's line height so the card does not move when the code arrives.
+            codeText("0000-0000")
+                .hidden()
+                .overlay(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.10)).frame(width: 184, height: 34)
+                }
                 .accessibilityHidden(true)
         }
+    }
+
+    private func codeText(_ code: String) -> Text {
+        Text(verbatim: code)
+            .font(.system(.title, design: .monospaced).weight(.semibold))
+            .monospacedDigit()
+            .kerning(1)
     }
 
     @ViewBuilder private var copyButton: some View {
@@ -134,12 +144,21 @@ struct DeviceCodeSheet: View {
         }
     }
 
-    /// Re-open stays available after the return, for a browser that never said signed in.
+    /// Re-open stays available after the return, for a browser that never said signed in; it
+    /// turns prominent again with the still-waiting hint. At AX sizes: full width, title only,
+    /// centered (the icon would hang on the first of two lines).
     @ViewBuilder private var openControl: some View {
         if !isFinished {
-            let label = Label("Open auth.openai.com", systemImage: "arrow.up.forward.app")
+            let ax = typeSize.isAccessibilitySize
+            let label = Group {
+                if ax {
+                    Text("Open auth.openai.com").multilineTextAlignment(.center).frame(maxWidth: .infinity)
+                } else {
+                    Label("Open auth.openai.com", systemImage: "arrow.up.forward.app")
+                }
+            }
             Group {
-                if form.openProminent(state) {
+                if form.openProminent(state, now: now) {
                     Button(action: open) { label }.buttonStyle(.borderedProminent)
                 } else {
                     Button(action: open) { label }
@@ -148,12 +167,15 @@ struct DeviceCodeSheet: View {
             }
             .buttonBorderShape(.capsule)
             .disabled(prompt == nil)
+            // Disabled: fade the pill with its label, so it does not read as tappable.
+            .opacity(prompt == nil ? 0.5 : 1)
         }
     }
 
     @ViewBuilder private var waitControl: some View {
         if let waitLine {
-            HStack(spacing: 8) {
+            // At AX sizes the line runs 4+ lines; the spinner sits by the first one.
+            HStack(alignment: typeSize.isAccessibilitySize ? .firstTextBaseline : .center, spacing: 8) {
                 ProgressView().tint(isGlass && scheme == .dark ? .white : nil)
                 Text(waitLine == .finishing ? Self.finishing : Self.stillWaiting)
                     .font(.subheadline)
@@ -172,12 +194,7 @@ struct DeviceCodeSheet: View {
         case .expired:
             SheetStatus(text: "That code expired", systemImage: "clock.badge.exclamationmark", tint: SheetTone.criticalGlyph(scheme))
         case .failed(let message):
-            SheetStatus(
-                text: message,
-                systemImage: "exclamationmark.triangle.fill",
-                tint: SheetTone.criticalGlyph(scheme),
-                font: .subheadline,
-            )
+            SheetStatus(text: message, systemImage: "exclamationmark.triangle.fill", tint: SheetTone.criticalGlyph(scheme))
         case .starting, .waiting:
             EmptyView()
         }

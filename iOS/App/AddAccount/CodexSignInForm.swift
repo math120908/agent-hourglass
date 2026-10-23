@@ -36,8 +36,11 @@ struct CodexSignInForm: Equatable {
         return steps(state)[0] == .current
     }
 
-    func openProminent(_ state: DeviceCodeFlowModel.State) -> Bool {
+    /// Prominent while step 2 is current and unopened, and again once the still-waiting hint
+    /// says "open it again" (step 2 stays done; the hint points at this button).
+    func openProminent(_ state: DeviceCodeFlowModel.State, now: Date) -> Bool {
         guard case .waiting = state else { return false }
+        if waitLine(state, now: now) == .stillWaiting { return true }
         return steps(state)[1] == .current && !opened
     }
 
