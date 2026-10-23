@@ -35,12 +35,17 @@ final class FakeProvider: UsageProvider, @unchecked Sendable {
     var refreshError: ProviderError?
     var alwaysUnauthorized = false
     var refreshTokensSeen: [String] = []
+    /// Runs before each usage fetch with the access token; may throw to fail the fetch.
+    var onFetch: (@Sendable (String) async throws -> Void)?
+    /// Runs inside refresh, before any error is thrown.
+    var onRefresh: (@Sendable () -> Void)?
 
     init(log: EventLog) { self.log = log }
 
     func fetch(credential: Credential, http: HTTPClient) async throws -> UsageSnapshot {
         let tok = credential.access.reveal()
         log.add("fetch:\(tok)")
+        try await onFetch?(tok)
         let ok = lock.withLock { !alwaysUnauthorized && tok == validToken }
         guard ok else { throw ProviderError.unauthorized }
         return UsageSnapshot(accountID: AccountID(kind: .claude, remoteID: "unknown"), fetchedAt: Date(), meters: [])
@@ -53,6 +58,7 @@ final class FakeProvider: UsageProvider, @unchecked Sendable {
             return (refreshCount + 1, refreshError)
         }
         if refreshDelay > .zero { try await Task.sleep(for: refreshDelay) }
+        onRefresh?()
         if let err { throw err }
         lock.withLock { validToken = "tok-\(n)" }
         log.add("refresh:tok-\(n)")

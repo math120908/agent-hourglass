@@ -69,7 +69,9 @@ public actor AccountClient {
         if let claudeCode { return await fetchClaudeCode(claudeCode) }
         if let gh { return await fetchCopilot(gh.source, login: gh.login) }
         if provider.kind == .codex { return await fetchBorrowed() }
-        if saveFailed, let credential { persist(credential) }
+        if saveFailed, let credential {
+            if let shared { persistShared(credential, shared) } else { persist(credential) }
+        }
         do {
             var cred = try currentCredential()
             if let exp = cred.expiresAt, exp.timeIntervalSince(now()) < Self.proactiveWindow {
@@ -166,7 +168,8 @@ public actor AccountClient {
             nextEarliestFetch = cached.fetchedAt.addingTimeInterval(interval)
             return .success(cached)
         }
-        if let next = shared.backoff.nextAllowedFetch(id, now: t), t < next {
+        // While this process holds the only copy of a rotated credential, its own retry is not gated.
+        if !(saveFailed && credential != nil), let next = shared.backoff.nextAllowedFetch(id, now: t), t < next {
             lastSnapshot = cached ?? lastSnapshot
             nextEarliestFetch = next
             status = .rateLimited(retryAt: next)
@@ -208,6 +211,13 @@ public actor AccountClient {
     }
 
     private func currentCredential() throws -> Credential {
+        if shared != nil {
+            // No cache across the refresh boundary: the other process may have rotated it.
+            if saveFailed, let credential { return credential }
+            guard let stored = try store.read(id) else { throw ProviderError.invalidGrant }
+            credential = stored
+            return stored
+        }
         if let credential { return credential }
         guard let stored = try store.read(id) else { throw ProviderError.invalidGrant }
         credential = stored
@@ -218,10 +228,57 @@ public actor AccountClient {
     private func refresh(replacing stale: Credential) async throws -> Credential {
         if let credential, credential.access != stale.access { return credential }
         let provider = provider, http = http
+        if let shared {
+            return try await lock.refresh { [self] in
+                try await shared.lock.withLock { try await self.refreshLocked(replacing: stale, shared: shared) }
+            }
+        }
         return try await lock.refresh { [self] in
             guard let fresh = try await provider.refresh(credential: stale, http: http) else { return stale }
             await self.adopt(fresh)
             return fresh
+        }
+    }
+
+    /// Runs under the cross-process lock: re-read the store, refresh only if nobody else did, persist before returning.
+    private func refreshLocked(replacing stale: Credential, shared: SharedAccountState) async throws -> Credential {
+        let base: Credential
+        if saveFailed, let credential {
+            base = credential
+        } else if let stored = try store.read(id) {
+            if stored.access != stale.access {
+                credential = stored
+                return stored
+            }
+            base = stored
+        } else {
+            base = stale
+        }
+        do {
+            guard let fresh = try await provider.refresh(credential: base, http: http) else { return base }
+            persistShared(fresh, shared)
+            credential = fresh
+            return fresh
+        } catch ProviderError.invalidGrant {
+            // Another process may have rotated the token between our read and the refresh.
+            if let stored = try? store.read(id), stored.access != base.access {
+                credential = stored
+                return stored
+            }
+            throw ProviderError.invalidGrant
+        }
+    }
+
+    /// Write, retry once; if both fail, block the other process from refreshing with a stale refresh token.
+    private func persistShared(_ c: Credential, _ shared: SharedAccountState) {
+        persist(c)
+        if saveFailed { persist(c) }
+        guard saveFailed else { return }
+        Self.log.error("credential save failed twice kind=\(self.id.kind?.rawValue ?? "unknown")")
+        do {
+            try shared.backoff.setNextAllowedFetch(now().addingTimeInterval(60), for: id)
+        } catch {
+            Self.log.error("shared backoff write failed: \(String(describing: type(of: error)), privacy: .public)")
         }
     }
 

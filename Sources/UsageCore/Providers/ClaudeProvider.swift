@@ -19,6 +19,8 @@ public struct ClaudeProvider: UsageProvider {
         guard let refresh = credential.refresh else { throw ProviderError.invalidGrant }
         var req = URLRequest(url: ClaudeOAuth.tokenURL)
         req.httpMethod = "POST"
+        // Runs under the cross-process refresh lock on iOS: must finish well inside the lock timeout.
+        req.timeoutInterval = 9
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONSerialization.data(withJSONObject: [
             "grant_type": "refresh_token",
