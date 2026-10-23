@@ -182,4 +182,91 @@ struct CodexDeviceAuthTests {
         let c = try await auth(ScriptedTransport([Self.code, Self.tokens()])).poll(prompt())
         for secret in secrets { #expect(!"\(c)".contains(secret)) }
     }
+
+    static func cred(refresh: String? = "OLD-REFRESH-SENTINEL", account: String? = "acct-old") -> Credential {
+        Credential(kind: .codex, access: Secret("OLD-ACCESS"), refresh: refresh.map(Secret.init), expiresAt: t0, refreshExpiresAt: nil, scopes: [], remoteAccountID: account)
+    }
+
+    @Test func refreshSendsRotatingRequest() async throws {
+        let t = ScriptedTransport([(200, #"{"access_token":"NEW-ACCESS","refresh_token":"NEW-REFRESH"}"#, [:])])
+        _ = try await auth(t).refresh(Self.cred())
+        #expect(t.requests.count == 1)
+        let r = t.requests[0]
+        #expect(r.url?.absoluteString == "https://auth.openai.com/oauth/token")
+        #expect(r.httpMethod == "POST")
+        #expect(r.value(forHTTPHeaderField: "Content-Type") == "application/json")
+        #expect(r.timeoutInterval < 10)
+        let body = t.bodyJSON(0) as? [String: String]
+        #expect(body == ["client_id": CodexDeviceAuth.clientID, "grant_type": "refresh_token", "refresh_token": "OLD-REFRESH-SENTINEL", "scope": "openid profile email"])
+    }
+
+    @Test func refreshKeepsAccountIDAndOldRefreshWhenAbsent() async throws {
+        let t = ScriptedTransport([(200, #"{"access_token":"NEW-ACCESS","expires_in":864000}"#, [:])])
+        let c = try await auth(t).refresh(Self.cred())
+        #expect(c.access == Secret("NEW-ACCESS"))
+        #expect(c.refresh == Secret("OLD-REFRESH-SENTINEL"))
+        #expect(c.remoteAccountID == "acct-old")
+        #expect(c.expiresAt == Self.t0.addingTimeInterval(864000))
+        #expect(c.earliestRefreshAt == nil)
+    }
+
+    @Test func refreshAdoptsNewRefreshAndAccountID() async throws {
+        let id = Self.jwt(#"{"https://api.openai.com/auth":{"chatgpt_account_id":"acct-new"}}"#)
+        let body = "{\"access_token\":\"NEW-ACCESS\",\"refresh_token\":\"NEW-REFRESH\",\"id_token\":\"\(id)\",\"earliest_refresh_at\":1800001000}"
+        let c = try await auth(ScriptedTransport([(200, body, [:])])).refresh(Self.cred())
+        #expect(c.refresh == Secret("NEW-REFRESH"))
+        #expect(c.remoteAccountID == "acct-new")
+        #expect(c.earliestRefreshAt == Date(timeIntervalSince1970: 1_800_001_000))
+        #expect(c.expiresAt == nil)
+    }
+
+    @Test func reusedOrExpiredIsInvalidGrant() async throws {
+        let cases: [(Int, String, [String: String])] = [
+            (400, #"{"error":"refresh_token_reused"}"#, [:]),
+            (401, "", [:]),
+            (400, #"{"error":{"code":"refresh_token_expired"}}"#, [:]),
+            (200, #"{"error":"refresh_token_invalidated"}"#, [:]),
+        ]
+        for r in cases {
+            let t = ScriptedTransport([r])
+            await #expect(throws: ProviderError.invalidGrant) { try await auth(t).refresh(Self.cred()) }
+            #expect(t.requests.count == 1)
+        }
+    }
+
+    @Test func rateLimitPropagates() async throws {
+        let t = ScriptedTransport([(429, "", [:])])
+        await #expect(throws: ProviderError.rateLimited(retryAfter: nil)) { try await auth(t).refresh(Self.cred()) }
+    }
+
+    @Test func missingRefreshTokenIsInvalidGrant() async throws {
+        let t = ScriptedTransport([])
+        await #expect(throws: ProviderError.invalidGrant) { try await auth(t).refresh(Self.cred(refresh: nil)) }
+        #expect(t.requests.isEmpty)
+    }
+
+    @Test func exchangeSetsEarliestRefreshAtISO() async throws {
+        let body = "{\"id_token\":\"\(Self.idToken)\",\"access_token\":\"\(Self.accessToken)\",\"refresh_token\":\"R\",\"earliest_refresh_at\":\"2027-01-15T08:00:00Z\"}"
+        let c = try await auth(ScriptedTransport([Self.code, (200, body, [:])])).poll(prompt())
+        #expect(c.earliestRefreshAt == ISO8601DateFormatter().date(from: "2027-01-15T08:00:00Z"))
+    }
+
+    @Test func shouldRefreshHonoursEarliestUnlessExpired() {
+        var c = Self.cred()
+        c.expiresAt = Self.t0.addingTimeInterval(3600)
+        c.earliestRefreshAt = Self.t0.addingTimeInterval(600)
+        #expect(!CodexDeviceAuth.shouldRefresh(c, now: Self.t0))
+        #expect(CodexDeviceAuth.shouldRefresh(c, now: Self.t0.addingTimeInterval(600)))
+        c.expiresAt = Self.t0.addingTimeInterval(-1)
+        #expect(CodexDeviceAuth.shouldRefresh(c, now: Self.t0))
+        c.expiresAt = Self.t0.addingTimeInterval(3600); c.earliestRefreshAt = nil
+        #expect(CodexDeviceAuth.shouldRefresh(c, now: Self.t0))
+    }
+
+    @Test func refreshErrorsCarryNoSecrets() async throws {
+        let t = ScriptedTransport([(500, "OLD-REFRESH-SENTINEL", [:])])
+        do { _ = try await auth(t).refresh(Self.cred()); Issue.record("expected throw") } catch {
+            #expect(!"\(error)".contains("OLD-REFRESH-SENTINEL"))
+        }
+    }
 }

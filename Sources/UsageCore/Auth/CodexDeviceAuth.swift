@@ -103,17 +103,69 @@ public struct CodexDeviceAuth: Sendable {
         return try Self.credential(fromTokenResponse: data, now: now())
     }
 
-    static func credential(fromTokenResponse data: Data, now: Date) throws -> Credential {
+    public static let refreshScope = "openid profile email"
+    /// Runs inside the cross-process refresh lock (15 s deadline).
+    static let refreshTimeout: TimeInterval = 9
+    static let refreshErrorCodes: Set<String> = ["refresh_token_expired", "refresh_token_reused", "refresh_token_invalidated", "invalid_grant"]
+
+    /// Rotates the refresh token. Single use: never retried here.
+    public func refresh(_ c: Credential) async throws -> Credential {
+        guard let rt = c.refresh?.reveal(), !rt.isEmpty else {
+            Self.log.error("codex refresh: invalidGrant (no refresh token)")
+            throw ProviderError.invalidGrant
+        }
+        let json = ["client_id": Self.clientID, "grant_type": "refresh_token", "refresh_token": rt, "scope": Self.refreshScope]
+        let data: Data
+        do {
+            data = try await send(path: "oauth/token", body: try JSONSerialization.data(withJSONObject: json), contentType: "application/json", timeout: Self.refreshTimeout)
+        } catch ProviderError.unauthorized {
+            Self.log.error("codex refresh: HTTP 401 invalidGrant")
+            throw ProviderError.invalidGrant
+        } catch let ProviderError.http(status, _, _) where status == 400 {
+            Self.log.error("codex refresh: HTTP 400 invalidGrant")
+            throw ProviderError.invalidGrant
+        } catch let error as ProviderError {
+            Self.log.error("codex refresh failed: \(error.description, privacy: .public)")
+            throw error
+        }
+        if let code = Self.errorCode(data), Self.refreshErrorCodes.contains(code) {
+            Self.log.error("codex refresh: body error invalidGrant")
+            throw ProviderError.invalidGrant
+        }
+        return try Self.credential(fromTokenResponse: data, now: now(), previous: c)
+    }
+
+    /// False while `now < earliestRefreshAt`, unless the access token has already expired.
+    public static func shouldRefresh(_ c: Credential, now: Date) -> Bool {
+        if let exp = c.expiresAt, exp <= now { return true }
+        if let earliest = c.earliestRefreshAt, now < earliest { return false }
+        return true
+    }
+
+    static func errorCode(_ data: Data) -> String? {
+        guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        if let s = obj["error"] as? String { return s }
+        return (obj["error"] as? [String: Any])?["code"] as? String
+    }
+
+    /// `previous` set means a refresh: id_token and refresh_token are optional and fall back to it.
+    static func credential(fromTokenResponse data: Data, now: Date, previous: Credential? = nil) throws -> Credential {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw ProviderError.schema(keys: [])
         }
-        guard let access = obj["access_token"] as? String,
-              let idToken = obj["id_token"] as? String else {
+        guard let access = obj["access_token"] as? String, !access.isEmpty else {
             throw ProviderError.schema(keys: obj.keys.sorted())
         }
-        guard let account = accountID(fromIDToken: idToken) else {
-            throw ProviderError.schema(keys: ["chatgpt_account_id"])
+        let account: String
+        if let idToken = obj["id_token"] as? String {
+            guard let a = accountID(fromIDToken: idToken) else { throw ProviderError.schema(keys: ["chatgpt_account_id"]) }
+            account = a
+        } else if let old = previous?.remoteAccountID {
+            account = old
+        } else {
+            throw ProviderError.schema(keys: obj.keys.sorted())
         }
+        let refresh = (obj["refresh_token"] as? String).flatMap { $0.isEmpty ? nil : Secret($0) } ?? previous?.refresh
         let expiresAt: Date?
         if let secs = number(obj["expires_in"]) {
             expiresAt = now.addingTimeInterval(secs)
@@ -125,12 +177,25 @@ public struct CodexDeviceAuth: Sendable {
         return Credential(
             kind: .codex,
             access: Secret(access),
-            refresh: (obj["refresh_token"] as? String).map(Secret.init),
+            refresh: refresh,
             expiresAt: expiresAt,
             refreshExpiresAt: nil,
             scopes: [],
-            remoteAccountID: account
+            remoteAccountID: account,
+            earliestRefreshAt: date(obj["earliest_refresh_at"])
         )
+    }
+
+    /// Seconds since epoch (number or numeric string) or an ISO8601 string.
+    static func date(_ raw: Any?) -> Date? {
+        if let secs = number(raw), secs.isFinite, secs > 0 {
+            return Date(timeIntervalSince1970: secs > 1e12 ? secs / 1000 : secs)
+        }
+        guard let s = raw as? String else { return nil }
+        let f = ISO8601DateFormatter()
+        if let d = f.date(from: s) { return d }
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f.date(from: s)
     }
 
     /// Reads only `["https://api.openai.com/auth"]["chatgpt_account_id"]`. No signature check:
@@ -173,7 +238,7 @@ public struct CodexDeviceAuth: Sendable {
         }
     }
 
-    private func send(path: String, body: Data, contentType: String) async throws -> Data {
+    private func send(path: String, body: Data, contentType: String, timeout: TimeInterval? = nil) async throws -> Data {
         let url = Self.issuer.appending(path: path)
         guard url.scheme == "https", Self.allowedHosts.contains(url.host() ?? "") else {
             throw ProviderError.hostNotAllowed(url.host() ?? "")
@@ -183,6 +248,7 @@ public struct CodexDeviceAuth: Sendable {
         req.setValue(contentType, forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.httpBody = body
+        if let timeout { req.timeoutInterval = timeout }
         return try await http.send(req, bearer: nil).0
     }
 }

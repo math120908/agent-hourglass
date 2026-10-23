@@ -9,6 +9,9 @@ public struct Credential: Sendable, Equatable, Codable, CustomStringConvertible,
     public var scopes: [String]
     /// Provider-side account id (e.g. Codex account). Kept out of description and mirror.
     public var remoteAccountID: String?
+    /// Server hint (Codex `earliest_refresh_at`): do not refresh before this unless expired.
+    /// Kept out of description and mirror.
+    public var earliestRefreshAt: Date?
 
     public init(
         kind: ProviderKind,
@@ -17,7 +20,8 @@ public struct Credential: Sendable, Equatable, Codable, CustomStringConvertible,
         expiresAt: Date?,
         refreshExpiresAt: Date?,
         scopes: [String],
-        remoteAccountID: String? = nil
+        remoteAccountID: String? = nil,
+        earliestRefreshAt: Date? = nil
     ) {
         self.kind = kind
         self.access = access
@@ -26,6 +30,7 @@ public struct Credential: Sendable, Equatable, Codable, CustomStringConvertible,
         self.refreshExpiresAt = refreshExpiresAt
         self.scopes = scopes
         self.remoteAccountID = remoteAccountID
+        self.earliestRefreshAt = earliestRefreshAt
     }
 
     public var description: String {
