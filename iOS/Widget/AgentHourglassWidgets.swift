@@ -8,6 +8,7 @@ struct AgentHourglassWidgets: WidgetBundle {
         EmptyWidget()
         SmallUsageWidget()
         CircularUsageWidget()
+        RectangularUsageWidget()
     }
 }
 
