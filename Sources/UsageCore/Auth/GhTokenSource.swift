@@ -1,12 +1,5 @@
 import Foundation
 
-public enum GhError: Error, Equatable, Sendable {
-    case missing
-    case untrusted
-    case loginRemoved
-    case timeout
-}
-
 /// Borrows tokens from an existing `gh` login. gh runs only from a fixed trusted path,
 /// with a fixed environment; the token is read from stdout into a `Secret` and never
 /// placed in any child's argv or env. Tokens are cached in memory for the process lifetime.
@@ -117,3 +110,5 @@ private final class TokenCache: @unchecked Sendable {
     func set(_ k: String, _ v: Secret) { lock.withLock { tokens[k] = v } }
     func remove(_ k: String) { lock.withLock { _ = tokens.removeValue(forKey: k) } }
 }
+
+extension GhTokenSource: CopilotTokenSource {}

@@ -20,7 +20,7 @@ public actor AccountClient {
     private let lock = RefreshLock()
     private let label: String
     /// Copilot only: borrows the token from gh for `login`. No Keychain item.
-    private let gh: (source: GhTokenSource, login: String)?
+    private let gh: (source: any CopilotTokenSource, login: String)?
     /// Claude Code (local) only: re-reads Claude Code's Keychain item on every fetch. Never refreshes or writes.
     private let claudeCode: ClaudeCodeLoginReading?
 
@@ -42,7 +42,7 @@ public actor AccountClient {
         now: @escaping @Sendable () -> Date,
         backoff: Backoff = Backoff(),
         label: String? = nil,
-        tokenSource: GhTokenSource? = nil,
+        tokenSource: (any CopilotTokenSource)? = nil,
         login: String? = nil,
         claudeCode: ClaudeCodeLoginReading? = nil
     ) {
@@ -120,7 +120,7 @@ public actor AccountClient {
     }
 
     /// Token cached by gh; a 401 drops it, re-reads once and retries once.
-    private func fetchCopilot(_ src: GhTokenSource, login: String) async -> FetchOutcome {
+    private func fetchCopilot(_ src: any CopilotTokenSource, login: String) async -> FetchOutcome {
         do {
             var snap: UsageSnapshot
             do {

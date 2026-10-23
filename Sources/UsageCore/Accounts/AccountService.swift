@@ -19,7 +19,7 @@ public actor AccountService {
     private let claudeLogin: ClaudeLogin
     private let makeClient: MakeClient
     private let now: @Sendable () -> Date
-    private let ghTokens: GhTokenSource?
+    private let ghTokens: (any CopilotTokenSource)?
     private let http: HTTPClient
     private let codexAuth: CodexAuthSource?
     private var signingIn = false
@@ -32,7 +32,7 @@ public actor AccountService {
         claudeLogin: @escaping ClaudeLogin,
         makeClient: @escaping MakeClient,
         now: @escaping @Sendable () -> Date = { Date() },
-        ghTokens: GhTokenSource? = nil,
+        ghTokens: (any CopilotTokenSource)? = nil,
         http: HTTPClient = HTTPClient(),
         codexAuth: CodexAuthSource? = nil
     ) {
