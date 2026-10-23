@@ -7,7 +7,7 @@ XCB = xcodebuild -project AgentHourglassiOS.xcodeproj -scheme AgentHourglassiOS 
 APP = $(DD)/Build/Products/Debug-iphonesimulator/AgentHourglass.app
 export SIM_NAME SIM_OS
 
-.PHONY: generate build test run-sim render render-widgets mac-ref icon testflight
+.PHONY: generate build test run-sim render render-widgets mac-ref icon testflight security-pass security-pass-start-log archive
 
 generate:
 	xcodegen generate --quiet
@@ -43,6 +43,12 @@ mac-ref:
 
 icon:
 	scripts/make-icon.sh
+
+security-pass-start-log:
+	scripts/security-pass.sh --start-log
+
+security-pass:
+	scripts/security-pass.sh
 
 testflight:
 	@echo "testflight: wired in P6 (needs App Store Connect record, distribution cert, API key)"
