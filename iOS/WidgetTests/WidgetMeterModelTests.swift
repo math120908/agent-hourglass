@@ -59,7 +59,7 @@ final class WidgetMeterModelTests: XCTestCase {
     }
 
     func testShortLabels() {
-        XCTAssertEqual(F.allMeters.map { row($0).shortLabel }, ["5H", "WK", "Opus W", "5H", "WK", "PREM", "PREM"])
+        XCTAssertEqual(F.allMeters.map { row($0).shortLabel }, ["5H", "WK", "Opus W", "5H", "WK"])
         XCTAssertEqual(WidgetMeterModel.shortLabel(F.claudeMax.meters[2]), "Opus W")
         XCTAssertLessThanOrEqual(WidgetMeterModel.shortLabel(Meter(kind: .weeklyModel, label: "Sonnet", percentUsed: 1)).count, 6)
     }

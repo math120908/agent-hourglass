@@ -22,13 +22,5 @@ enum WidgetFixtures {
         Meter(kind: .window, label: "Weekly", percentUsed: 72, resetsAt: now.addingTimeInterval(3 * 86400), windowLength: .seconds(604_800)),
     ])
 
-    static let copilot = UsageSnapshot(accountID: AccountID(rawValue: "copilot:c")!, fetchedAt: now, meters: [
-        Meter(kind: .copilotPremium, label: "Premium requests", percentUsed: 91, used: 455, limit: 500),
-    ])
-
-    static let copilotNoPremium = UsageSnapshot(accountID: AccountID(rawValue: "copilot:n")!, fetchedAt: now, meters: [
-        Meter(kind: .copilotPremium, label: "Premium requests", percentUsed: nil, used: 0, limit: 0),
-    ])
-
-    static var allMeters: [Meter] { [claudeMax, codexPlus, copilot, copilotNoPremium].flatMap(\.meters) }
+    static var allMeters: [Meter] { [claudeMax, codexPlus].flatMap(\.meters) }
 }
