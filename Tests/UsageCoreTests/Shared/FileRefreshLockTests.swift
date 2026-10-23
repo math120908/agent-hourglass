@@ -9,6 +9,31 @@ private actor Recorder {
 
 private struct Boom: Error {}
 
+private actor Flag {
+    var value = false
+    func set() { value = true }
+}
+
+/// Generous lock timeout for "is the lock free again" checks. A released lock is taken on the first
+/// non-blocking `flock`, so elapsed time stays far below this even under heavy load; a lock that is
+/// never released (or released only when the holder's own 15 s timeout fires) makes `acquire` spin
+/// to this timeout and throw `.timeout`, and the `< reacquireTimeout / 2` bound catches a late release.
+private let reacquireTimeout: Duration = .seconds(10)
+
+/// Runs `FileRefreshLock.withLock` in a task whose body signals once the lock is held and then
+/// sleeps until cancelled, so tests wait on the event instead of a fixed head start.
+private func startHolder(url: URL) async -> Task<Void, Error> {
+    let (held, cont) = AsyncStream<Void>.makeStream()
+    let task = Task {
+        try await FileRefreshLock(url: url).withLock {
+            cont.yield()
+            try await Task.sleep(for: .seconds(30))
+        }
+    }
+    for await _ in held { break }
+    return task
+}
+
 struct FileRefreshLockTests {
     let dir: URL
     let url: URL
@@ -39,11 +64,7 @@ struct FileRefreshLockTests {
     }
 
     @Test func timesOutWhenHeldInProcess() async throws {
-        let url = url
-        let holder = Task {
-            try await FileRefreshLock(url: url).withLock { try await Task.sleep(for: .seconds(2)) }
-        }
-        try await Task.sleep(for: .milliseconds(100))
+        let holder = await startHolder(url: url)
         await #expect(throws: FileRefreshLockError.timeout) {
             try await FileRefreshLock(url: url, timeout: .milliseconds(300)).withLock {}
         }
@@ -55,40 +76,42 @@ struct FileRefreshLockTests {
             try await FileRefreshLock(url: url).withLock { throw Boom() }
         }
         let t0 = ContinuousClock.now
-        try await FileRefreshLock(url: url, timeout: .milliseconds(200)).withLock {}
-        #expect(ContinuousClock.now - t0 < .milliseconds(200))
+        try await FileRefreshLock(url: url, timeout: reacquireTimeout).withLock {}
+        #expect(ContinuousClock.now - t0 < reacquireTimeout / 2)
     }
 
     @Test func releasedAfterCancellation() async throws {
-        try await cancelThenReacquire(within: .seconds(1))
-    }
-
-    @Test func cancelledBodyReleasesLock() async throws {
-        try await cancelThenReacquire(within: .milliseconds(200))
-    }
-
-    private func cancelThenReacquire(within limit: Duration) async throws {
-        let url = url
-        let task = Task {
-            try await FileRefreshLock(url: url).withLock { try await Task.sleep(for: .seconds(30)) }
-        }
-        try await Task.sleep(for: .milliseconds(100))
+        let task = await startHolder(url: url)
         task.cancel()
         let t0 = ContinuousClock.now
-        try await FileRefreshLock(url: url, timeout: limit).withLock {}
-        #expect(ContinuousClock.now - t0 < limit)
+        try await FileRefreshLock(url: url, timeout: reacquireTimeout).withLock {}
+        #expect(ContinuousClock.now - t0 < reacquireTimeout / 2)
         _ = await task.result
     }
 
+    @Test func cancelledBodyReleasesLock() async throws {
+        // The holder must end by cancellation (not by its own 15 s lock timeout), and the lock
+        // must be free once it has ended.
+        let task = await startHolder(url: url)
+        let t0 = ContinuousClock.now
+        task.cancel()
+        await #expect(throws: CancellationError.self) { try await task.value }
+        #expect(ContinuousClock.now - t0 < reacquireTimeout / 2)
+        try await FileRefreshLock(url: url, timeout: .milliseconds(1)).withLock {}
+    }
+
     @Test func slowBodyTimesOutAndReleases() async throws {
+        // Bound against the body's 30 s sleep: the 300 ms timeout must cut the body, so elapsed
+        // stays far below the sleep even when the machine is busy.
+        let bodySleep: Duration = .seconds(30)
         let t0 = ContinuousClock.now
         await #expect(throws: FileRefreshLockError.timeout) {
             try await FileRefreshLock(url: url, timeout: .milliseconds(300)).withLock {
-                try await Task.sleep(for: .seconds(30))
+                try await Task.sleep(for: bodySleep)
             }
         }
-        #expect(ContinuousClock.now - t0 < .seconds(2))
-        try await FileRefreshLock(url: url, timeout: .milliseconds(200)).withLock {}
+        #expect(ContinuousClock.now - t0 < bodySleep / 2)
+        try await FileRefreshLock(url: url, timeout: .milliseconds(1)).withLock {}
     }
 
     @Test func lockFileIs0600() async throws {
@@ -121,17 +144,28 @@ struct FileRefreshLockTests {
     }
 
     #if os(macOS)
-    private func spawnHolder(sleep seconds: Int) throws -> Process {
+    private struct Holder {
+        let process: Process
+        let stdin: Pipe
+
+        /// Lets the holder exit (and the kernel drop its flock) on demand.
+        func release() { try? stdin.fileHandleForWriting.write(contentsOf: Data("go\n".utf8)) }
+    }
+
+    /// Spawns a separate process that takes the flock and holds it until `release()` or `seconds`.
+    private func spawnHolder(maxHold seconds: Int) throws -> Holder {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
         p.arguments = [
             "-MFcntl=:flock",
             "-e",
-            "open(F,\">>\",$ARGV[0]) or die; flock(F,LOCK_EX) or die; $|=1; print \"locked\\n\"; sleep \(seconds)",
+            "open(F,\">>\",$ARGV[0]) or die; flock(F,LOCK_EX) or die; $|=1; print \"locked\\n\"; alarm \(seconds); <STDIN>",
             url.path,
         ]
         let pipe = Pipe()
+        let stdin = Pipe()
         p.standardOutput = pipe
+        p.standardInput = stdin
         try p.run()
         var buf = Data()
         while !(String(decoding: buf, as: UTF8.self).contains("locked\n")) {
@@ -139,32 +173,39 @@ struct FileRefreshLockTests {
             if chunk.isEmpty { throw Boom() }
             buf.append(chunk)
         }
-        return p
+        return Holder(process: p, stdin: stdin)
     }
 
     @Test func separateProcessHolderBlocksUntilReleased() async throws {
-        let p = try spawnHolder(sleep: 1)
-        defer { p.terminate() }
-        let t0 = ContinuousClock.now
-        let t1 = try await FileRefreshLock(url: url).withLock { ContinuousClock.now }
-        #expect(t1 - t0 >= .milliseconds(800))
+        // Ordered by events, not wall clock: the holder keeps the flock until told to exit, so the
+        // body may only run after `released` was set. 300 ms gives a broken lock time to slip in.
+        let h = try spawnHolder(maxHold: 30)
+        defer { h.process.terminate() }
+        let released = Flag()
+        let url = url
+        async let acquiredAfterRelease = FileRefreshLock(url: url, timeout: reacquireTimeout).withLock {
+            await released.value
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        await released.set()
+        h.release()
+        #expect(try await acquiredAfterRelease)
     }
 
     @Test func killedHolderReleasesLock() async throws {
-        let p = try spawnHolder(sleep: 30)
-        kill(p.processIdentifier, SIGKILL)
+        let h = try spawnHolder(maxHold: 30)
+        kill(h.process.processIdentifier, SIGKILL)
         // Bound against the lock timeout, not a tight wall clock: if the kernel did not release
         // the dead holder's flock, acquire would spin until `timeout` and throw `.timeout`.
         // Under heavy load reaping the holder alone can take >1 s, so keep the margin wide.
-        let timeout: Duration = .seconds(10)
         let t0 = ContinuousClock.now
-        try await FileRefreshLock(url: url, timeout: timeout).withLock {}
-        #expect(ContinuousClock.now - t0 < timeout / 2)
+        try await FileRefreshLock(url: url, timeout: reacquireTimeout).withLock {}
+        #expect(ContinuousClock.now - t0 < reacquireTimeout / 2)
     }
 
     @Test func timesOutWhenHeld() async throws {
-        let p = try spawnHolder(sleep: 5)
-        defer { p.terminate() }
+        let h = try spawnHolder(maxHold: 30)
+        defer { h.process.terminate() }
         await #expect(throws: FileRefreshLockError.timeout) {
             try await FileRefreshLock(url: url, timeout: .milliseconds(300)).withLock {}
         }
