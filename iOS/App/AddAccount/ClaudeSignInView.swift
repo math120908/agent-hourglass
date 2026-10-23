@@ -78,6 +78,7 @@ struct ClaudeSignInView: View {
         .onDisappear {
             exchange?.cancel()
             debounce?.cancel()
+            browser.cancel()
         }
     }
 
