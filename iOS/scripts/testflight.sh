@@ -6,7 +6,7 @@
 #   testflight.sh --verify-ipa <ipa> <build> <commit>             verify an exported ipa (tests)
 # Env: ASC_ENV (default ~/.config/agent-hourglass/asc.env) defining ASC_KEY_ID and ASC_ISSUER_ID;
 # key at ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8. Both files must be mode 600.
-# Key ID, issuer ID and the key path are never echoed. xcodebuild output goes to <out>/xcodebuild.log (600).
+# Key ID, issuer ID and the key path are never echoed. Preflight test output goes to <out>/preflight.log, xcodebuild output to <out>/xcodebuild.log (both 600).
 # Upload fallback (manual, not automatic): if destination=upload fails after a good export, run
 #   xcrun altool --upload-app -f <out>/export/*.ipa -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
 set -euo pipefail
@@ -80,14 +80,19 @@ p8="$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8"
 [ -f "$p8" ] || die "missing API key file in ~/.appstoreconnect/private_keys/"
 [ "$(stat -f '%Lp' "$p8")" = 600 ] || die "API key file must be mode 600"
 security find-identity -v -p codesigning | rg -q 'Apple Distribution' || die "no Apple Distribution identity in the keychain"
-make -C .. test >/dev/null || die "make test failed"
-make test >/dev/null || die "make -C iOS test failed"
-
-# 2-3. Version and project.
+# 2. Version and output dir (before the test runs, which log into it).
 build=$(scripts/build-number.sh); commit=$(git rev-parse --short HEAD)
 version=$(rg -o -r '$1' '^\s*MARKETING_VERSION:\s*(\S+)' project.yml | head -1)
 out=build/testflight/$build
 mkdir -p "$out"; chmod 700 "$out"
+# tail_log <log>: last 30 lines to stderr, with any asc.env value lines dropped.
+tail_log() { tail -n 30 "$1" | rg -v -F -e "$ASC_KEY_ID" -e "$ASC_ISSUER_ID" >&2 || true; }
+plog=$out/preflight.log; ( umask 077; : > "$plog" )
+pre() { local what=$1; shift; "$@" >>"$plog" 2>&1 || { tail_log "$plog"; die "$what failed (log: $plog)"; }; }
+pre "make test" make -C .. test
+pre "make -C iOS test" make test
+
+# 3. Project.
 log=$out/xcodebuild.log; ( umask 077; : > "$log" )
 xcodegen generate --spec project.yml --quiet
 auth=(-allowProvisioningUpdates -authenticationKeyPath "$p8" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
@@ -102,7 +107,7 @@ rm_distlogs() { local d; distlogs | while IFS= read -r d; do printf '%s\n' "$pre
 # Pin `rsync` to the system one for this run.
 rsbin=$(mktemp -d); ln -s /usr/bin/rsync "$rsbin/rsync"; PATH="$rsbin:$PATH"
 trap 'rm_distlogs; rm -rf "$rsbin"' EXIT
-run() { "$@" >>"$log" 2>&1 || { tail -n 30 "$log" | rg -v -F -e "$ASC_KEY_ID" -e "$ASC_ISSUER_ID" >&2; die "$2 failed (log: $log)"; }; }
+run() { "$@" >>"$log" 2>&1 || { tail_log "$log"; die "$2 failed (log: $log)"; }; }
 
 # 4. Archive.
 arc=$out/AgentHourglass.xcarchive

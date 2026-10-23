@@ -7,6 +7,8 @@
 #   rsync:      export runs with rsync resolving to /usr/bin/rsync. Xcode's IPA step runs /usr/bin/rsync
 #               (openrsync), which starts its local server as `rsync` from PATH; Homebrew rsync 3.x there
 #               rejects --extended-attributes and the export fails with "Copy failed".
+#   preflight-log: a failing preflight `make test` leaves its output in <out>/preflight.log (mode 600)
+#               and the failure message shows the log's tail and path.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 script=$here/testflight.sh
@@ -49,7 +51,14 @@ cat > "$bin/git" <<'EOF'
 case "$*" in "status --porcelain") ;; "rev-parse --short HEAD") echo abc1234 ;; *) exit 2 ;; esac
 EOF
 printf '#!/bin/bash\necho "1) X \\"Apple Distribution: Fake\\""\n' > "$bin/security"
-printf '#!/bin/bash\nexit 0\n' > "$bin/make"; cp "$bin/make" "$bin/xcodegen"
+printf '#!/bin/bash\nexit 0\n' > "$bin/xcodegen"
+# Fake make: FAKE_MAKE_FAIL=1 prints a marker line after some noise and fails.
+cat > "$bin/make" <<'EOF2'
+#!/bin/bash
+[ "${FAKE_MAKE_FAIL:-0}" = 1 ] || exit 0
+for i in $(seq 1 50); do echo "noise $i"; done
+echo "FAKE-MARKER killedHolderReleasesLock failed"; exit 2
+EOF2
 # Fake xcodebuild: like Xcode with -authenticationKey*, writes the key id into a $TMPDIR bundle.
 cat > "$bin/xcodebuild" <<'EOF'
 #!/bin/bash
@@ -89,6 +98,21 @@ run_flow() {
 run_flow distlogs-upload 0
 run_flow distlogs-dry-run 0 --dry-run
 FAKE_EXPORT_FAIL=1 run_flow distlogs-export-fail 1
+
+# preflight-log: the build number is pinned so the run's output dir is known.
+pb=261023.120000; pdir=$outroot/$pb; plog=$pdir/preflight.log
+[ ! -e "$pdir" ] || bad preflight-log "$pdir already exists"
+code=0; out=$(env PATH="$bin:$PATH" HOME="$t/home" ASC_ENV="$t/asc.env" TMPDIR="$t/" FAKE_MAKE_FAIL=1 \
+  BUILD_NUMBER_NOW=2026-10-23T12:00:00Z "$script" --dry-run 2>&1) || code=$?
+if [ $code = 0 ]; then bad preflight-log "exit 0"
+elif [[ "$out" != *"FAKE-MARKER killedHolderReleasesLock failed"* ]]; then bad preflight-log "no tail in output: $out"
+elif [[ "$out" != *"$plog"* && "$out" != *"build/testflight/$pb/preflight.log"* ]]; then bad preflight-log "no log path in output: $out"
+elif [ ! -f "$plog" ]; then bad preflight-log "no $plog"
+elif [ "$(stat -f '%Lp' "$plog")" != 600 ]; then bad preflight-log "log mode $(stat -f '%Lp' "$plog")"
+elif ! rg -q -F 'FAKE-MARKER' "$plog"; then bad preflight-log "marker not in log"
+elif [[ "$out" == *"$KEY"* || "$out" == *"$ISS"* ]]; then bad preflight-log "key id or issuer id in output"
+else pass preflight-log; fi
+rm -rf "$pdir"
 
 # relpath: a relative archive path from the caller's cwd.
 mkdir -p "$t/cwd"; PATH="$bin:$PATH" make_app "$t/cwd/rel.xcarchive/Products/Applications/AgentHourglass.app" 1.1 abc1234
