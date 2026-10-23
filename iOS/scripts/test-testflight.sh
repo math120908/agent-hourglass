@@ -20,6 +20,8 @@
 #               `xcrun altool --upload-package`; a failed verify never uploads; altool output is redacted.
 #   exportoptions-*: ExportOptions.plist keys are asserted (destination export, app-store-connect,
 #               internal TestFlight only, no version management, team).
+#   build-number-now-upload: upload mode refuses a pinned build number.
+#   All flows run with a GNU-style fake `stat` first on PATH; the mode checks must use /usr/bin/stat.
 #   preflight-log: a failing preflight `make test` leaves its output in <out>/preflight.log (mode 600)
 #               and the failure message shows the log's tail and path.
 set -euo pipefail
@@ -143,6 +145,8 @@ echo "Authenticating with key $FAKE_KEY issuer $FAKE_ISS"
 [ "${FAKE_UPLOAD_FAIL:-0}" = 1 ] && { echo "ERROR fake upload error"; exit 1; }
 echo "UPLOAD SUCCEEDED"
 EOF
+# Fake GNU stat first on PATH (coreutils gnubin): `stat -f` means filesystem status there.
+printf '#!/bin/bash\necho "  File: GNU stat"\n' > "$bin/stat"
 # Fake Homebrew rsync shadowing /usr/bin/rsync, as /opt/homebrew/bin does on this Mac.
 printf '#!/bin/bash\nexit 1\n' > "$bin/rsync"
 chmod +x "$bin"/*
@@ -194,6 +198,9 @@ RUN_WANT_MSG='tree changed during run' RUN_NO_CALL=xcrun FAKE_EXPORT_TOUCH=dirty
 # upload-*: upload mode exports an ipa, verifies it, then uploads that file with altool.
 RUN_WANT_MSG='get-task-allow' RUN_NO_CALL=xcrun FAKE_EXPORT_GTA=true run_flow upload-verifies-ipa-first 1
 RUN_WANT_MSG='fake upload error' FAKE_UPLOAD_FAIL=1 run_flow upload-fail-redacted 1
+
+# build-number-now-upload: BUILD_NUMBER_NOW is for --dry-run only.
+RUN_WANT_MSG='BUILD_NUMBER_NOW' RUN_NO_CALL=make BUILD_NUMBER_NOW=2026-10-23T12:00:00Z run_flow build-number-now-upload 1
 
 # exportoptions-*: --check-export-options guards the export plist's keys.
 eo_case() { # <name> <want 0|1> [PlistBuddy cmd]
@@ -257,7 +264,7 @@ if [ $code = 0 ]; then bad preflight-log "exit 0"
 elif [[ "$out" != *"FAKE-MARKER killedHolderReleasesLock failed"* ]]; then bad preflight-log "no tail in output: $out"
 elif [[ "$out" != *"$plog"* && "$out" != *"build/testflight/$pb/preflight.log"* ]]; then bad preflight-log "no log path in output: $out"
 elif [ ! -f "$plog" ]; then bad preflight-log "no $plog"
-elif [ "$(stat -f '%Lp' "$plog")" != 600 ]; then bad preflight-log "log mode $(stat -f '%Lp' "$plog")"
+elif [ "$(/usr/bin/stat -f '%Lp' "$plog")" != 600 ]; then bad preflight-log "log mode $(/usr/bin/stat -f '%Lp' "$plog")"
 elif ! rg -q -F 'FAKE-MARKER' "$plog"; then bad preflight-log "marker not in log"
 elif [[ "$out" == *"$KEY"* || "$out" == *"$ISS"* ]]; then bad preflight-log "key id or issuer id in output"
 else pass preflight-log; fi

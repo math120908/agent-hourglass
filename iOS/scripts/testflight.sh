@@ -112,10 +112,12 @@ case "${1:-}" in
 esac
 
 # 1. Preflight. Cheap checks first so a missing key fails in seconds.
+# A pinned build number would repeat across uploads; it is for --dry-run and tests only.
+[ $dry -eq 1 ] || [ -z "${BUILD_NUMBER_NOW:-}" ] || die "BUILD_NUMBER_NOW is only allowed with --dry-run"
 [ -z "$(git status --porcelain)" ] || die "dirty tree"
 asc=${ASC_ENV:-$HOME/.config/agent-hourglass/asc.env}
 [ -f "$asc" ] || die "missing App Store Connect env file (set ASC_ENV or create ~/.config/agent-hourglass/asc.env)"
-[ "$(stat -f '%Lp' "$asc")" = 600 ] || die "App Store Connect env file must be mode 600"
+[ "$(/usr/bin/stat -f '%Lp' "$asc")" = 600 ] || die "App Store Connect env file must be mode 600"
 # Parse asc.env, never source it: only ASC_KEY_ID=<10 [A-Z0-9]> and ASC_ISSUER_ID=<uuid>, each once, plus
 # blank and # comment lines. The values live in unexported shell vars; a caller's exported ASC_* are dropped.
 unset ASC_KEY_ID ASC_ISSUER_ID
@@ -134,7 +136,7 @@ unset line
 [ -n "$kid" ] && [ -n "$iss" ] || die "env file must define ASC_KEY_ID and ASC_ISSUER_ID"
 p8="$HOME/.appstoreconnect/private_keys/AuthKey_${kid}.p8"
 [ -f "$p8" ] || die "missing API key file in ~/.appstoreconnect/private_keys/"
-[ "$(stat -f '%Lp' "$p8")" = 600 ] || die "API key file must be mode 600"
+[ "$(/usr/bin/stat -f '%Lp' "$p8")" = 600 ] || die "API key file must be mode 600"
 check_export_options ExportOptions.plist
 security find-identity -v -p codesigning | rg -q 'Apple Distribution' || die "no Apple Distribution identity in the keychain"
 # 2. Version and output dir (before the test runs, which log into it).
@@ -171,8 +173,9 @@ rm_distlogs() { local d; distlogs | while IFS= read -r d; do printf '%s\n' "$pre
 # Xcode's IPA step runs /usr/bin/rsync (openrsync), which starts its local server as `rsync` from PATH.
 # Homebrew rsync 3.x there rejects --extended-attributes and export fails with only "Copy failed".
 # Pin `rsync` to the system one for this run.
+rsbin=
+trap 'rm_distlogs; [ -z "$rsbin" ] || rm -rf "$rsbin"' EXIT
 rsbin=$(mktemp -d); ln -s /usr/bin/rsync "$rsbin/rsync"; PATH="$rsbin:$PATH"
-trap 'rm_distlogs; rm -rf "$rsbin"' EXIT
 run() { "$@" >>"$log" 2>&1 || { tail_log "$log"; die "$2 failed (log: $log)"; }; }
 
 # 4. Archive.
