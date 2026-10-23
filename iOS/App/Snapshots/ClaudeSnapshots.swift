@@ -3,40 +3,39 @@ import SwiftUI
 import UsageCore
 
 enum ClaudeSnapshots {
+    /// Shape of a real pasted code; not a live value.
+    private static let code = "ac_6f1b9c2e7d4a5f3b8e0c#9d2f7a1c4e8b6d3f5a0c2e"
+    private static let incomplete = "ac_6f1b9c2e7d4a5f3b8e0c"
+
     static let scenes: [SnapshotScene] = [
-        scene("claude-signin", .browsing),
-        scene("claude-exchanging", .exchanging),
-        scene("claude-success", .success(AccountID(kind: .claude, remoteID: "demo"))),
-        scene("claude-failed", .failed("Sign-in didn't match. Try again.")),
-        paste("claude-paste-empty", ""),
-        paste("claude-paste-filled", "PASTE-CODE#STATE"),
+        scene("claude-initial", .browsing, ClaudeSignInForm()),
+        scene("claude-returned", .browsing, form(opened: true, hasStrings: true)),
+        scene("claude-ready", .browsing, form(opened: true, text: code)),
+        scene("claude-invalid", .browsing, form(opened: true, text: incomplete, showsInvalid: true)),
+        scene("claude-exchanging", .exchanging, form(opened: true, text: code)),
+        scene("claude-success", .success(AccountID(kind: .claude, remoteID: "demo")), form(opened: true)),
+        scene("claude-failed", .failed("That code has expired. Sign in again."), form(opened: true)),
+        scene("claude-ready-ax", .browsing, form(opened: true, text: code), typeSize: .accessibility2),
     ]
 
-    private static func paste(_ name: String, _ text: String) -> SnapshotScene {
-        SnapshotScene(name: name, size: .device) { theme in
-            AnyView(
-                NavigationStack {
-                    ClaudePasteView(model: ClaudeSignInModel(state: .browsing), text: text, onDone: { _ in })
-                }
-                .appTheme(theme)
-                .tint(GlassStyle.claude)
-            )
-        }
+    private static func form(opened: Bool, hasStrings: Bool = false, text: String = "", showsInvalid: Bool = false) -> ClaudeSignInForm {
+        ClaudeSignInForm(text: text, opened: opened, hasStrings: hasStrings, showsInvalid: showsInvalid)
     }
 
-    private static func scene(_ name: String, _ state: ClaudeSignInModel.State) -> SnapshotScene {
+    private static func scene(
+        _ name: String,
+        _ state: ClaudeSignInModel.State,
+        _ form: ClaudeSignInForm,
+        typeSize: DynamicTypeSize = .large,
+    ) -> SnapshotScene {
         SnapshotScene(name: name, size: .device) { theme in
             AnyView(
                 NavigationStack {
-                    ClaudeSignInSheet(
-                        model: ClaudeSignInModel(state: state),
-                        web: Rectangle().fill(Color.gray.opacity(0.3)),
-                        onPasteInstead: {},
-                        onDone: { _ in },
-                    )
+                    ClaudeSignInView(model: ClaudeSignInModel(state: state), form: form, onDone: { _ in })
                 }
                 .appTheme(theme)
                 .tint(GlassStyle.claude)
+                .dynamicTypeSize(typeSize)
             )
         }
     }
