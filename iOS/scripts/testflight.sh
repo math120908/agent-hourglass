@@ -1,18 +1,19 @@
 #!/bin/bash
 # Archive, verify, export and upload the iOS app to TestFlight (P6 Task 13).
-#   testflight.sh                 preflight, archive, verify, export with destination=upload
-#   testflight.sh --dry-run       same, but export with destination=export (no upload); checks the .ipa
+#   testflight.sh                 preflight, archive, verify, export a local .ipa, verify it, upload that .ipa
+#   testflight.sh --dry-run       same, without the upload
 #   testflight.sh --verify-archive <xcarchive> <build> <commit>   verify only (tests)
 #   testflight.sh --verify-ipa <ipa> <build> <commit>             verify an exported ipa (tests)
+#   testflight.sh --check-export-options <plist>                  assert the export plist keys (tests)
 # Env: ASC_ENV (default ~/.config/agent-hourglass/asc.env) holding exactly the lines ASC_KEY_ID=<id> and
 # ASC_ISSUER_ID=<uuid> (parsed, not sourced); key at ~/.appstoreconnect/private_keys/AuthKey_<id>.p8.
 # Both files must be mode 600.
-# Key ID, issuer ID and the key path are never echoed. Preflight test output goes to <out>/preflight.log, xcodebuild output to <out>/xcodebuild.log (both 600).
-# Upload fallback (manual, not automatic): if destination=upload fails after a good export, run
-#   xcrun altool --upload-app -f <out>/export/*.ipa -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+# Key ID, issuer ID and the key path are never echoed. Preflight test output goes to <out>/preflight.log,
+# xcodebuild and altool output to <out>/xcodebuild.log (both 600); failures show a redacted tail.
 set -euo pipefail
 # --verify-* paths are relative to the caller's cwd, not iOS/.
-if [ $# -ge 2 ] && { [ "$1" = --verify-archive ] || [ "$1" = --verify-ipa ]; } && [[ "$2" != /* ]]; then
+if [ $# -ge 2 ] && [[ "$1" == --verify-archive || "$1" == --verify-ipa || "$1" == --check-export-options ]] \
+  && [[ "$2" != /* ]]; then
   set -- "$1" "$PWD/$2" "${@:3}"
 fi
 cd "$(dirname "$0")/.."
@@ -85,12 +86,30 @@ verify_ipa() { # <ipa> <build> <commit>
   rm -rf "$tmp"
 }
 
-if [ "${1:-}" = --verify-archive ] || [ "${1:-}" = --verify-ipa ]; then
-  [ $# -eq 4 ] || die "usage: $1 <path> <build> <commit>"
-  if [ "$1" = --verify-archive ]; then verify_archive "$2" "$3" "$4"; else verify_ipa "$2" "$3" "$4"; fi
-  exit 0
-fi
-dry=0; [ "${1:-}" = --dry-run ] && dry=1
+# check_export_options <plist>: the keys the export relies on. destination export keeps the ipa local so
+# it is verified before upload; the upload then sends that same file.
+check_export_options() {
+  local kv k got
+  for kv in destination=export method=app-store-connect signingStyle=automatic "teamID=$TEAM" \
+    testFlightInternalTestingOnly=true manageAppVersionAndBuildNumber=false; do
+    k=${kv%%=*}; got=$(plist "$k" "$1")
+    [ "$got" = "${kv#*=}" ] || die "ExportOptions: $k is ${got:-missing}, want ${kv#*=}"
+  done
+}
+
+dry=0
+case "${1:-}" in
+  --verify-archive|--verify-ipa)
+    [ $# -eq 4 ] || die "usage: $1 <path> <build> <commit>"
+    if [ "$1" = --verify-archive ]; then verify_archive "$2" "$3" "$4"; else verify_ipa "$2" "$3" "$4"; fi
+    exit 0 ;;
+  --check-export-options)
+    [ $# -eq 2 ] || die "usage: $1 <plist>"
+    check_export_options "$2"; echo "testflight: export options ok"; exit 0 ;;
+  --dry-run) [ $# -eq 1 ] || die "usage: testflight.sh [--dry-run]"; dry=1 ;;
+  '') ;;
+  *) die "usage: testflight.sh [--dry-run]" ;;
+esac
 
 # 1. Preflight. Cheap checks first so a missing key fails in seconds.
 [ -z "$(git status --porcelain)" ] || die "dirty tree"
@@ -116,6 +135,7 @@ unset line
 p8="$HOME/.appstoreconnect/private_keys/AuthKey_${kid}.p8"
 [ -f "$p8" ] || die "missing API key file in ~/.appstoreconnect/private_keys/"
 [ "$(stat -f '%Lp' "$p8")" = 600 ] || die "API key file must be mode 600"
+check_export_options ExportOptions.plist
 security find-identity -v -p codesigning | rg -q 'Apple Distribution' || die "no Apple Distribution identity in the keychain"
 # 2. Version and output dir (before the test runs, which log into it).
 build=$(scripts/build-number.sh); head=$(git rev-parse HEAD); commit=$(git rev-parse --short "$head")
@@ -165,18 +185,19 @@ run xcodebuild archive -project AgentHourglassiOS.xcodeproj -scheme AgentHourgla
 # 5. Verify.
 verify_archive "$arc" "$build" "$commit"
 
-# 6. Export (+ upload).
-opts=ExportOptions.plist
-if [ $dry -eq 1 ]; then
-  opts=$out/ExportOptions-dry.plist; cp ExportOptions.plist "$opts"
-  /usr/libexec/PlistBuddy -c 'Set :destination export' "$opts"
-fi
+# 6. Export a local ipa and verify it.
+check_export_options ExportOptions.plist
 check_tree
-run xcodebuild -exportArchive -archivePath "$arc" -exportOptionsPlist "$opts" -exportPath "$out/export" "${auth[@]}"
+run xcodebuild -exportArchive -archivePath "$arc" -exportOptionsPlist ExportOptions.plist -exportPath "$out/export" \
+  "${auth[@]}"
+ipa=$(echo "$out"/export/*.ipa); [ -f "$ipa" ] || die "export produced no .ipa"
+verify_ipa "$ipa" "$build" "$commit"
 if [ $dry -eq 1 ]; then
-  ipa=$(echo "$out"/export/*.ipa); [ -f "$ipa" ] || die "export produced no .ipa"
-  verify_ipa "$ipa" "$build" "$commit"
   echo "testflight: dry run ok $version ($build) $commit"
-else
-  echo "testflight: uploaded $version ($build) $commit"
+  exit 0
 fi
+
+# 7. Upload the verified ipa. altool reads AuthKey_<id>.p8 from ~/.appstoreconnect/private_keys (checked above).
+check_tree
+run xcrun altool --upload-package "$ipa" --api-key "$kid" --api-issuer "$iss"
+echo "testflight: uploaded $version ($build) $commit"

@@ -16,6 +16,10 @@
 #               lines (plus blanks and comments). Anything else exits 1 before make or xcodebuild run,
 #               without executing it; the values never reach a child's environment.
 #   tree-*:     a tracked change or a new HEAD during preflight or archive exits 1 before the next xcodebuild.
+#   upload-*:   upload mode exports a local ipa, verifies it, and uploads that same file with
+#               `xcrun altool --upload-package`; a failed verify never uploads; altool output is redacted.
+#   exportoptions-*: ExportOptions.plist keys are asserted (destination export, app-store-connect,
+#               internal TestFlight only, no version management, team).
 #   preflight-log: a failing preflight `make test` leaves its output in <out>/preflight.log (mode 600)
 #               and the failure message shows the log's tail and path.
 set -euo pipefail
@@ -30,7 +34,7 @@ t=$(mktemp -d); trap 'rm -rf "$t"' EXIT
 bin=$t/bin; mkdir -p "$bin" "$t/home/.appstoreconnect/private_keys"
 KEY=FAKEKEY123; ISS=0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0
 printf '# App Store Connect API key\n\nASC_KEY_ID=%s\nASC_ISSUER_ID=%s\n' "$KEY" "$ISS" > "$t/asc.env"; chmod 600 "$t/asc.env"
-export FAKE_CALLS=$t/calls
+export FAKE_CALLS=$t/calls FAKE_KEY=$KEY FAKE_ISS=$ISS
 : > "$t/home/.appstoreconnect/private_keys/AuthKey_$KEY.p8"; chmod 600 "$t/home/.appstoreconnect/private_keys/AuthKey_$KEY.p8"
 
 # sign_fake <bundle> <dev|dist> <bundle id>: the signature the fake codesign reports for <bundle>, kept as
@@ -128,6 +132,17 @@ case "$1" in
     fi ;;
 esac
 EOF
+# Fake xcrun altool: records the call (ids replaced by KEYID / ISSID), prints the key id and issuer id like
+# a chatty uploader, and fails with FAKE_UPLOAD_FAIL=1.
+cat > "$bin/xcrun" <<'EOF'
+#!/bin/bash
+[ "$1" = altool ] || exit 2
+a="$*"; a=${a//$FAKE_KEY/KEYID}; a=${a//$FAKE_ISS/ISSID}; echo "xcrun $a" >> "$FAKE_CALLS"
+[ "$2" = --upload-package ] && [ -f "$3" ] || { echo "no package"; exit 2; }
+echo "Authenticating with key $FAKE_KEY issuer $FAKE_ISS"
+[ "${FAKE_UPLOAD_FAIL:-0}" = 1 ] && { echo "ERROR fake upload error"; exit 1; }
+echo "UPLOAD SUCCEEDED"
+EOF
 # Fake Homebrew rsync shadowing /usr/bin/rsync, as /opt/homebrew/bin does on this Mac.
 printf '#!/bin/bash\nexit 1\n' > "$bin/rsync"
 chmod +x "$bin"/*
@@ -160,8 +175,8 @@ run_flow() {
   elif [ -n "${RUN_CALL:-}" ] && ! rg -q -F -- "$RUN_CALL" "$FAKE_CALLS"; then bad "$name" "did not call $RUN_CALL"
   else pass "$name"; fi
 }
-run_flow distlogs-upload 0
-run_flow distlogs-dry-run 0 --dry-run
+RUN_CALL='/export/AgentHourglass.ipa --api-key KEYID --api-issuer ISSID' run_flow distlogs-upload 0
+RUN_NO_CALL=xcrun run_flow distlogs-dry-run 0 --dry-run
 FAKE_EXPORT_FAIL=1 run_flow distlogs-export-fail 1
 RUN_TMPDIR=other run_flow distlogs-tmpdir-override 0 --dry-run
 
@@ -174,6 +189,26 @@ RUN_WANT_MSG='tree changed during run' RUN_NO_CALL='xcodebuild -exportArchive' F
   run_flow tree-dirty-in-archive 1
 RUN_WANT_MSG='HEAD changed during run' RUN_NO_CALL='xcodebuild -exportArchive' FAKE_ARCHIVE_TOUCH=moved \
   run_flow tree-head-moved-in-archive 1 --dry-run
+RUN_WANT_MSG='tree changed during run' RUN_NO_CALL=xcrun FAKE_EXPORT_TOUCH=dirty run_flow tree-dirty-in-export 1
+
+# upload-*: upload mode exports an ipa, verifies it, then uploads that file with altool.
+RUN_WANT_MSG='get-task-allow' RUN_NO_CALL=xcrun FAKE_EXPORT_GTA=true run_flow upload-verifies-ipa-first 1
+RUN_WANT_MSG='fake upload error' FAKE_UPLOAD_FAIL=1 run_flow upload-fail-redacted 1
+
+# exportoptions-*: --check-export-options guards the export plist's keys.
+eo_case() { # <name> <want 0|1> [PlistBuddy cmd]
+  local f=$t/eo-$1.plist code=0 out
+  cp "$here/../ExportOptions.plist" "$f"; [ -z "${3:-}" ] || /usr/libexec/PlistBuddy -c "$3" "$f" >/dev/null
+  out=$("$script" --check-export-options "$f" 2>&1) || code=$?
+  if [ $code = "$2" ]; then pass "$1"; else bad "$1" "exit $code want $2: $out"; fi
+}
+eo_case exportoptions-ok 0
+eo_case exportoptions-internal-only 1 'Set :testFlightInternalTestingOnly false'
+eo_case exportoptions-internal-only-missing 1 'Delete :testFlightInternalTestingOnly'
+eo_case exportoptions-destination 1 'Set :destination upload'
+eo_case exportoptions-method 1 'Set :method debugging'
+eo_case exportoptions-manage-version 1 'Set :manageAppVersionAndBuildNumber true'
+eo_case exportoptions-team 1 'Set :teamID OTHERTEAM1'
 
 # asc_case <name> <asc.env content> [env...]: must exit 1 before any make/xcodebuild call, no marker.
 asc_case() {
