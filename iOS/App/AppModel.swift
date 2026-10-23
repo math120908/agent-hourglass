@@ -98,13 +98,34 @@ final class AppModel {
         await withBackgroundTask("manual-poll") { [self] in await poller.refreshAll(force: true) }
     }
 
-    /// Called after `service.addClaude/addCodex` commits a new account.
-    func accountAdded(_ id: AccountID) async {
+    /// Runs `commit` (`service.addClaude/addCodex`) and shows the new account. The service polls the
+    /// account before `entries` knows it, so results for unknown ids are held until the add ends.
+    func add(_ commit: () async throws -> AccountID) async throws -> AccountID {
+        addsInFlight += 1
+        let id: AccountID
+        do { id = try await commit() } catch {
+            finishAdd()
+            throw error
+        }
         await reloadEntries()
         if let e = entries.first(where: { $0.id == id }) {
             seed(e, interval: appState.effectiveInterval, at: now())
         }
+        finishAdd()
         WidgetReloader.reloadAll()
+        return id
+    }
+
+    @ObservationIgnored private var addsInFlight = 0
+    @ObservationIgnored private var heldResults: [AccountID: FetchOutcome] = [:]
+
+    /// Replays held results once no add is running; any still unknown are dropped like a removed account's.
+    private func finishAdd() {
+        addsInFlight -= 1
+        guard addsInFlight == 0 else { return }
+        let held = heldResults
+        heldResults = [:]
+        for (id, outcome) in held { deliver(id, outcome) }
     }
 
     func rename(_ id: AccountID, to name: String) async throws {
@@ -167,9 +188,11 @@ final class AppModel {
     }
 
     /// Poller result sink. A result for an account no longer in `entries` (removed while its fetch
-    /// was in flight) is dropped, and the snapshot the client just wrote is deleted again.
+    /// was in flight) is dropped, and the snapshot the client just wrote is deleted again. During an
+    /// add it is held instead: the new account is not in `entries` yet.
     func deliver(_ id: AccountID, _ outcome: FetchOutcome) {
         guard entries.contains(where: { $0.id == id }) else {
+            if addsInFlight > 0 { heldResults[id] = outcome; return }
             try? env.shared.cache.remove(id)
             return
         }

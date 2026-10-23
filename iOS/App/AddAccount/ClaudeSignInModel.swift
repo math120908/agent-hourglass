@@ -53,8 +53,8 @@ import UsageCore
         state = .exchanging
         do {
             let (cred, remoteID) = try await flow.exchange(code: code, pkce: expected, redirectURI: ClaudePKCEFlow.manualRedirectURI)
-            let id = try await app.service.addClaude(credential: cred, remoteID: remoteID)
-            await app.accountAdded(id)
+            let service = app.service
+            let id = try await app.add { try await service.addClaude(credential: cred, remoteID: remoteID) }
             state = .success(id)
         } catch AccountServiceError.differentAccount {
             state = .failed("That was a different account")
