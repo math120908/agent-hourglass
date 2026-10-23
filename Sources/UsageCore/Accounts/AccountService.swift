@@ -1,9 +1,11 @@
 import Foundation
+import os
 
 public enum AccountServiceError: Error, Equatable {
     case signInInProgress
     case differentAccount
     case unknownAccount
+    case missingAccountID
 }
 
 /// Orchestrates AccountRegistry + CredentialStore + Poller (spec §4, §5).
@@ -22,7 +24,9 @@ public actor AccountService {
     private let ghTokens: (any CopilotTokenSource)?
     private let http: HTTPClient
     private let codexAuth: (any CodexLoginSource)?
+    private let shared: SharedAccountState?
     private var signingIn = false
+    private static let log = Logger(subsystem: "cc.kuoc.agent-hourglass", category: "AccountService")
 
     public init(
         registry: AccountRegistry,
@@ -34,8 +38,10 @@ public actor AccountService {
         now: @escaping @Sendable () -> Date = { Date() },
         ghTokens: (any CopilotTokenSource)? = nil,
         http: HTTPClient = HTTPClient(),
-        codexAuth: (any CodexLoginSource)? = nil
+        codexAuth: (any CodexLoginSource)? = nil,
+        shared: SharedAccountState? = nil
     ) {
+        self.shared = shared
         self.codexAuth = codexAuth
         self.ghTokens = ghTokens
         self.http = http
@@ -57,7 +63,16 @@ public actor AccountService {
     public func addClaude(loginHint: String?) async throws -> AccountID {
         let (cred, remoteID) = try await signIn(loginHint, nil)
         let id = AccountID(kind: .claude, remoteID: remoteID)
-        try await commit(cred, id: id)
+        try await commitClaude(cred, id: id)
+        return id
+    }
+
+    /// Adds a Claude account whose credential was obtained elsewhere (iOS WKWebView login). No sign-in;
+    /// an id already in the registry is a re-auth. Writes Keychain → registry → one fetch.
+    @discardableResult
+    public func addClaude(credential: Credential, remoteID: String) async throws -> AccountID {
+        let id = AccountID(kind: .claude, remoteID: remoteID)
+        try await commitClaude(credential, id: id)
         return id
     }
 
@@ -115,6 +130,18 @@ public actor AccountService {
         return id
     }
 
+    /// Adds a Codex account whose credential came from the device-code login (iOS). The credential's
+    /// `remoteAccountID` is the stable id; an id already in the registry is a re-auth.
+    @discardableResult
+    public func addCodex(credential: Credential) async throws -> AccountID {
+        guard credential.kind == .codex, let remote = credential.remoteAccountID, !remote.isEmpty else {
+            throw AccountServiceError.missingAccountID
+        }
+        let id = AccountID(kind: .codex, remoteID: remote)
+        try await commit(credential, id: id, kind: .codex, defaultName: { $0 == 1 ? "Codex" : "Codex #\($0)" }, remoteLogin: nil)
+        return id
+    }
+
     /// Adds the read-only Claude Code (local) account. Writes only the registry; the first poll reads the Keychain.
     @discardableResult
     public func addClaudeCodeLocal() async throws -> AccountID {
@@ -149,14 +176,24 @@ public actor AccountService {
         let remote = String(id.rawValue.dropFirst(entry.kind.rawValue.count + 1))
         let (cred, remoteID) = try await signIn(entry.remoteLogin, remote)
         guard AccountID(kind: entry.kind, remoteID: remoteID) == id else { throw AccountServiceError.differentAccount }
-        try await commit(cred, id: id)
+        try await commitClaude(cred, id: id)
     }
 
-    /// Deletes credential, registry entry (promoting the next menu bar account) and history.
+    /// Deletes every trace of the account: Keychain item (any kind; a missing item is a no-op),
+    /// shared snapshot and backoff files, registry entry (promoting the next menu bar account), history.
     public func remove(_ id: AccountID) async throws {
         await poller.remove(client: id)
         // Our own service only; Claude Code's item is never touched.
-        if id.kind == .claude, !id.isClaudeCodeLocal { try store.delete(id) }
+        if !id.isClaudeCodeLocal {
+            do { try store.delete(id) } catch {
+                Self.log.error("keychain delete failed kind=\(id.kind?.rawValue ?? "unknown", privacy: .public) error=\(String(describing: type(of: error)), privacy: .public)")
+                throw error
+            }
+        }
+        if let shared {
+            try shared.cache.remove(id)
+            try shared.backoff.remove(id)
+        }
         try await registry.remove(id)
         try await history.deleteAccount(id)
     }
@@ -176,17 +213,29 @@ public actor AccountService {
         return try await claudeLogin(hint, expected)
     }
 
-    private func commit(_ cred: Credential, id: AccountID) async throws {
+    private func commitClaude(_ cred: Credential, id: AccountID) async throws {
+        try await commit(cred, id: id, kind: .claude, defaultName: { "Claude #\($0)" }, remoteLogin: nil)
+    }
+
+    /// Keychain → registry → poller. Number = position among accounts of `kind`; an existing entry keeps
+    /// displayName/order/addedAt; a non-nil `remoteLogin` overrides the stored one.
+    private func commit(
+        _ cred: Credential,
+        id: AccountID,
+        kind: ProviderKind,
+        defaultName: (Int) -> String,
+        remoteLogin: String?
+    ) async throws {
         let accounts = await registry.accounts()
         let existing = accounts.first { $0.id == id }
-        let number = existing.map { e in accounts.filter { $0.kind == .claude && $0.order <= e.order }.count }
-            ?? accounts.filter { $0.kind == .claude }.count + 1
-        try store.write(cred, for: id, label: Self.keychainLabel(kind: .claude, number: number))
+        let number = existing.map { e in accounts.filter { $0.kind == kind && $0.order <= e.order }.count }
+            ?? accounts.filter { $0.kind == kind }.count + 1
+        try store.write(cred, for: id, label: Self.keychainLabel(kind: kind, number: number))
         try await registry.upsert(AccountEntry(
             id: id,
-            kind: .claude,
-            displayName: existing?.displayName ?? "Claude #\(number)",
-            remoteLogin: existing?.remoteLogin,
+            kind: kind,
+            displayName: existing?.displayName ?? defaultName(number),
+            remoteLogin: remoteLogin ?? existing?.remoteLogin,
             order: existing?.order ?? 0,
             addedAt: existing?.addedAt ?? now(),
             status: "ok"
