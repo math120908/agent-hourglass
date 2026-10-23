@@ -25,6 +25,7 @@ enum DeviceCodeSnapshots {
                     DeviceCodeSheet(model: DeviceCodeFlowModel(title: "Add Codex account", state: state), provider: .codex) { _ in }
                 }
                 .appTheme(theme)
+                .tint(GlassStyle.codex)
             )
         }
     }

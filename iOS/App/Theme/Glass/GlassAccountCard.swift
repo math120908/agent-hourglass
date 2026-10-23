@@ -62,7 +62,7 @@ struct GlassAccountCard: View {
             if isExpanded {
                 VStack(spacing: 0) {
                     ForEach(Array(meters.enumerated()), id: \.offset) { _, meter in
-                        Divider().opacity(0.6)
+                        GlassDivider()
                         MeterView(
                             meter: meter,
                             settings: settings,
@@ -75,10 +75,10 @@ struct GlassAccountCard: View {
                         .padding(.vertical, 10)
                     }
                     if let spend = c.spend {
-                        Divider().opacity(0.6)
+                        GlassDivider()
                         spendSection(spend)
                     }
-                    Divider().opacity(0.6)
+                    GlassDivider()
                     Text(ageText)
                         .font(.system(size: 11).monospacedDigit())
                         .glassTone()
@@ -89,6 +89,7 @@ struct GlassAccountCard: View {
                 .transition(.opacity)
             }
         }
+        .opacity(c.isDimmed && action != .offline ? 0.82 : 1)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(.thinMaterial)
@@ -103,7 +104,6 @@ struct GlassAccountCard: View {
                 .strokeBorder(Color.primary.opacity(0.07), lineWidth: 0.5)
         )
         .shadow(color: .black.opacity(0.06), radius: 1.5, y: 0.5)
-        .opacity(c.isDimmed && action != .offline ? 0.82 : 1)
     }
 
     // MARK: Compact row

@@ -9,7 +9,7 @@ enum ClaudeSnapshots {
         scene("claude-success", .success(AccountID(kind: .claude, remoteID: "demo"))),
         scene("claude-failed", .failed("Sign-in didn't match. Try again.")),
         paste("claude-paste-empty", ""),
-        paste("claude-paste-filled", "q8Zt3vNcXw2LpR7kYbHf#Ue4mJ9sTa1WdGx6"),
+        paste("claude-paste-filled", "PASTE-CODE#STATE"),
     ]
 
     private static func paste(_ name: String, _ text: String) -> SnapshotScene {
@@ -19,6 +19,7 @@ enum ClaudeSnapshots {
                     ClaudePasteView(model: ClaudeSignInModel(state: .browsing), text: text, onDone: { _ in })
                 }
                 .appTheme(theme)
+                .tint(GlassStyle.claude)
             )
         }
     }
@@ -35,6 +36,7 @@ enum ClaudeSnapshots {
                     )
                 }
                 .appTheme(theme)
+                .tint(GlassStyle.claude)
             )
         }
     }

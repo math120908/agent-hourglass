@@ -44,6 +44,7 @@ struct ClaudePasteView: View {
             }
             Section { status }
         }
+        .tint(GlassStyle.claude)
         .navigationTitle("Paste code")
         .navigationBarTitleDisplayMode(.inline)
     }

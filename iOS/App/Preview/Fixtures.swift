@@ -22,6 +22,21 @@ enum Fixtures {
     static let eevee = AccountID(kind: .claude, remoteID: "eevee")
     static let mewtwo = AccountID(kind: .codex, remoteID: "acct-synthetic")
 
+    /// Snapshot-only extras shared by both card catalogs.
+    static let jigglypuff = AccountID(kind: .claude, remoteID: "jigglypuff")
+    static let ditto = AccountID(kind: .claude, remoteID: "ditto")
+
+    static func claudeExtra(_ id: AccountID, _ name: String, order: Int) -> AccountEntry {
+        AccountEntry(id: id, kind: .claude, displayName: name, remoteLogin: nil, order: order, addedAt: now, status: "active")
+    }
+
+    /// Jigglypuff reuses Snorlax's usage (and Max plan) under its own id.
+    static var jigglypuffSnapshot: UsageSnapshot {
+        var s = snapshots()[snorlax]!
+        s.accountID = jigglypuff
+        return s
+    }
+
     static var entries: [AccountEntry] {
         [
             AccountEntry(id: snorlax, kind: .claude, displayName: "Snorlax", remoteLogin: nil, order: 0, addedAt: now, status: "active"),

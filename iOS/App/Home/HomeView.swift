@@ -58,6 +58,39 @@ struct HomeContent: View {
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
+                Group {
+                    if entries.isEmpty {
+                        ContentUnavailableView {
+                            Label("No accounts", systemImage: "person.crop.circle.badge.plus")
+                        } actions: {
+                            addMenu
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        list
+                    }
+                }
+                .onChange(of: focused, initial: true) { _, id in
+                    guard let id else { return }
+                    collapsed.remove(id)
+                    withAnimation { proxy.scrollTo(id, anchor: .top) }
+                    focused = nil
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background { backdrop.ignoresSafeArea() }
+            .navigationTitle("Usage")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { addMenu }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: openSettings) { Image(systemName: "gearshape") }
+                        .accessibilityLabel("Settings")
+                }
+            }
+        }
+    }
+
+    private var list: some View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         if !entries.isEmpty {
@@ -69,33 +102,7 @@ struct HomeContent: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 24)
                 }
-                .overlay {
-                    if entries.isEmpty {
-                        ContentUnavailableView {
-                            Label("No accounts", systemImage: "person.crop.circle.badge.plus")
-                        } actions: {
-                            addMenu
-                        }
-                    }
-                }
                 .refreshable { await refresh() }
-                .onChange(of: focused, initial: true) { _, id in
-                    guard let id else { return }
-                    collapsed.remove(id)
-                    withAnimation { proxy.scrollTo(id, anchor: .top) }
-                    focused = nil
-                }
-            }
-            .background { backdrop.ignoresSafeArea() }
-            .navigationTitle("Usage")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { addMenu }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: openSettings) { Image(systemName: "gearshape") }
-                        .accessibilityLabel("Settings")
-                }
-            }
-        }
     }
 
     @ViewBuilder private var backdrop: some View {

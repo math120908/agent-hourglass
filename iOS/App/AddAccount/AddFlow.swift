@@ -12,6 +12,13 @@ enum AddFlow: Identifiable, Equatable {
         }
     }
 
+    var kind: ProviderKind {
+        switch self {
+        case .claude: .claude
+        case .codex: .codex
+        }
+    }
+
     static func signIn(for entry: AccountEntry) -> AddFlow? {
         switch entry.kind {
         case .claude: .claude(loginHint: entry.remoteLogin)
@@ -28,10 +35,13 @@ struct AddFlowSheet: View {
     let onDone: (AccountID) -> Void
 
     var body: some View {
-        switch flow {
-        case .claude(let hint): ClaudeFlowView(model: ClaudeSignInModel(app: app, loginHint: hint), onDone: onDone)
-        case .codex: CodexFlowView(model: CodexAddFlow.model(app: app), onDone: onDone)
+        Group {
+            switch flow {
+            case .claude(let hint): ClaudeFlowView(model: ClaudeSignInModel(app: app, loginHint: hint), onDone: onDone)
+            case .codex: CodexFlowView(model: CodexAddFlow.model(app: app), onDone: onDone)
+            }
         }
+        .tint(GlassStyle.accent(flow.kind))
     }
 }
 

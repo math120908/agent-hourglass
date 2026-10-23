@@ -8,7 +8,7 @@ extension CardSnapshots {
             AnyView(InstrumentList(rows: [InstrumentList.Row(entry: Fixtures.entries[0], expanded: true)]))
         },
         SnapshotScene(name: "card-instrument-collapsed", size: .fitting(width: 402), themes: [.instrument]) { _ in
-            AnyView(InstrumentList(rows: Fixtures.entries.map { InstrumentList.Row(entry: $0) }))
+            AnyView(InstrumentList(rows: InstrumentList.collapsedRows))
         },
         SnapshotScene(name: "card-instrument-states", size: .fitting(width: 402), themes: [.instrument]) { _ in
             AnyView(InstrumentList(rows: InstrumentList.stateRows))
@@ -27,35 +27,23 @@ private struct InstrumentList: View {
 
     var rows: [Row]
 
+    static var collapsedRows: [Row] {
+        Fixtures.entries.map { Row(entry: $0) }
+            + [Row(entry: Fixtures.claudeExtra(Fixtures.jigglypuff, "Jigglypuff", order: 3), snapshot: .some(Fixtures.jigglypuffSnapshot))]
+    }
+
     static var stateRows: [Row] {
         let e = Fixtures.entries
         let snaps = Fixtures.snapshots()
         var stale = snaps[Fixtures.snorlax]!
         stale.fetchedAt = Fixtures.now.addingTimeInterval(-23 * 60)
-        let pika = AccountEntry(
-            id: AccountID(kind: .claude, remoteID: "pikachu-dev"),
-            kind: .claude,
-            displayName: "pikachu-dev",
-            remoteLogin: nil,
-            order: 3,
-            addedAt: Fixtures.now,
-            status: "active"
-        )
-        let empty = AccountEntry(
-            id: AccountID(kind: .codex, remoteID: "psyduck"),
-            kind: .codex,
-            displayName: "Psyduck",
-            remoteLogin: nil,
-            order: 4,
-            addedAt: Fixtures.now,
-            status: "active"
-        )
+        let jiggly = Fixtures.claudeExtra(Fixtures.jigglypuff, "Jigglypuff", order: 3)
         return [
             Row(entry: e[0], status: .stale, snapshot: .some(stale)),
             Row(entry: e[1], status: .needsLogin),
             Row(entry: e[2], status: .rateLimited(retryAt: Fixtures.now.addingTimeInterval(25 * 60))),
-            Row(entry: pika, status: .schemaError, snapshot: .some(nil)),
-            Row(entry: empty, status: .noData, snapshot: .some(nil)),
+            Row(entry: jiggly, status: .schemaError, snapshot: .some(Fixtures.jigglypuffSnapshot)),
+            Row(entry: Fixtures.claudeExtra(Fixtures.ditto, "Ditto", order: 4), status: .noData, snapshot: .some(nil)),
         ]
     }
 
@@ -76,7 +64,7 @@ private struct InstrumentList: View {
                 )
             }
         }
-        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
         .padding(8)
     }
 }

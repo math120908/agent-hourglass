@@ -14,15 +14,10 @@ enum GlassStyle {
         tint == critical ? Color(red: 1.0, green: 0.93, blue: 0.91) : Color(red: 1.0, green: 0.92, blue: 0.74)
     }
 
-    /// Dark-mode text level for a severity: saturated enough that amber / red still read as severity.
+    /// Dark-mode text level for a severity: the provider accent (same hue as the bar fill), lifted amber / red.
     static func darkAccent(_ severity: Meter.Severity, _ kind: ProviderKind) -> Color {
         switch severity {
-        case .normal:
-            switch kind {
-            case .claude: Color(red: 1.0, green: 0.72, blue: 0.56)
-            case .copilot: Color(red: 0.88, green: 0.82, blue: 1.0)
-            case .codex: Color(red: 0.72, green: 0.96, blue: 0.93)
-            }
+        case .normal: accent(kind)
         case .warning: Color(red: 1.0, green: 0.82, blue: 0.45)
         case .critical: Color(red: 1.0, green: 0.66, blue: 0.62)
         }
@@ -42,6 +37,17 @@ enum GlassStyle {
         case .warning: warning
         case .critical: critical
         }
+    }
+}
+
+/// Hairline section divider; the system `Divider` vanishes on the dark glass card.
+struct GlassDivider: View {
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        Rectangle()
+            .fill(scheme == .dark ? Color.white.opacity(0.16) : Color.primary.opacity(0.12))
+            .frame(height: 0.5)
     }
 }
 
