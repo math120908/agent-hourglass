@@ -63,6 +63,16 @@ import UsageCore
         }
     }
 
+    /// Accepts `code#state` or the full callback URL, with surrounding whitespace trimmed.
+    func receivePasted(_ text: String) async {
+        guard state == .browsing else { return }
+        guard let parsed = ClaudeManualCallback.parse(pasted: text.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            state = .failed("That code isn't complete")
+            return
+        }
+        await receive(code: parsed.code, state: parsed.state)
+    }
+
     func restart() {
         let p = PKCE.make()
         pkce = p
