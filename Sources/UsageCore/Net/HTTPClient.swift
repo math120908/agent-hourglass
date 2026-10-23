@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 public protocol HTTPTransport: Sendable {
     func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse)
@@ -38,6 +39,7 @@ public final class HTTPClient: Sendable {
     public static let noRedirectHosts: Set<String> = ["auth.openai.com"]
 
     let configuration: URLSessionConfiguration
+    private static let log = Logger(subsystem: "cc.kuoc.agent-hourglass", category: "HTTPClient")
     private let transport: HTTPTransport
 
     public init(transport: HTTPTransport? = nil, extraProtocolClasses: [AnyClass] = []) {
@@ -72,6 +74,8 @@ public final class HTTPClient: Sendable {
         } catch let error as ProviderError {
             throw error
         } catch {
+            let code = (error as? URLError)?.code.rawValue ?? 0
+            Self.log.error("transport error host=\(host, privacy: .public) urlError=\(code, privacy: .public) type=\(String(describing: type(of: error)), privacy: .public)")
             throw ProviderError.transport(host: host)
         }
 

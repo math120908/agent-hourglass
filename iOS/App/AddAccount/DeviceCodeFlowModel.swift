@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 import UsageCore
 
 /// Drives a device-code sign-in: `start` fetches a prompt, `complete` polls until the user approves.
@@ -52,6 +53,17 @@ import UsageCore
         task = nil
     }
 
+    private nonisolated static let log = Logger(subsystem: "cc.kuoc.agent-hourglass", category: "DeviceCodeFlow")
+
+    /// Type name plus, for the secret-free error enums, the case (status codes, hosts, key names).
+    nonisolated static func describe(_ error: Error) -> String {
+        switch error {
+        case let e as ProviderError: "ProviderError \(e.description)"
+        case let e as DeviceFlowError: "DeviceFlowError \(e)"
+        default: String(describing: type(of: error))
+        }
+    }
+
     private enum Outcome: Sendable {
         case done(AccountID)
         case expired
@@ -72,7 +84,10 @@ import UsageCore
         let remaining = prompt.expiresAt.timeIntervalSince(now())
         let outcome: Outcome = await withTaskGroup(of: Outcome.self) { group in
             group.addTask {
-                do { return .done(try await complete(prompt)) } catch { return .failed }
+                do { return .done(try await complete(prompt)) } catch {
+                    Self.log.error("device login complete failed: \(Self.describe(error), privacy: .public)")
+                    return .failed
+                }
             }
             group.addTask {
                 if remaining > 0 { try? await Task.sleep(for: .seconds(remaining)) }
