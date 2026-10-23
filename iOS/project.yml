@@ -1,0 +1,91 @@
+name: AgentHourglassiOS
+options:
+  bundleIdPrefix: cc.kuoc
+  deploymentTarget:
+    iOS: "26.0"
+packages:
+  UsageCore:
+    path: ..
+settings:
+  base:
+    DEVELOPMENT_TEAM: R7V5X99HYA
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "6.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    MARKETING_VERSION: 0.1.0
+    CURRENT_PROJECT_VERSION: 1
+targets:
+  AgentHourglassiOS:
+    type: application
+    platform: iOS
+    sources: [App, Shared]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cc.kuoc.agent-hourglass.ios
+        PRODUCT_NAME: AgentHourglass
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    dependencies:
+      - package: UsageCore
+        product: UsageCore
+      - target: AgentHourglassWidget
+        embed: true
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Agent Hourglass
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        ITSAppUsesNonExemptEncryption: false
+        AHKeychainAccessGroup: $(TeamIdentifierPrefix)cc.kuoc.agent-hourglass.shared
+        CFBundleURLTypes:
+          - CFBundleURLName: cc.kuoc.agent-hourglass.ios
+            CFBundleURLSchemes: [agenthourglass]
+    entitlements:
+      path: App/AgentHourglass.entitlements
+      properties:
+        com.apple.security.application-groups: [group.cc.kuoc.agent-hourglass]
+        keychain-access-groups: ["$(TeamIdentifierPrefix)cc.kuoc.agent-hourglass.shared"]
+  AgentHourglassWidget:
+    type: app-extension
+    platform: iOS
+    sources: [Widget, Shared]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cc.kuoc.agent-hourglass.ios.widget
+    dependencies:
+      - package: UsageCore
+        product: UsageCore
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: Agent Hourglass
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+        AHKeychainAccessGroup: $(TeamIdentifierPrefix)cc.kuoc.agent-hourglass.shared
+    entitlements:
+      path: Widget/AgentHourglassWidget.entitlements
+      properties:
+        com.apple.security.application-groups: [group.cc.kuoc.agent-hourglass]
+        keychain-access-groups: ["$(TeamIdentifierPrefix)cc.kuoc.agent-hourglass.shared"]
+  AgentHourglassiOSTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [Tests]
+    settings:
+      base:
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/AgentHourglass.app/AgentHourglass
+        BUNDLE_LOADER: $(TEST_HOST)
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: AgentHourglassiOS
+schemes:
+  AgentHourglassiOS:
+    build:
+      targets:
+        AgentHourglassiOS: all
+    test:
+      targets: [AgentHourglassiOSTests]
