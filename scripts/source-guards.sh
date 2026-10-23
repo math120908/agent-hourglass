@@ -26,10 +26,6 @@ out=$(rg -n 'rawValue, privacy: \.public' Sources App 2>/dev/null)
 # Error text can embed file paths and Keychain attributes: log type(of:) and the code only (S2).
 out=$(rg -n 'String\(describing: error\), privacy: \.public' Sources App iOS 2>/dev/null)
 [ -n "$out" ] && report "raw error logged with privacy: .public (log type(of: error) + code):" "$out"
-# Sign-in web view: no WKUIDelegate, so new-window requests (target=_blank, window.open) are dropped
-# and every load, including server 3xx redirects, re-enters decidePolicyFor navigationAction (S4).
-out=$(rg -n -e 'uiDelegate\s*=' -e 'createWebViewWith' iOS/App/AddAccount 2>/dev/null)
-[ -n "$out" ] && report "WKUIDelegate / createWebViewWith in iOS/App/AddAccount (sign-in policy bypass):" "$out"
 # History db gets an explicit file-protection class after open, not only the inherited one (N9).
 rg -q 'SnapshotCache\.protect' Sources/UsageHistory/History/HistoryStore.swift || report "HistoryStore does not call SnapshotCache.protect (N9):" "Sources/UsageHistory/History/HistoryStore.swift"
 
@@ -64,15 +60,14 @@ out=$(rg -l '^import (GRDB|UsageHistory)' Sources/UsageCore iOS 2>/dev/null)
 out=$(rg -n 'UsageHistory|GRDB' iOS/project.yml 2>/dev/null)
 [ -n "$out" ] && report "iOS target depends on UsageHistory/GRDB:" "$out"
 
-# iOS sign-in surfaces: non-persistent web store, no JS bridge, ephemeral auth session, no dump(.
+# iOS sign-in surfaces: no embedded web view at all (Claude signs in through an ephemeral
+# ASWebAuthenticationSession plus paste), no programmatic pasteboard reads (only the system
+# PasteButton reads; writes and hasStrings are fine), no dump(.
 IOSSRC=(iOS/App iOS/Widget iOS/Shared)
-out=$(rg -n -g '*.swift' -e 'WKWebsiteDataStore\.default\(' -e 'websiteDataStore\s*=\s*\.default\(' "${IOSSRC[@]}" 2>/dev/null)
-[ -n "$out" ] && report "persistent WKWebsiteDataStore in iOS/:" "$out"
-if rg -q -g '*.swift' 'WKWebViewConfiguration' "${IOSSRC[@]}" 2>/dev/null && ! rg -q -g '*.swift' 'nonPersistent\(\)' "${IOSSRC[@]}" 2>/dev/null; then
-  report "WKWebView in iOS/ without a nonPersistent() data store:" "iOS/"
-fi
-out=$(rg -n -g '*.swift' -e 'addScriptMessageHandler' -e 'WKUserScript' -e 'evaluateJavaScript' -e 'callAsyncJavaScript' "${IOSSRC[@]}" 2>/dev/null)
-[ -n "$out" ] && report "JavaScript bridge in iOS/:" "$out"
+out=$(rg -n -g '*.swift' -e '^import WebKit' -e '\bWKWebView' -e '\bWKUserScript' "${IOSSRC[@]}" 2>/dev/null)
+[ -n "$out" ] && report "WebKit / WKWebView in iOS/ (sign in with ASWebAuthenticationSession):" "$out"
+out=$(rg -n -P -g '*.swift' 'UIPasteboard\.general\.(string|strings|url|urls|image|images|color|colors|items|itemProviders|value|data)\b(?!\s*=(?!=))' "${IOSSRC[@]}" 2>/dev/null)
+[ -n "$out" ] && report "programmatic pasteboard read in iOS/ (use PasteButton):" "$out"
 for f in $(rg -l -g '*.swift' 'ASWebAuthenticationSession\(' "${IOSSRC[@]}" 2>/dev/null); do
   rg -q 'prefersEphemeralWebBrowserSession = true' "$f" || report "ASWebAuthenticationSession without prefersEphemeralWebBrowserSession = true:" "$f"
 done
