@@ -50,6 +50,8 @@ security-pass-start-log:
 security-pass:
 	scripts/security-pass.sh
 
+archive:
+	scripts/testflight.sh --dry-run
+
 testflight:
-	@echo "testflight: wired in P6 (needs App Store Connect record, distribution cert, API key)"
-	@exit 1
+	scripts/testflight.sh
