@@ -114,7 +114,7 @@ final class UsageEngine {
         do {
             entries = try await registry.load()
         } catch {
-            Self.log.error("registry load failed: \(String(describing: error), privacy: .public)")
+            Self.log.error("registry load failed: \(String(describing: type(of: error)), privacy: .public) code=\((error as NSError).code, privacy: .public)")
             entries = []
         }
         let claudeIDs = entries.filter { $0.kind == .claude }.map(\.id)
@@ -129,7 +129,7 @@ final class UsageEngine {
         do {
             try await service.cleanupOrphans()
         } catch {
-            Self.log.error("orphan cleanup failed: \(String(describing: error), privacy: .public)")
+            Self.log.error("orphan cleanup failed: \(String(describing: type(of: error)), privacy: .public) code=\((error as NSError).code, privacy: .public)")
         }
         labels.reset(entries)
         publish(entries)
@@ -220,7 +220,7 @@ final class UsageEngine {
         do {
             return try HistoryStore(url: HistoryStore.defaultURL())
         } catch {
-            log.error("history unavailable: \(String(describing: error), privacy: .public)")
+            log.error("history unavailable: \(String(describing: type(of: error)), privacy: .public) code=\((error as NSError).code, privacy: .public)")
             return nil
         }
     }
@@ -233,7 +233,7 @@ final class UsageEngine {
                 let ran = try await history.runMaintenanceIfDue(now: Date(), calendar: .current, rawDays: Self.rawDays)
                 if ran { Self.log.info("history maintenance ran") }
             } catch {
-                Self.log.error("history maintenance failed: \(String(describing: error), privacy: .public)")
+                Self.log.error("history maintenance failed: \(String(describing: type(of: error)), privacy: .public) code=\((error as NSError).code, privacy: .public)")
             }
         }
     }

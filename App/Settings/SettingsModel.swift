@@ -90,7 +90,7 @@ final class SettingsModel {
                 try await op(backend)
             } catch {
                 self.error = Self.message(error)
-                Self.log.error("settings op failed: \(String(describing: error), privacy: .public)")
+                Self.log.error("settings op failed: \(String(describing: type(of: error)), privacy: .public) code=\((error as NSError).code, privacy: .public)")
             }
             busy = nil
             reload()

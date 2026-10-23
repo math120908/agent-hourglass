@@ -23,6 +23,9 @@ out=$(rg -n '/usr/bin/security' Sources App iOS 2>/dev/null)
 # Logging: account ids must never be logged in the clear.
 out=$(rg -n 'rawValue, privacy: \.public' Sources App 2>/dev/null)
 [ -n "$out" ] && report "account id logged with privacy: .public:" "$out"
+# Error text can embed file paths and Keychain attributes: log type(of:) and the code only (S2).
+out=$(rg -n 'String\(describing: error\), privacy: \.public' Sources App iOS 2>/dev/null)
+[ -n "$out" ] && report "raw error logged with privacy: .public (log type(of: error) + code):" "$out"
 
 # Portability: UsageCore must build for iOS; its tests must not depend on macOS-only modules.
 out=$(rg -l '^import (AppKit|ServiceManagement)' Sources/UsageCore 2>/dev/null)

@@ -33,7 +33,7 @@ public enum LegacyMigration {
                 try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: new.path)
                 outcome = .moved
             } catch {
-                log.error("dir move failed: \(String(describing: error), privacy: .public)")
+                log.error("dir move failed: \(String(describing: type(of: error)), privacy: .public) code=\((error as NSError).code, privacy: .public)")
                 return .failed
             }
         }
@@ -79,7 +79,7 @@ public enum LegacyMigration {
                 guard let c = try old.read(id) else { r.absent += 1; continue }
                 cred = c
             } catch {
-                log.error("keychain read old failed: \(String(describing: error), privacy: .public)")
+                log.error("keychain read old failed: \(String(describing: type(of: error)), privacy: .public) code=\((error as NSError).code, privacy: .public)")
                 r.failed += 1; continue
             }
             do {
@@ -88,7 +88,7 @@ public enum LegacyMigration {
                 try old.delete(id)
                 r.moved += 1
             } catch {
-                log.error("keychain write/verify failed: \(String(describing: error), privacy: .public)")
+                log.error("keychain write/verify failed: \(String(describing: type(of: error)), privacy: .public) code=\((error as NSError).code, privacy: .public)")
                 r.failed += 1
             }
         }
