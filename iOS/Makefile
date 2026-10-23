@@ -15,8 +15,12 @@ generate:
 build: generate
 	$(XCB) build GIT_COMMIT=$$(git rev-parse --short HEAD)
 
+# One booted, fully booted sim; serial tests; bounded per-test time. See scripts/sim-prepare.sh.
+TEST_FLAGS = -parallel-testing-enabled NO -test-timeouts-enabled YES -default-test-execution-time-allowance 120 -maximum-test-execution-time-allowance 300
+
 test: generate
-	$(XCB) test GIT_COMMIT=$$(git rev-parse --short HEAD)
+	udid=$$(scripts/sim-prepare.sh '$(SIM_NAME)' '$(SIM_OS)') && \
+	xcodebuild -project AgentHourglassiOS.xcodeproj -scheme AgentHourglassiOS -destination "id=$$udid" -derivedDataPath $(DD) -quiet $(TEST_FLAGS) test GIT_COMMIT=$$(git rev-parse --short HEAD)
 
 run-sim: build
 	scripts/run-sim.sh $(APP)
