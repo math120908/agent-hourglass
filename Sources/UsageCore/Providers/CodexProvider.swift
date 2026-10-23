@@ -11,9 +11,10 @@ public struct CodexProvider: UsageProvider {
     public let kind: ProviderKind = .codex
     /// R5 politeness: one request per account per 5 min at most.
     public let minimumInterval: Duration = .seconds(300)
-    public let auth: CodexAuthSource
+    /// `nil` means no login source on this platform: every fetch reports not signed in.
+    public let auth: (any CodexLoginSource)?
 
-    public init(auth: CodexAuthSource) { self.auth = auth }
+    public init(auth: (any CodexLoginSource)?) { self.auth = auth }
 
     /// Placeholder handed to `fetch`; Codex never keeps a credential of its own.
     static let borrowed = Credential(kind: .codex, access: Secret(""), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: [])
@@ -23,7 +24,7 @@ public struct CodexProvider: UsageProvider {
         do {
             return try await fetchOnce(http)
         } catch ProviderError.unauthorized {
-            auth.invalidate()
+            auth?.invalidate()
             do {
                 return try await fetchOnce(http)
             } catch ProviderError.unauthorized {
@@ -33,6 +34,7 @@ public struct CodexProvider: UsageProvider {
     }
 
     private func fetchOnce(_ http: HTTPClient) async throws -> UsageSnapshot {
+        guard let auth else { throw CodexAuthError.missing }
         let login = try auth.login()
         var req = URLRequest(url: Self.usageURL)
         req.setValue("application/json", forHTTPHeaderField: "Accept")

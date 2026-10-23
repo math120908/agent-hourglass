@@ -193,3 +193,68 @@ struct CodexAccountServiceTests {
         #expect(try String(contentsOfFile: auth.path, encoding: .utf8) == codexAuthBody)
     }
 }
+
+@Suite struct CodexLoginSourceTests {
+    let id = AccountID(kind: .codex, remoteID: "acct-1")
+    static let login = CodexLogin(access: Secret("tok-synthetic"), accountID: "acct-1")
+
+    func client(_ auth: (any CodexLoginSource)?, _ t: CodexTransport) -> AccountClient {
+        AccountClient(id: id, provider: CodexProvider(auth: auth), http: HTTPClient(transport: t), store: InMemoryCredentialStore(), clock: ContinuousClock(), now: { Date() })
+    }
+
+    func service(_ auth: (any CodexLoginSource)?) throws -> AccountService {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("cxls-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let store = InMemoryCredentialStore()
+        let http = HTTPClient(transport: CodexTransport())
+        let poller = Poller(clients: [], clock: ContinuousClock(), now: { Date() }, jitter: { 0 }) { _, _ in }
+        return AccountService(
+            registry: AccountRegistry(directory: dir),
+            store: store,
+            poller: poller,
+            history: SvcFakeHistory(log: SvcEventLog()),
+            claudeLogin: { _, _ in throw AccountServiceError.unknownAccount },
+            makeClient: { id in
+                AccountClient(id: id, provider: CodexProvider(auth: auth), http: http, store: store, clock: ContinuousClock(), now: { Date() })
+            },
+            http: http,
+            codexAuth: auth
+        )
+    }
+
+    @Test func fakeLoginSendsHeaders() async throws {
+        let t = CodexTransport()
+        guard case .success = await client(FakeCodexLogin([.success(Self.login)]), t).fetch() else { Issue.record("expected success"); return }
+        let r = try #require(t.requests.first)
+        #expect(r.value(forHTTPHeaderField: "Authorization") == "Bearer tok-synthetic")
+        #expect(r.value(forHTTPHeaderField: "ChatGPT-Account-Id") == "acct-1")
+    }
+
+    @Test func unauthorizedInvalidatesOnce() async throws {
+        let fake = FakeCodexLogin([.success(Self.login)])
+        guard case .success = await client(fake, CodexTransport([401, 200])).fetch() else { Issue.record("expected success"); return }
+        #expect(fake.invalidateCalls == 1)
+        #expect(fake.loginCalls == 2)
+    }
+
+    @Test func nilSourceIsNotSignedIn() async throws {
+        let t = CodexTransport()
+        #expect(await client(nil, t).fetch() == .failure(.codexNotSignedIn))
+        #expect(t.count == 0)
+    }
+
+    @Test func notChatGPTFromSource() async throws {
+        let t = CodexTransport()
+        #expect(await client(FakeCodexLogin([.failure(CodexAuthError.notChatGPT)]), t).fetch() == .failure(.codexNotSignedIn))
+        #expect(t.count == 0)
+    }
+
+    @Test func addCodexUsesProtocol() async throws {
+        let fake = FakeCodexLogin([.success(Self.login)])
+        let id = try await service(fake).addCodex()
+        #expect(id.rawValue == "codex:acct-1")
+        #expect(fake.invalidateCalls == 1)
+        #expect(fake.events.prefix(2) == ["invalidate", "login"])
+        await #expect(throws: CodexAuthError.missing) { try await service(nil).addCodex() }
+    }
+}

@@ -21,7 +21,7 @@ public actor AccountService {
     private let now: @Sendable () -> Date
     private let ghTokens: (any CopilotTokenSource)?
     private let http: HTTPClient
-    private let codexAuth: CodexAuthSource?
+    private let codexAuth: (any CodexLoginSource)?
     private var signingIn = false
 
     public init(
@@ -34,7 +34,7 @@ public actor AccountService {
         now: @escaping @Sendable () -> Date = { Date() },
         ghTokens: (any CopilotTokenSource)? = nil,
         http: HTTPClient = HTTPClient(),
-        codexAuth: CodexAuthSource? = nil
+        codexAuth: (any CodexLoginSource)? = nil
     ) {
         self.codexAuth = codexAuth
         self.ghTokens = ghTokens
