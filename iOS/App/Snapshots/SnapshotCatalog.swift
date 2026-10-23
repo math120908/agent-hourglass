@@ -5,6 +5,7 @@ import UsageCore
 struct SnapshotScene {
     let name: String
     let size: SnapshotSize
+    var themes: [Theme] = Theme.allCases
     let make: @MainActor (Theme) -> AnyView
 }
 
