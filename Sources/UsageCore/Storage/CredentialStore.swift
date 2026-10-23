@@ -37,10 +37,38 @@ public struct CredentialStore: CredentialStoring {
         return q
     }
 
-    public func read(_ id: AccountID) throws -> Credential? {
+    /// Query used by `read`. Internal so tests can inspect it without touching the Keychain.
+    func readQuery(for id: AccountID) -> [String: Any] {
         var q = query(for: id)
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
+        return q
+    }
+
+    /// Attributes `write` sets on both update and add (never synchronizable).
+    func writeAttributes(data: Data, label: String) -> [String: Any] {
+        [
+            kSecValueData as String: data,
+            kSecAttrLabel as String: label,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ]
+    }
+
+    /// Dictionary passed to `SecItemAdd` when `write` creates a new item.
+    func addQuery(for id: AccountID, data: Data, label: String) -> [String: Any] {
+        query(for: id).merging(writeAttributes(data: data, label: label)) { _, new in new }
+    }
+
+    /// Query used by `allAccountIDs`.
+    func listQuery() -> [String: Any] {
+        var q = query(for: nil)
+        q[kSecReturnAttributes as String] = true
+        q[kSecMatchLimit as String] = Self.maxAccounts
+        return q
+    }
+
+    public func read(_ id: AccountID) throws -> Credential? {
+        let q = readQuery(for: id)
         var out: CFTypeRef?
         let status = SecItemCopyMatching(q as CFDictionary, &out)
         if status == errSecItemNotFound { return nil }
@@ -53,15 +81,10 @@ public struct CredentialStore: CredentialStoring {
 
     public func write(_ c: Credential, for id: AccountID, label: String) throws {
         let data = try JSONEncoder().encode(c)
-        let attrs: [String: Any] = [
-            kSecValueData as String: data,
-            kSecAttrLabel as String: label,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-        ]
-        let q = query(for: id)
-        var status = SecItemUpdate(q as CFDictionary, attrs as CFDictionary)
+        let attrs = writeAttributes(data: data, label: label)
+        var status = SecItemUpdate(query(for: id) as CFDictionary, attrs as CFDictionary)
         if status == errSecItemNotFound {
-            status = SecItemAdd(q.merging(attrs) { _, new in new } as CFDictionary, nil)
+            status = SecItemAdd(addQuery(for: id, data: data, label: label) as CFDictionary, nil)
         }
         guard status == errSecSuccess else { throw CredentialStoreError.unexpected(status: status) }
     }
@@ -74,9 +97,7 @@ public struct CredentialStore: CredentialStoring {
     }
 
     public func allAccountIDs() throws -> [AccountID] {
-        var q = query(for: nil)
-        q[kSecReturnAttributes as String] = true
-        q[kSecMatchLimit as String] = Self.maxAccounts
+        let q = listQuery()
         var out: CFTypeRef?
         let status = SecItemCopyMatching(q as CFDictionary, &out)
         if status == errSecItemNotFound { return [] }

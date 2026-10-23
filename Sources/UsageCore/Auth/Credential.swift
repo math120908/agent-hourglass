@@ -7,6 +7,8 @@ public struct Credential: Sendable, Equatable, Codable, CustomStringConvertible,
     public var expiresAt: Date?
     public var refreshExpiresAt: Date?
     public var scopes: [String]
+    /// Provider-side account id (e.g. Codex account). Kept out of description and mirror.
+    public var remoteAccountID: String?
 
     public init(
         kind: ProviderKind,
@@ -14,7 +16,8 @@ public struct Credential: Sendable, Equatable, Codable, CustomStringConvertible,
         refresh: Secret?,
         expiresAt: Date?,
         refreshExpiresAt: Date?,
-        scopes: [String]
+        scopes: [String],
+        remoteAccountID: String? = nil
     ) {
         self.kind = kind
         self.access = access
@@ -22,6 +25,7 @@ public struct Credential: Sendable, Equatable, Codable, CustomStringConvertible,
         self.expiresAt = expiresAt
         self.refreshExpiresAt = refreshExpiresAt
         self.scopes = scopes
+        self.remoteAccountID = remoteAccountID
     }
 
     public var description: String {
