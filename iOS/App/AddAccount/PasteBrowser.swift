@@ -58,9 +58,12 @@ extension ASWebAuthenticationSession: PasteAuthSession {}
 
     nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
         MainActor.assumeIsolated {
-            UIApplication.shared.connectedScenes
-                .compactMap { ($0 as? UIWindowScene)?.keyWindow }
-                .first ?? ASPresentationAnchor()
+            let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            if let window = scenes.lazy.compactMap(\.keyWindow).first ?? scenes.lazy.flatMap(\.windows).first {
+                return window
+            }
+            guard let scene = scenes.first else { preconditionFailure("no window scene to present the auth sheet") }
+            return ASPresentationAnchor(windowScene: scene)
         }
     }
 }
