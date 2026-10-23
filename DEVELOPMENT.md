@@ -72,11 +72,19 @@ log show --last 1h --info --predicate 'subsystem == "cc.kuoc.agent-hourglass" AN
 
 ## iOS
 
+Requirements: Xcode, XcodeGen, an Apple Distribution identity in the login keychain (team R7V5X99HYA), and for uploads `~/.config/agent-hourglass/asc.env` (defines `ASC_KEY_ID`, `ASC_ISSUER_ID`) plus `~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8`. Both files mode 600, backed up in 1Password, never in the repo.
+
 - `make -C iOS build`: generate the Xcode project (XcodeGen) and build for the simulator
 - `make -C iOS test`: run the iOS unit tests on the simulator
 - `make -C iOS run-sim`: build, boot the simulator headless, install and launch the app
 - `make -C iOS render`: launch with `--render latest` and copy the PNGs to `iOS/docs/screenshots/`
 - `make -C iOS icon`: regenerate the app icon from `App/Resources/AppIcon.svg`
-- `make -C iOS testflight`: placeholder, wired in P6 (exits 1)
+- `make -C iOS security-pass-start-log` then `make -C iOS security-pass`: runtime security checks S1-S5 against the booted simulator
+- `make -C iOS archive`: preflight, archive, verify, export an `.ipa` without uploading
+- `make -C iOS testflight`: same, then upload to App Store Connect (TestFlight internal only)
+
+Versioning: `MARKETING_VERSION` 1.0.0 in `iOS/project.yml`; build number `YYMMDD.HMMSS` in UTC from `iOS/scripts/build-number.sh`, set on the archive command line. TestFlight builds expire after 90 days: upload at least that often.
+
+Release checks: [iOS/docs/testflight-checklist.md](iOS/docs/testflight-checklist.md). `make test` includes `make check-ios` (UsageCore builds for iOS) and the source guards and secret scan, which cover `iOS/`.
 
 Simulator defaults: `SIM_NAME=iPhone 17`, `SIM_OS=26.0` (override on the make command line). Signing is automatic with team R7V5X99HYA; simulator builds need no signing.
