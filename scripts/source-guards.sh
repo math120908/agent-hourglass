@@ -64,5 +64,20 @@ out=$(rg -l '^import (GRDB|UsageHistory)' Sources/UsageCore iOS 2>/dev/null)
 out=$(rg -n 'UsageHistory|GRDB' iOS/project.yml 2>/dev/null)
 [ -n "$out" ] && report "iOS target depends on UsageHistory/GRDB:" "$out"
 
+# iOS sign-in surfaces: non-persistent web store, no JS bridge, ephemeral auth session, no dump(.
+IOSSRC=(iOS/App iOS/Widget iOS/Shared)
+out=$(rg -n -g '*.swift' -e 'WKWebsiteDataStore\.default\(' -e 'websiteDataStore\s*=\s*\.default\(' "${IOSSRC[@]}" 2>/dev/null)
+[ -n "$out" ] && report "persistent WKWebsiteDataStore in iOS/:" "$out"
+if rg -q -g '*.swift' 'WKWebViewConfiguration' "${IOSSRC[@]}" 2>/dev/null && ! rg -q -g '*.swift' 'nonPersistent\(\)' "${IOSSRC[@]}" 2>/dev/null; then
+  report "WKWebView in iOS/ without a nonPersistent() data store:" "iOS/"
+fi
+out=$(rg -n -g '*.swift' -e 'addScriptMessageHandler' -e 'WKUserScript' -e 'evaluateJavaScript' -e 'callAsyncJavaScript' "${IOSSRC[@]}" 2>/dev/null)
+[ -n "$out" ] && report "JavaScript bridge in iOS/:" "$out"
+for f in $(rg -l -g '*.swift' 'ASWebAuthenticationSession\(' "${IOSSRC[@]}" 2>/dev/null); do
+  rg -q 'prefersEphemeralWebBrowserSession = true' "$f" || report "ASWebAuthenticationSession without prefersEphemeralWebBrowserSession = true:" "$f"
+done
+out=$(rg -n -g '*.swift' '\bdump\(' "${IOSSRC[@]}" 2>/dev/null)
+[ -n "$out" ] && report "dump( in iOS/:" "$out"
+
 [ $fail -eq 0 ] && echo "source-guards: ok"
 exit $fail
