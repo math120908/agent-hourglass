@@ -153,9 +153,13 @@ struct FileRefreshLockTests {
     @Test func killedHolderReleasesLock() async throws {
         let p = try spawnHolder(sleep: 30)
         kill(p.processIdentifier, SIGKILL)
+        // Bound against the lock timeout, not a tight wall clock: if the kernel did not release
+        // the dead holder's flock, acquire would spin until `timeout` and throw `.timeout`.
+        // Under heavy load reaping the holder alone can take >1 s, so keep the margin wide.
+        let timeout: Duration = .seconds(10)
         let t0 = ContinuousClock.now
-        try await FileRefreshLock(url: url, timeout: .seconds(1)).withLock {}
-        #expect(ContinuousClock.now - t0 < .seconds(1))
+        try await FileRefreshLock(url: url, timeout: timeout).withLock {}
+        #expect(ContinuousClock.now - t0 < timeout / 2)
     }
 
     @Test func timesOutWhenHeld() async throws {
