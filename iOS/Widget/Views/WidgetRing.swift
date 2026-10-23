@@ -13,7 +13,7 @@ struct WidgetRing: View {
 
     var body: some View {
         ZStack {
-            Circle().stroke(style.track(), lineWidth: lineWidth)
+            Circle().stroke(style.ringTrack(), lineWidth: lineWidth)
             if let fraction, fraction > 0 {
                 Circle()
                     .trim(from: 0, to: max(0.01, fraction))
@@ -25,7 +25,7 @@ struct WidgetRing: View {
                 GeometryReader { geo in
                     let r = min(geo.size.width, geo.size.height) / 2
                     Rectangle()
-                        .fill(style.text(.secondary))
+                        .fill(style.paceTick())
                         .frame(width: 1.5, height: lineWidth + 4)
                         .position(x: geo.size.width / 2, y: geo.size.height / 2 - r)
                         .rotationEffect(.degrees(360 * paceTick))

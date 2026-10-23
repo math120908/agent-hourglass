@@ -33,6 +33,16 @@ final class RenderStyleTests: XCTestCase {
         XCTAssertGreaterThan(rgba(style(.vibrant).track())[3], 0)
     }
 
+    func testPaceTickMatchesMacInFullColor() {
+        XCTAssertEqual(rgba(style(.fullColor).paceTick()), rgba(Color.primary.opacity(0.55)))
+        XCTAssertEqual(rgba(style(.accented).paceTick()), rgba(Color.white.opacity(0.55)))
+    }
+
+    func testRingTrackMatchesMacInFullColor() {
+        XCTAssertEqual(rgba(style(.fullColor).ringTrack()), rgba(Color.primary.opacity(0.10)))
+        XCTAssertGreaterThan(rgba(style(.vibrant).ringTrack())[3], 0)
+    }
+
     func testDimmed() {
         XCTAssertEqual(style(.fullColor).dimmed(false), 1.0)
         XCTAssertEqual(style(.fullColor).dimmed(true), 0.45)

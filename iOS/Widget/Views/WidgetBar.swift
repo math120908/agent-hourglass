@@ -22,7 +22,7 @@ struct WidgetBar: View {
                 }
                 if let paceTick {
                     RoundedRectangle(cornerRadius: 0.5)
-                        .fill(style.text(.secondary).opacity(0.6))
+                        .fill(style.paceTick())
                         .frame(width: 1.5, height: height + 6)
                         .offset(x: geo.size.width * paceTick - 0.75)
                 }

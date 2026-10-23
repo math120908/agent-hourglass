@@ -40,6 +40,12 @@ struct WidgetRenderStyle: Sendable {
         return .primary.opacity(theme == .glass ? 0.09 : 0.10)
     }
 
+    /// Ring track; matches Mac `RingGauge` in full color.
+    func ringTrack() -> Color { isFullColor ? .primary.opacity(0.10) : .white.opacity(0.25) }
+
+    /// Pace tick; matches Mac `GlassMeterBar` in full color.
+    func paceTick() -> Color { isFullColor ? .primary.opacity(0.55) : .white.opacity(0.55) }
+
     func text(_ level: GlassTone.Level) -> Color {
         guard isFullColor, colorScheme == .light else {
             switch level {
