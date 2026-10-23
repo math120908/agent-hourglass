@@ -11,7 +11,6 @@ settings:
     DEVELOPMENT_TEAM: R7V5X99HYA
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "6.0"
-    TARGETED_DEVICE_FAMILY: "1"
     MARKETING_VERSION: 1.0.0
     CURRENT_PROJECT_VERSION: 1
 targets:
@@ -22,6 +21,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cc.kuoc.agent-hourglass.ios
+        # iPhone only. Per target: XcodeGen's iOS target preset sets "1,2", which overrides project settings.
+        TARGETED_DEVICE_FAMILY: "1"
         GIT_COMMIT: unknown
         PRODUCT_NAME: AgentHourglass
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -57,6 +58,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cc.kuoc.agent-hourglass.ios.widget
+        # iPhone only. Per target: XcodeGen's iOS target preset sets "1,2", which overrides project settings.
+        TARGETED_DEVICE_FAMILY: "1"
     dependencies:
       - package: UsageCore
         product: UsageCore
