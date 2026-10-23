@@ -13,8 +13,10 @@ final class RedirectGuard: NSObject, URLSessionTaskDelegate, Sendable {
         newRequest request: URLRequest,
         completionHandler: @escaping @Sendable (URLRequest?) -> Void
     ) {
-        let authed = task.originalRequest?.value(forHTTPHeaderField: "Authorization") != nil
-        completionHandler(authed ? nil : request)
+        let original = task.originalRequest
+        let authed = original?.value(forHTTPHeaderField: "Authorization") != nil
+        let pinned = HTTPClient.noRedirectHosts.contains(original?.url?.host() ?? "")
+        completionHandler(authed || pinned ? nil : request)
     }
 }
 
@@ -31,6 +33,9 @@ struct URLSessionTransport: HTTPTransport {
 public final class HTTPClient: Sendable {
     /// Hosts that may receive a bearer token. Any other host is rejected before sending.
     public static let authHosts: Set<String> = ["api.anthropic.com", "platform.claude.com", "claude.ai", "api.github.com", "chatgpt.com"]
+
+    /// Hosts whose redirects are always refused, even without a bearer (login flows).
+    public static let noRedirectHosts: Set<String> = ["auth.openai.com"]
 
     let configuration: URLSessionConfiguration
     private let transport: HTTPTransport
