@@ -10,13 +10,13 @@ import WidgetKit
 @MainActor @Observable
 final class AppModel {
     let appState: AppState
-    private(set) var entries: [AccountEntry] = []
+    fileprivate(set) var entries: [AccountEntry] = []
     let service: AccountService
     var focusedAccount: AccountID?
 
     private let env: UsageEnvironment
     var http: HTTPClient { env.http }
-    private let displayStore: DisplaySettingsStore
+    let displayStore: DisplaySettingsStore
     private let now: @Sendable () -> Date
     private let poller: Poller
     private static let log = Logger(subsystem: "cc.kuoc.agent-hourglass", category: "AppModel")
@@ -223,3 +223,18 @@ final class AppModel {
         if task != .invalid { app.endBackgroundTask(task) }
     }
 }
+
+#if DEBUG
+extension AppModel {
+    /// `--fixtures`: seeds state from `Fixtures` with no Poller, for manual UI checks.
+    func loadFixtures() {
+        let src = Fixtures.appState()
+        entries = Fixtures.entries
+        appState.accounts = src.accounts
+        appState.snapshots = src.snapshots
+        appState.statuses = src.statuses
+        appState.names = src.names
+        appState.lastSuccess = src.lastSuccess
+    }
+}
+#endif
