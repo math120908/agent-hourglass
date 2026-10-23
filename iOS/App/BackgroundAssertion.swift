@@ -15,13 +15,24 @@ struct BackgroundAssertion {
         )
     }
 
+    /// iOS allows a few seconds after expiration; stay well inside it.
+    static let expirationGrace: Duration = .seconds(2)
+
     func run(_ name: String, _ body: @escaping @MainActor () async -> Void) async {
         let work = Task { @MainActor in await body() }
         let ticket = Ticket()
         let end = self.end
         ticket.id = begin(name) {
             work.cancel()
-            ticket.finish(end)
+            // Cancellation is cooperative: wait (bounded) for the body to unwind and release the
+            // flock before ending the assertion, else iOS may suspend us holding it (0xdead10cc).
+            Task { @MainActor in
+                let deadline = Task { try? await Task.sleep(for: Self.expirationGrace) }
+                let done = Task { @MainActor in await work.value; deadline.cancel() }
+                await deadline.value
+                done.cancel()
+                ticket.finish(end)
+            }
         }
         await work.value
         ticket.finish(end)
