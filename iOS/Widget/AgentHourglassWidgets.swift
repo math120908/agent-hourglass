@@ -6,6 +6,7 @@ import WidgetKit
 struct AgentHourglassWidgets: WidgetBundle {
     var body: some Widget {
         EmptyWidget()
+        SmallUsageWidget()
     }
 }
 
