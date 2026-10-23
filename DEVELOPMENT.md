@@ -17,7 +17,7 @@ make icon      # regenerate App/Resources/AppIcon.icns from AppIcon.svg
 
 ## Versioning
 
-Each build on `master` bumps the patch version (`1.0.1`, `1.0.2`, ...). The counter lives in the untracked `.build-number`; builds on other branches reuse it with a `-dev` suffix.
+Each build on `master` bumps the patch version (`1.0.1`, `1.0.2`, ...) and creates and pushes an annotated `v<version>` tag on the built commit (an existing tag is never moved; if the push fails, push it later with `git push origin v<version>`). The counter lives in the untracked `.build-number`; builds on other branches reuse it with a `-dev` suffix and are not tagged.
 
 ## Signing, notarization, release
 
