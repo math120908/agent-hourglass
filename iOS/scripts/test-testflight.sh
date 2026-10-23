@@ -1,10 +1,11 @@
 #!/bin/bash
 # Tests for testflight.sh with fake tools on PATH (no real archive, export or upload).
-#   distlogs-*: the run removes the .xcdistributionlogs bundles its own xcodebuild calls write
-#               (they hold the ASC key id and issuer id), on success and on failure, and leaves
-#               bundles that existed before the run alone. Real xcodebuild writes them to
-#               `getconf DARWIN_USER_TEMP_DIR` even when TMPDIR is overridden; the fake writes to
-#               AH_DARWIN_TEMP_DIR, which testflight.sh reads in place of getconf.
+#   distlogs-*: the run removes the AgentHourglassiOS_*.xcdistributionlogs bundles its own xcodebuild calls
+#               write (they hold the ASC key id and issuer id), on success and on failure, and leaves
+#               bundles that existed before the run, and other schemes' bundles, alone. Real xcodebuild
+#               writes them to `getconf DARWIN_USER_TEMP_DIR` even when TMPDIR is overridden; the fake
+#               xcodebuild does the same through a fake `getconf` (FAKE_GETCONF). A stray
+#               AH_DARWIN_TEMP_DIR export is ignored.
 #   verify-*:   --verify-archive / --verify-ipa pass a good fixture; each mutated fixture (versions vs each
 #               other and project.yml, bundle ids, GitCommit, entitlements compared as exact plist values,
 #               signing identity and team) exits 1 with a message naming the failed check.
@@ -19,7 +20,8 @@
 #   upload-*:   upload mode exports a local ipa, verifies it, and uploads that same file with
 #               `xcrun altool --upload-package`; a failed verify never uploads; altool output is redacted.
 #   exportoptions-*: ExportOptions.plist keys are asserted (destination export, app-store-connect,
-#               internal TestFlight only, no version management, team).
+#               internal TestFlight only, no version management, team), by --check-export-options and
+#               by a full run of a copy of iOS/ (before the archive, and again before the export).
 #   build-number-now-upload: upload mode refuses a pinned build number.
 #   All flows run with a GNU-style fake `stat` first on PATH; the mode checks must use /usr/bin/stat.
 #   preflight-log: a failing preflight `make test` leaves its output in <out>/preflight.log (mode 600)
@@ -28,8 +30,12 @@
 #               into a mode 700 mktemp dir (file mode 600), hands that path to xcodebuild and the dir to
 #               altool (API_PRIVATE_KEYS_DIR), and the dir is gone after success, failure and SIGTERM.
 #               op missing, not signed in, a non-PEM file, no p8 file or a Key ID mismatch exit 1.
-#               The fake HOME holds a valid-looking key in ~/.appstoreconnect/private_keys that must never
-#               be used. ASC_KEY_PATH=<AuthKey_<id>.p8, mode 600> is the only local fallback.
+#               ASC_KEY_PATH=<AuthKey_<id>.p8, mode 600> is the only local fallback. The key dir is
+#               created only after `make test` (the fake make exits 3 if op read already ran);
+#               an undeletable distlogs bundle never keeps the key dir on disk.
+#   stale-key-*: any AuthKey_*.p8 in one of altool's own search dirs (./private_keys, ~/private_keys,
+#               ~/.private_keys, ~/.appstoreconnect/private_keys) stops the run before make, and one that
+#               appears during the run stops it before altool.
 #   Every flow runs with a PATH that cannot reach the real `op`.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -39,15 +45,14 @@ fail=0
 pass() { echo "PASS $1"; }
 bad() { echo "FAIL $1: $2"; fail=1; }
 
-t=$(mktemp -d); trap 'rm -rf "$t"' EXIT
+t=$(mktemp -d); trap 'chflags -R nouchg "$t" 2>/dev/null; rm -rf "$t"' EXIT
 bin=$t/bin; mkdir -p "$bin" "$t/home/.appstoreconnect/private_keys" "$t/sys"
 KEY=FAKEKEY123; ISS=0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0
 printf '# App Store Connect API key\n\nASC_KEY_ID=%s\nASC_ISSUER_ID=%s\n' "$KEY" "$ISS" > "$t/asc.env"; chmod 600 "$t/asc.env"
 export FAKE_CALLS=$t/calls FAKE_KEY=$KEY FAKE_ISS=$ISS
-# A real PEM key for the fake op to serve, and a decoy (also a PEM key) where altool used to look.
+# A real PEM key for the fake op to serve. home_key: where altool used to look (absent; the fakes reject it).
 /usr/bin/openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$t/fake.pem" 2>/dev/null
 home_key=$t/home/.appstoreconnect/private_keys/AuthKey_$KEY.p8
-cp "$t/fake.pem" "$home_key"; chmod 600 "$home_key"
 export FAKE_PEM=$t/fake.pem FAKE_HOME_KEY=$home_key FAKE_KEYS=$t/keypaths
 # Test PATH: fakes, then only rg and jq from Homebrew (never the real op), then the system.
 for x in rg jq; do ln -s "$(command -v "$x")" "$t/sys/$x"; done
@@ -82,6 +87,8 @@ for p in "$app:cc.kuoc.agent-hourglass.ios" "$app/PlugIns/W.appex:cc.kuoc.agent-
   d=${p%%:*}; f=$d/Info.plist; rm -f "$f"
   /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string ${p#*:}" -c "Add :CFBundleVersion string $2" \
     -c 'Add :CFBundleShortVersionString string 1.0.0' -c "Add :GitCommit string $3" "$f" >/dev/null
+  # The internal-only export stamps the app (not the widget) Info.plist, as in the 261023.201712 ipa.
+  if [ "${4:-dev}" = dist ] && [ "$d" = "$app" ]; then /usr/libexec/PlistBuddy -c 'Add :TFInternalTestingOnly bool true' "$f" >/dev/null; fi
   sign_fake "$d" "${4:-dev}" "${p#*:}"
 done
 EOF
@@ -112,18 +119,22 @@ esac
 EOF
 printf '#!/bin/bash\necho "1) X \\"Apple Distribution: Fake\\""\n' > "$bin/security"
 printf '#!/bin/bash\nexit 0\n' > "$bin/xcodegen"
-# Fake make: FAKE_MAKE_FAIL=1 prints a marker line after some noise and fails.
+# Fake make: FAKE_MAKE_FAIL=1 prints a marker line after some noise and fails. Exits 3 if the key was
+# already fetched (fetch_key creates the key dir and runs op read) while the tests run.
 cat > "$bin/make" <<'EOF2'
 #!/bin/bash
 echo "make $*" >> "$FAKE_CALLS"
 [ -z "${ASC_KEY_ID:-}${ASC_ISSUER_ID:-}" ] || { echo "ASC_* in make env"; exit 3; }
+! rg -q -F 'op read' "$FAKE_CALLS" || { echo "key fetched before make"; exit 3; }
 [ -z "${FAKE_MAKE_TOUCH:-}" ] || touch "$FAKE_STATE/$FAKE_MAKE_TOUCH"
 [ "${FAKE_MAKE_FAIL:-0}" = 1 ] || exit 0
 for i in $(seq 1 50); do echo "noise $i"; done
 echo "FAKE-MARKER killedHolderReleasesLock failed"; exit 2
 EOF2
-# Fake xcodebuild: like Xcode with -authenticationKey*, writes the key id into a bundle in the
-# Darwin user temp dir (AH_DARWIN_TEMP_DIR here), not in $TMPDIR.
+# Fake xcodebuild: like Xcode with -authenticationKey*, writes the key id into a bundle in
+# `getconf DARWIN_USER_TEMP_DIR` (the fake getconf), not in $TMPDIR. FAKE_DISTLOGS_UCHG=1 makes the bundle
+# undeletable; FAKE_OTHER_LOGS=1 also writes another scheme's bundle; FAKE_ARCHIVE_EO=<plist> turns off
+# internal-only in that plist during the archive; FAKE_EXPORT_PLANT=<file> writes a key there during export.
 cat > "$bin/xcodebuild" <<'EOF'
 #!/bin/bash
 echo "xcodebuild $1" >> "$FAKE_CALLS"
@@ -137,14 +148,18 @@ k=$(val -authenticationKeyPath)
 [ "$(head -n 1 "$k")" = '-----BEGIN PRIVATE KEY-----' ] || { echo "error: key not PEM"; exit 4; }
 echo "$k" >> "$FAKE_KEYS"
 [ "${FAKE_ARCHIVE_HANG:-0}" = 1 ] && [ "$1" = archive ] && { echo $$ > "$FAKE_STATE/../hang.pid"; sleep 30; }
-logs=$(mktemp -d "${AH_DARWIN_TEMP_DIR%/}/AgentHourglassiOS_XXXX")
+dt=$(getconf DARWIN_USER_TEMP_DIR); logs=$(mktemp -d "${dt%/}/AgentHourglassiOS_XXXX")
 mv "$logs" "$logs.xcdistributionlogs"; echo "key $(val -authenticationKeyID) $(val -authenticationKeyIssuerID)" > "$logs.xcdistributionlogs/IDEDistribution.log"
+[ "${FAKE_DISTLOGS_UCHG:-0}" = 0 ] || chflags uchg "$logs.xcdistributionlogs/IDEDistribution.log"
+[ "${FAKE_OTHER_LOGS:-0}" = 0 ] || mkdir -p "${dt%/}/OtherApp_run.xcdistributionlogs"
 build=; for a in "$@"; do case $a in CURRENT_PROJECT_VERSION=*) build=${a#*=} ;; esac; done
 case "$1" in
   archive) make_app "$(val -archivePath)/Products/Applications/AgentHourglass.app" "$build" abc1234
+    [ -z "${FAKE_ARCHIVE_EO:-}" ] || /usr/libexec/PlistBuddy -c 'Set :testFlightInternalTestingOnly false' "$FAKE_ARCHIVE_EO"
     [ -z "${FAKE_ARCHIVE_TOUCH:-}" ] || touch "$FAKE_STATE/$FAKE_ARCHIVE_TOUCH" ;;
   -exportArchive)
     [ -z "${FAKE_EXPORT_TOUCH:-}" ] || touch "$FAKE_STATE/$FAKE_EXPORT_TOUCH"
+    [ -z "${FAKE_EXPORT_PLANT:-}" ] || { mkdir -p "$(dirname "$FAKE_EXPORT_PLANT")"; cp "$FAKE_PEM" "$FAKE_EXPORT_PLANT"; }
     [ "${FAKE_EXPORT_FAIL:-0}" = 1 ] && { echo "error: exportArchive fake failure"; exit 70; }
     r=$(command -v rsync); [ "$(readlink -f "$r")" = /usr/bin/rsync ] || { echo "error: exportArchive Copy failed (rsync $r)"; exit 70; }
     if [ "$(/usr/libexec/PlistBuddy -c 'Print :destination' "$(val -exportOptionsPlist)")" = export ]; then
@@ -152,6 +167,9 @@ case "$1" in
       mkdir -p "$s/Payload" "$exp"; cp -R "$arc"/Products/Applications/*.app "$s/Payload/"
       sign_fake "$s/Payload/AgentHourglass.app" dist cc.kuoc.agent-hourglass.ios
       sign_fake "$s/Payload/AgentHourglass.app/PlugIns/W.appex" dist cc.kuoc.agent-hourglass.ios.widget
+      if [ "$(/usr/libexec/PlistBuddy -c 'Print :testFlightInternalTestingOnly' "$(val -exportOptionsPlist)")" = true ]; then
+        /usr/libexec/PlistBuddy -c 'Add :TFInternalTestingOnly bool true' "$s/Payload/AgentHourglass.app/Info.plist" >/dev/null
+      fi
       ditto -c -k "$s" "$exp/AgentHourglass.ipa"; rm -rf "$s"
     fi ;;
 esac
@@ -193,6 +211,12 @@ case "$1 $2" in
   *) exit 2 ;;
 esac
 EOF
+# Fake getconf: DARWIN_USER_TEMP_DIR is FAKE_GETCONF (each flow's scratch dir).
+cat > "$bin/getconf" <<'EOF'
+#!/bin/bash
+[ "$*" = DARWIN_USER_TEMP_DIR ] && [ -n "${FAKE_GETCONF:-}" ] || { echo "fake getconf: unset" >&2; exit 2; }
+echo "$FAKE_GETCONF"
+EOF
 # Fake GNU stat first on PATH (coreutils gnubin): `stat -f` means filesystem status there.
 printf '#!/bin/bash\necho "  File: GNU stat"\n' > "$bin/stat"
 # Fake Homebrew rsync shadowing /usr/bin/rsync, as /opt/homebrew/bin does on this Mac.
@@ -207,18 +231,28 @@ clean_out() {
   local d
   for d in "$outroot"/*; do [ -e "$d" ] || continue; printf '%s\n' "$out_before" | rg -q -x -F -- "$(basename "$d")" || rm -rf "$d"; done
 }
-# run_flow <name> <want exit> [script args...]: full flow with a scratch Darwin temp dir holding one
-# older bundle. RUN_TMPDIR=other runs with TMPDIR set to a different scratch dir (also holding one).
+# run_flow <name> <want exit> [script args...]: full flow with a scratch Darwin temp dir holding two
+# older bundles (this scheme's and another). RUN_TMPDIR=other runs with TMPDIR set to a different scratch
+# dir (also holding them). RUN_SCRIPT runs another copy of testflight.sh, RUN_HOME another HOME.
+# RUN_LEFT: the bundles expected afterwards in the two dirs (default: the older ones).
+older='AgentHourglassiOS_older.xcdistributionlogs Older_1.xcdistributionlogs '
 run_flow() {
   local name=$1 want=$2 tmp=$t/tmp-$1 code=0 out left d; shift 2
   local tmpdir=$tmp/
   [ "${RUN_TMPDIR:-}" = other ] && tmpdir=$t/tmpdir-$name/
-  mkdir -p "$tmp/Older_1.xcdistributionlogs" "${tmpdir}Older_1.xcdistributionlogs"
+  for d in "$tmp/" "$tmpdir"; do mkdir -p "${d}Older_1.xcdistributionlogs" "${d}AgentHourglassiOS_older.xcdistributionlogs"; done
   : > "$FAKE_CALLS"; : > "$FAKE_KEYS"; rm -f "$FAKE_STATE"/*
   snap_out
-  out=$(env PATH="${RUN_PATH:-$tpath}" HOME="$t/home" ASC_ENV="$t/asc.env" AH_DARWIN_TEMP_DIR="$tmp/" TMPDIR="$tmpdir" \
-    "$script" "$@" 2>&1) || code=$?
+  out=$(env PATH="${RUN_PATH:-$tpath}" HOME="${RUN_HOME:-$t/home}" ASC_ENV="$t/asc.env" FAKE_GETCONF="$tmp/" TMPDIR="$tmpdir" \
+    "${RUN_SCRIPT:-$script}" "$@" 2>&1) || code=$?
   clean_out
+  # An undeletable bundle is expected to stay; clear its flag and drop it so the other checks still apply.
+  if [ "${FAKE_DISTLOGS_UCHG:-0}" != 0 ]; then
+    chflags -R nouchg "$tmp" "$tmpdir"
+    for d in "$tmp"/AgentHourglassiOS_*.xcdistributionlogs "$tmpdir"AgentHourglassiOS_*.xcdistributionlogs; do
+      [ "$(basename "$d")" = AgentHourglassiOS_older.xcdistributionlogs ] || rm -rf "$d"
+    done
+  fi
   left=
   # Every key copy the fakes saw must be gone with its dir (an owner's ASC_KEY_PATH file stays).
   local kleft= k kuse
@@ -229,7 +263,7 @@ run_flow() {
   kuse=$({ rg -v -F -x -- "${FAKE_KEEP_KEY:-/nonexistent}" "$FAKE_KEYS" || true; } | wc -l | tr -d ' ')
   for d in "$tmp" "$tmpdir"; do left="$left$(cd "$d" && ls -d -- *.xcdistributionlogs 2>/dev/null | tr '\n' ' ' || true)"; done
   if [ "$code" != "$want" ]; then bad "$name" "exit $code want $want: $out"
-  elif [ "$left" != "Older_1.xcdistributionlogs Older_1.xcdistributionlogs " ]; then bad "$name" "bundles left: '$left'"
+  elif [ "$left" != "${RUN_LEFT:-$older$older}" ]; then bad "$name" "bundles left: '$left'"
   elif [[ "$out" == *"$KEY"* || "$out" == *"$ISS"* ]]; then bad "$name" "key id or issuer id in output"
   elif [ -n "$kleft" ]; then bad "$name" "key copies left:$kleft"
   elif [ -n "${RUN_KEY:-}" ] && [ "$kuse" != "$RUN_KEY" ]; then bad "$name" "want $RUN_KEY key copy uses, got $kuse"
@@ -242,6 +276,11 @@ RUN_CALL='/export/AgentHourglass.ipa --api-key KEYID --api-issuer ISSID' run_flo
 RUN_NO_CALL=xcrun run_flow distlogs-dry-run 0 --dry-run
 FAKE_EXPORT_FAIL=1 run_flow distlogs-export-fail 1
 RUN_TMPDIR=other run_flow distlogs-tmpdir-override 0 --dry-run
+# A stray AH_DARWIN_TEMP_DIR (the old test hook) must not replace getconf: the run's bundles are still removed.
+mkdir -p "$t/stray"; RUN_TMPDIR=other AH_DARWIN_TEMP_DIR=$t/stray/ run_flow distlogs-stray-hook-ignored 0 --dry-run
+# Only this scheme's bundles: another scheme's bundle written during the run stays.
+o2="AgentHourglassiOS_older.xcdistributionlogs Older_1.xcdistributionlogs OtherApp_run.xcdistributionlogs "
+RUN_LEFT="$o2$o2" FAKE_OTHER_LOGS=1 run_flow distlogs-other-scheme-kept 0 --dry-run
 
 # tree-*: the tree and HEAD are checked again before archive and before export.
 RUN_WANT_MSG='tree changed during run' RUN_NO_CALL='xcodebuild archive' FAKE_MAKE_TOUCH=dirty \
@@ -265,6 +304,10 @@ RUN_WANT_MSG='BUILD_NUMBER_NOW' RUN_NO_CALL=make BUILD_NUMBER_NOW=2026-10-23T12:
 RUN_KEY=3 RUN_CALL='op read' run_flow key-removed-upload 0
 RUN_KEY=2 RUN_NO_CALL=xcrun run_flow key-removed-dry-run 0 --dry-run
 RUN_KEY=2 FAKE_EXPORT_FAIL=1 run_flow key-removed-export-fail 1
+# An undeletable distlogs bundle (uchg) must not stop cleanup before the key dir is removed.
+RUN_KEY=2 RUN_WANT_MSG='could not remove' FAKE_DISTLOGS_UCHG=1 run_flow key-removed-distlogs-undeletable 0 --dry-run
+RUN_KEY=2 RUN_WANT_MSG='could not remove' FAKE_DISTLOGS_UCHG=1 FAKE_EXPORT_FAIL=1 \
+  run_flow key-removed-distlogs-undeletable-fail 1 --dry-run
 # op-*: every failure stops before the key is used, with a message and no secret in the output.
 RUN_WANT_MSG="'op' not found" RUN_NO_CALL=xcodebuild RUN_PATH="$t/bin2:$t/sys:/usr/bin:/bin:/usr/sbin:/sbin" \
   run_flow op-missing 1 --dry-run
@@ -286,7 +329,7 @@ RUN_WANT_MSG='AuthKey_' RUN_NO_CALL=make ASC_KEY_PATH=$t/local/other.p8 run_flow
 # does) mid-archive; the key copy and the run's distribution logs are gone afterwards.
 : > "$FAKE_KEYS"; : > "$FAKE_CALLS"; rm -f "$FAKE_STATE"/* "$t/hang.pid"; snap_out
 st=$t/tmp-sigterm; mkdir -p "$st"
-env PATH="$tpath" HOME="$t/home" ASC_ENV="$t/asc.env" AH_DARWIN_TEMP_DIR="$st/" TMPDIR="$st/" FAKE_ARCHIVE_HANG=1 \
+env PATH="$tpath" HOME="$t/home" ASC_ENV="$t/asc.env" FAKE_GETCONF="$st/" TMPDIR="$st/" FAKE_ARCHIVE_HANG=1 \
   "$script" --dry-run > "$t/sigterm.out" 2>&1 &
 spid=$!; i=0
 while [ ! -s "$t/hang.pid" ] && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
@@ -318,13 +361,37 @@ eo_case exportoptions-destination 1 'Set :destination upload'
 eo_case exportoptions-method 1 'Set :method debugging'
 eo_case exportoptions-manage-version 1 'Set :manageAppVersionAndBuildNumber true'
 eo_case exportoptions-team 1 'Set :teamID OTHERTEAM1'
+# fresh_copy: a minimal copy of iOS/ (script, build number, project.yml, ExportOptions.plist) at $cp.
+cp=$t/copy/iOS
+fresh_copy() {
+  rm -rf "$t/copy"; mkdir -p "$cp/scripts"
+  cp "$script" "$here/build-number.sh" "$cp/scripts/"; cp "$here/../project.yml" "$here/../ExportOptions.plist" "$cp/"
+}
+# exportoptions-run-*: a full run checks the plist before the archive and again before the export.
+fresh_copy; /usr/libexec/PlistBuddy -c 'Set :testFlightInternalTestingOnly false' "$cp/ExportOptions.plist"
+RUN_SCRIPT=$cp/scripts/testflight.sh RUN_WANT_MSG='testFlightInternalTestingOnly' RUN_NO_CALL=xcodebuild \
+  run_flow exportoptions-run-preflight 1 --dry-run
+fresh_copy
+RUN_SCRIPT=$cp/scripts/testflight.sh RUN_WANT_MSG='testFlightInternalTestingOnly' RUN_NO_CALL='xcodebuild -exportArchive' \
+  FAKE_ARCHIVE_EO=$cp/ExportOptions.plist run_flow exportoptions-run-before-export 1 --dry-run
+
+# stale-key-*: a key in one of altool's own search dirs takes precedence over API_PRIVATE_KEYS_DIR.
+for sd in private_keys .private_keys .appstoreconnect/private_keys; do
+  h=$t/home-stale-${sd//\//-}; mkdir -p "$h/$sd"; cp "$t/fake.pem" "$h/$sd/AuthKey_OTHERKEY12.p8"; chmod 600 "$h/$sd/AuthKey_OTHERKEY12.p8"
+  RUN_HOME=$h RUN_WANT_MSG='private_keys' RUN_NO_CALL=make run_flow "stale-key-home-${sd//\//-}" 1
+done
+fresh_copy; mkdir -p "$cp/private_keys"; cp "$t/fake.pem" "$cp/private_keys/AuthKey_$KEY.p8"
+RUN_SCRIPT=$cp/scripts/testflight.sh RUN_WANT_MSG='private_keys' RUN_NO_CALL=make run_flow stale-key-cwd 1 --dry-run
+h=$t/home-stale-late; mkdir -p "$h"
+RUN_HOME=$h RUN_WANT_MSG='private_keys' RUN_NO_CALL=xcrun FAKE_EXPORT_PLANT=$h/.private_keys/AuthKey_$KEY.p8 \
+  run_flow stale-key-during-run 1
 
 # asc_case <name> <asc.env content> [env...]: must exit 1 before any make/xcodebuild call, no marker.
 asc_case() {
   local name=$1 body=$2 f=$t/asc-$1.env m=$t/marker code=0 out; shift 2
   rm -f "$m"; : > "$FAKE_CALLS"; printf '%s\n' "$body" > "$f"; chmod 600 "$f"
   snap_out
-  out=$(cd "$t" && env PATH="$tpath" HOME="$t/home" ASC_ENV="$f" AH_DARWIN_TEMP_DIR="$t/" "$@" "$script" --dry-run 2>&1) || code=$?
+  out=$(cd "$t" && env PATH="$tpath" HOME="$t/home" ASC_ENV="$f" FAKE_GETCONF="$t/" "$@" "$script" --dry-run 2>&1) || code=$?
   clean_out
   if [ $code != 1 ]; then bad "$name" "exit $code want 1: $out"
   elif [ -e "$m" ]; then bad "$name" "asc.env code ran"
@@ -360,7 +427,8 @@ ASC_KEY_ID=$KEY ASC_ISSUER_ID=$ISS run_flow asc-not-exported 0 --dry-run
 # preflight-log: the build number is pinned so the run's output dir is known.
 pb=261023.120000; pdir=$outroot/$pb; plog=$pdir/preflight.log
 [ ! -e "$pdir" ] || bad preflight-log "$pdir already exists"
-code=0; out=$(env PATH="$tpath" HOME="$t/home" ASC_ENV="$t/asc.env" AH_DARWIN_TEMP_DIR="$t/" TMPDIR="$t/" FAKE_MAKE_FAIL=1 \
+: > "$FAKE_CALLS"
+code=0; out=$(env PATH="$tpath" HOME="$t/home" ASC_ENV="$t/asc.env" FAKE_GETCONF="$t/" TMPDIR="$t/" FAKE_MAKE_FAIL=1 \
   BUILD_NUMBER_NOW=2026-10-23T12:00:00Z "$script" --dry-run 2>&1) || code=$?
 if [ $code = 0 ]; then bad preflight-log "exit 0"
 elif [[ "$out" != *"FAKE-MARKER killedHolderReleasesLock failed"* ]]; then bad preflight-log "no tail in output: $out"
@@ -400,6 +468,8 @@ vcase() {
 EA='$A/_fake_ent.plist'; EW='$W/_fake_ent.plist'
 vcase verify-archive-ok archive 0 ':'
 vcase verify-ipa-ok ipa 0 ':'
+vcase verify-ipa-internal-only ipa 'TFInternalTestingOnly' 'pbe $A/Info.plist "Delete :TFInternalTestingOnly"'
+vcase verify-ipa-internal-only-false ipa 'TFInternalTestingOnly' 'pbe $A/Info.plist "Set :TFInternalTestingOnly false"'
 vcase verify-widget-build archive 'CFBundleVersion mismatch' 'pbe $W/Info.plist "Set :CFBundleVersion 1.2"'
 vcase verify-app-build ipa 'CFBundleVersion mismatch' 'pbe $A/Info.plist "Set :CFBundleVersion 1.2"'
 vcase verify-widget-short-version archive 'CFBundleShortVersionString mismatch' \
