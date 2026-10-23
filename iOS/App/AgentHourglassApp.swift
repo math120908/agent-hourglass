@@ -1,6 +1,5 @@
 import SwiftUI
 import UsageCore
-import WidgetKit
 
 @main
 struct AgentHourglassApp: App {

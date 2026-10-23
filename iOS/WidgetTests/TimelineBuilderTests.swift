@@ -48,11 +48,18 @@ final class TimelineBuilderTests: XCTestCase {
         XCTAssertFalse(dates.contains(F.now.addingTimeInterval(1800)))
     }
 
-    func provider(timeout: TimeInterval = 20, fetch: @escaping @Sendable (AccountID) async -> (UsageSnapshot?, AccountStatus?)) -> UsageTimelineProvider {
-        let e = entry
+    func provider(
+        timeout: TimeInterval = 20,
+        registryStatus: String = "ok",
+        cache: UsageSnapshot = F.claudeMax,
+        fetch: @escaping @Sendable (AccountID) async -> (UsageSnapshot?, AccountStatus?)
+    ) -> UsageTimelineProvider {
+        var copy = entry
+        copy.status = registryStatus
+        let e = copy
         return UsageTimelineProvider(
             fetch: fetch,
-            cacheRead: { _ in F.claudeMax },
+            cacheRead: { _ in cache },
             loadEntries: { [e] },
             loadSettings: { (.default, .glass) },
             now: { F.now },
@@ -90,5 +97,35 @@ final class TimelineBuilderTests: XCTestCase {
     func testPolicyIsAfter15Min() async {
         let t = await provider { _ in (F.claudeMax, .fresh) }.makeTimeline(intent: SelectAccountMetersIntent(), family: .small)
         XCTAssertEqual(t.reload, F.now.addingTimeInterval(900))
+    }
+
+    var fiveMinOld: UsageSnapshot {
+        UsageSnapshot(accountID: F.claudeMax.accountID, fetchedAt: F.now.addingTimeInterval(-300), meters: F.claudeMax.meters)
+    }
+
+    func testNilLiveStatusFallsBackToPersistedNeedsLogin() async {
+        let cache = fiveMinOld
+        let t = await provider(registryStatus: "needsLogin", cache: cache) { _ in (cache, nil) }
+            .makeTimeline(intent: SelectAccountMetersIntent(), family: .small)
+        let first = try! XCTUnwrap(t.entries.first)
+        XCTAssertEqual(first.status, .needsLogin)
+        XCTAssertEqual(WidgetFreshness.freshness(fetchedAt: first.snapshot?.fetchedAt, status: first.status, at: first.date), .failed(.needsLogin))
+    }
+
+    func testTimeoutFallsBackToPersistedNeedsLogin() async {
+        let cache = fiveMinOld
+        let t = await provider(timeout: 0.1, registryStatus: "needsLogin", cache: cache) { _ in
+            try? await Task.sleep(for: .seconds(30))
+            return (nil, .offline)
+        }.makeTimeline(intent: SelectAccountMetersIntent(), family: .small)
+        let first = try! XCTUnwrap(t.entries.first)
+        XCTAssertEqual(first.snapshot, cache)
+        XCTAssertEqual(WidgetFreshness.freshness(fetchedAt: first.snapshot?.fetchedAt, status: first.status, at: first.date), .failed(.needsLogin))
+    }
+
+    func testLiveStatusWinsOverPersisted() async {
+        let t = await provider(registryStatus: "needsLogin") { _ in (F.claudeMax, .fresh) }
+            .makeTimeline(intent: SelectAccountMetersIntent(), family: .small)
+        XCTAssertEqual(t.entries.first?.status, .fresh)
     }
 }

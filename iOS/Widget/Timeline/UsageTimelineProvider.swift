@@ -58,7 +58,9 @@ struct UsageTimelineProvider: AppIntentTimelineProvider {
             let input = makeInput(account: nil, snapshot: nil, status: nil, intent: intent, family: family)
             return ([TimelineBuilder.entry(input, at: t)], TimelinePlan.reloadDate(now: t))
         }
-        let (snapshot, status) = await fetchWithTimeout(account.id)
+        let (snapshot, live) = await fetchWithTimeout(account.id)
+        // No live status (signed out, unsupported, timeout): trust the persisted registry status.
+        let status = live ?? Self.persistedStatus(account.status)
         let t = now()
         let input = makeInput(account: account, snapshot: snapshot, status: status, intent: intent, family: family)
         return (TimelineBuilder.entries(input, now: t), TimelinePlan.reloadDate(now: t))
@@ -95,6 +97,23 @@ struct UsageTimelineProvider: AppIntentTimelineProvider {
             theme: theme,
             family: family
         )
+    }
+
+    /// Maps a registry `AccountEntry.status` string (the `Diagnostics.statusName` spelling) to a status.
+    /// Returns nil for "ok", "active" and unknown values, so freshness falls back to cache age.
+    static func persistedStatus(_ raw: String) -> AccountStatus? {
+        switch raw {
+        case "needsLogin": .needsLogin
+        case "codexNotSignedIn": .codexNotSignedIn
+        case "schemaError": .schemaError
+        case "ghMissing": .ghMissing
+        case "ghLoginRemoved": .ghLoginRemoved
+        case "claudeCodeNotSignedIn": .claudeCodeNotSignedIn
+        case "claudeCodeExpired": .claudeCodeExpired
+        case "claudeCodeDenied": .claudeCodeDenied
+        case "offline": .offline
+        default: nil
+        }
     }
 
     static func kind(_ family: WidgetFamily) -> WidgetFamilyKind {

@@ -74,9 +74,9 @@ final class RenderMatrixTests: XCTestCase {
         var countdown = DisplaySettings.default
         countdown.resetStyle = .countdown
         // The base renders 24 h times in the fixture locale, so this variant forces 12 h to differ.
-        var hour24 = DisplaySettings.default
-        hour24.hour24 = .off
-        for (variant, settings) in [("remaining", remaining), ("countdown", countdown), ("24h", hour24)] {
+        var hour12 = DisplaySettings.default
+        hour12.hour24 = .off
+        for (variant, settings) in [("remaining", remaining), ("countdown", countdown), ("12h", hour12)] {
             cases.append(Case(name: "small-glass-fullcolor-dark-\(variant)", family: .small, mode: smallModes[1], entry: F.entry(F.claudeMax, settings: settings)))
         }
         return cases
@@ -130,7 +130,7 @@ final class RenderMatrixTests: XCTestCase {
             }
         }
         let base = try Data(contentsOf: dir.appendingPathComponent("small-glass-fullcolor-dark.png"))
-        for variant in ["remaining", "countdown", "24h"] {
+        for variant in ["remaining", "countdown", "12h"] {
             let data = try Data(contentsOf: dir.appendingPathComponent("small-glass-fullcolor-dark-\(variant).png"))
             XCTAssertNotEqual(data, base, "\(variant) renders identical to its base")
         }

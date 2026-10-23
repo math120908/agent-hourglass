@@ -1,6 +1,5 @@
 import Foundation
 import Observation
-import WidgetKit
 
 /// App-side owner of `DisplaySettings`. Every change is saved and the widget timelines reload.
 @MainActor @Observable

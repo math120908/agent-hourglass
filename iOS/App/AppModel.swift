@@ -4,7 +4,6 @@ import os
 import SwiftUI
 import UIKit
 import UsageCore
-import WidgetKit
 
 /// App-wide state: registry entries, cache-first snapshots, the foreground Poller, and account ops.
 @MainActor @Observable
@@ -179,9 +178,9 @@ final class AppModel {
         if case .success = outcome { reloadWidgetsThrottled() }
     }
 
-    private var lastPollReload: Date?
+    @ObservationIgnored private var lastPollReload: Date?
 
-    /// Foreground polls reload widgets at most once per `WidgetReloader.minInterval`.
+    /// Poll results reload widgets at most once per `WidgetReloader.minInterval`.
     private func reloadWidgetsThrottled() {
         let t = now()
         guard WidgetReloader.shouldReload(lastReload: lastPollReload, now: t) else { return }
