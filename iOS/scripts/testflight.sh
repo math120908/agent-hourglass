@@ -16,6 +16,7 @@
 # upload, while any AuthKey_*.p8 sits in a dir altool searches before API_PRIVATE_KEYS_DIR.
 # Key ID, issuer ID, the key and its path are never echoed. Preflight test output goes to <out>/preflight.log,
 # xcodebuild and altool output to <out>/xcodebuild.log (both 600); failures show a redacted tail.
+# Verify requires iPhone only (UIDeviceFamily [1]) and portrait only.
 set -euo pipefail
 # --verify-* paths are relative to the caller's cwd, not iOS/.
 if [ $# -ge 2 ] && [[ "$1" == --verify-archive || "$1" == --verify-ipa || "$1" == --check-export-options ]] \
@@ -43,6 +44,13 @@ ent_is() {
   [ "$got" = "$4" ] || die "verify: $5 $key is $got, want $4"
 }
 
+# plist_is <plist> <key> <json> <label>: exact JSON value of a top-level key ("missing" when absent).
+plist_is() {
+  local got
+  got=$(/usr/bin/plutil -extract "$2" json -o - "$1" 2>/dev/null) || got=missing
+  [ "$got" = "$3" ] || die "verify: $4 $2 is $got, want $3"
+}
+
 # Bundle checks on <app> (and its widget appex). <dist>=1 (the exported .ipa) also requires get-task-allow
 # false and an Apple Distribution signature: automatic signing archives with the development identity.
 verify_bundles() { # <app> <build> <commit> <dist> <label>
@@ -58,6 +66,12 @@ verify_bundles() { # <app> <build> <commit> <dist> <label>
   [ "$(plist CFBundleIdentifier "$app/Info.plist")" = "$APP_ID" ] || die "verify: app bundle id"
   [ "$(plist CFBundleIdentifier "$appex/Info.plist")" = "$WIDGET_ID" ] || die "verify: widget bundle id"
   [ "$(plist GitCommit "$app/Info.plist")" = "$commit" ] || die "verify: GitCommit is not $commit"
+  # iPhone only and portrait only. A build that also targets iPad must support every orientation, or App
+  # Store Connect rejects it (ITMS-90474); XcodeGen's per-target preset once overrode the project's "1".
+  plist_is "$app/Info.plist" UIDeviceFamily '[1]' app
+  plist_is "$appex/Info.plist" UIDeviceFamily '[1]' widget
+  plist_is "$app/Info.plist" UISupportedInterfaceOrientations '["UIInterfaceOrientationPortrait"]' app
+  plist_is "$app/Info.plist" 'UISupportedInterfaceOrientations~ipad' missing app
   # The internal-only export stamps the app Info.plist (seen in the 261023.201712 ipa); the archive has none.
   if [ "$dist" = 1 ] && [ "$(plist TFInternalTestingOnly "$app/Info.plist")" != true ]; then
     die "verify: app TFInternalTestingOnly is not true"

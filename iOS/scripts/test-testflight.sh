@@ -7,6 +7,8 @@
 #               xcodebuild does the same through a fake `getconf` (FAKE_GETCONF). A stray
 #               AH_DARWIN_TEMP_DIR export is ignored. A new bundle named otherwise (the prefix is a guess)
 #               is kept and reported as a count-only warning.
+#   verify-device-* / verify-orientation-*: the app and widget must be iPhone only (UIDeviceFamily exactly
+#               [1]) and the app portrait only, with no ~ipad orientations (ITMS-90474).
 #   verify-*:   --verify-archive / --verify-ipa pass a good fixture; each mutated fixture (versions vs each
 #               other and project.yml, bundle ids, GitCommit, entitlements compared as exact plist values,
 #               signing identity and team) exits 1 with a message naming the failed check.
@@ -87,7 +89,11 @@ app=$1; mkdir -p "$app/PlugIns/W.appex"
 for p in "$app:cc.kuoc.agent-hourglass.ios" "$app/PlugIns/W.appex:cc.kuoc.agent-hourglass.ios.widget"; do
   d=${p%%:*}; f=$d/Info.plist; rm -f "$f"
   /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string ${p#*:}" -c "Add :CFBundleVersion string $2" \
-    -c 'Add :CFBundleShortVersionString string 1.0.0' -c "Add :GitCommit string $3" "$f" >/dev/null
+    -c 'Add :CFBundleShortVersionString string 1.0.0' -c "Add :GitCommit string $3" \
+    -c 'Add :UIDeviceFamily array' -c 'Add :UIDeviceFamily:0 integer 1' "$f" >/dev/null
+  # iPhone only, portrait only (the app; Xcode stamps UIDeviceFamily into both bundles).
+  [ "$d" != "$app" ] || /usr/libexec/PlistBuddy -c 'Add :UISupportedInterfaceOrientations array' \
+    -c 'Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationPortrait' "$f" >/dev/null
   # The internal-only export stamps the app (not the widget) Info.plist, as in the 261023.201712 ipa.
   if [ "${4:-dev}" = dist ] && [ "$d" = "$app" ]; then /usr/libexec/PlistBuddy -c 'Add :TFInternalTestingOnly bool true' "$f" >/dev/null; fi
   sign_fake "$d" "${4:-dev}" "${p#*:}"
@@ -485,6 +491,21 @@ vcase verify-project-version ipa 'project.yml' \
 vcase verify-app-bundle-id archive 'app bundle id' 'pbe $A/Info.plist "Set :CFBundleIdentifier cc.kuoc.other"'
 vcase verify-widget-bundle-id ipa 'widget bundle id' \
   'pbe $W/Info.plist "Set :CFBundleIdentifier cc.kuoc.agent-hourglass.ios.other"'
+# device-*: iPhone only (UIDeviceFamily exactly [1] in app and widget) and portrait only; ASC rejects an
+# iPad-capable build that is not all-orientations (ITMS-90474).
+vcase verify-device-family-ipad archive 'UIDeviceFamily' 'pbe $A/Info.plist "Add :UIDeviceFamily:1 integer 2"'
+vcase verify-device-family-ipad-ipa ipa 'UIDeviceFamily' 'pbe $A/Info.plist "Add :UIDeviceFamily:1 integer 2"'
+vcase verify-device-family-ipad-only ipa 'UIDeviceFamily' 'pbe $A/Info.plist "Set :UIDeviceFamily:0 2"'
+vcase verify-device-family-missing archive 'UIDeviceFamily' 'pbe $A/Info.plist "Delete :UIDeviceFamily"'
+vcase verify-device-family-widget ipa 'UIDeviceFamily' 'pbe $W/Info.plist "Add :UIDeviceFamily:1 integer 2"'
+vcase verify-orientation-landscape archive 'UISupportedInterfaceOrientations' \
+  'pbe $A/Info.plist "Add :UISupportedInterfaceOrientations:1 string UIInterfaceOrientationLandscapeLeft"'
+vcase verify-orientation-landscape-ipa ipa 'UISupportedInterfaceOrientations' \
+  'pbe $A/Info.plist "Set :UISupportedInterfaceOrientations:0 UIInterfaceOrientationLandscapeRight"'
+vcase verify-orientation-missing ipa 'UISupportedInterfaceOrientations' \
+  'pbe $A/Info.plist "Delete :UISupportedInterfaceOrientations"'
+vcase verify-orientation-ipad-key archive 'UISupportedInterfaceOrientations~ipad' \
+  'pbe $A/Info.plist "Add :UISupportedInterfaceOrientations~ipad array" "Add :UISupportedInterfaceOrientations~ipad:0 string UIInterfaceOrientationPortrait"'
 vcase verify-git-commit archive 'GitCommit' 'pbe $A/Info.plist "Set :GitCommit deadbee"'
 vcase verify-gta-app ipa 'get-task-allow' "pbe $EA 'Set :get-task-allow true'"
 vcase verify-gta-widget ipa 'get-task-allow' "pbe $EW 'Set :get-task-allow true'"
