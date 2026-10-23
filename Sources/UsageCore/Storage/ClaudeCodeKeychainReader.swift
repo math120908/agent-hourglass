@@ -56,6 +56,7 @@ public protocol ClaudeCodeLoginReading: Sendable {
     func read() throws -> ClaudeCodeLogin
 }
 
+#if os(macOS)
 /// Read-only view of Claude Code's Keychain item (default config dir only).
 /// Only `SecItemCopyMatching`. Never adds, updates, deletes, or changes the item's access.
 /// No caching: every call re-reads so a token refreshed by Claude Code is picked up.
@@ -118,3 +119,4 @@ public struct ClaudeCodeKeychainReader: ClaudeCodeLoginReading {
         return (out as? [String: Any])?[kSecAttrModificationDate as String] as? Date
     }
 }
+#endif

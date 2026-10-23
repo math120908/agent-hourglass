@@ -40,5 +40,14 @@ out=$(rg -n -g '*.swift' -e '\bprint\(' -e '\bNSLog\(' iOS 2>/dev/null)
 out=$(rg -n -i -g '*.entitlements' -e 'icloud' -e 'ubiquity' -e 'aps-environment' iOS 2>/dev/null)
 [ -n "$out" ] && report "iCloud/push entitlement in iOS/:" "$out"
 
+# Mac-only credential paths: the phone must never reach Claude Code's Keychain item or legacy migration.
+macgate() { # file, declaration regex: the declaration must sit after an '#if os(macOS)' line
+  gawk -v pat="$2" '/^#if os\(macOS\)/{g=1} $0 ~ pat {found=1; if(!g) bad=1} END{exit (found && !bad) ? 0 : 1}' "$1"
+}
+macgate "$READER" '^public struct ClaudeCodeKeychainReader' || report "ClaudeCodeKeychainReader not gated by #if os(macOS):" "$READER"
+macgate Sources/UsageCore/Storage/LegacyMigration.swift '^public enum LegacyMigration' || report "LegacyMigration not gated by #if os(macOS):" "Sources/UsageCore/Storage/LegacyMigration.swift"
+out=$(rg -l -e 'ClaudeCodeKeychainReader' -e 'LegacyMigration' iOS 2>/dev/null)
+[ -n "$out" ] && report "iOS/ references Mac-only credential code:" "$out"
+
 [ $fail -eq 0 ] && echo "source-guards: ok"
 exit $fail
