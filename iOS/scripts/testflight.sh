@@ -15,8 +15,9 @@
 # ASC_KEY_PATH=/abs/AuthKey_<id>.p8 (mode 600) uses a local file instead. The run refuses to start, and to
 # upload, while any AuthKey_*.p8 sits in a dir altool searches before API_PRIVATE_KEYS_DIR.
 # Key ID, issuer ID, the key and its path are never echoed. Preflight test output goes to <out>/preflight.log,
-# xcodebuild and altool output to <out>/xcodebuild.log (both 600); failures show a redacted tail.
-# Verify requires iPhone only (UIDeviceFamily [1]) and portrait only.
+# xcodebuild and altool output to <out>/xcodebuild.log (both 600); failures show a redacted tail. The
+# *.xcdistributionlogs bundles and the altool log the run writes (both hold the key id and issuer id) are
+# removed on every exit. Verify requires iPhone only (UIDeviceFamily [1]) and portrait only.
 set -euo pipefail
 # --verify-* paths are relative to the caller's cwd, not iOS/.
 if [ $# -ge 2 ] && [[ "$1" == --verify-archive || "$1" == --verify-ipa || "$1" == --check-export-options ]] \
@@ -138,10 +139,11 @@ esac
 # Cleanup for every exit of a run (the --verify-* modes above exit before this). Each part is armed once
 # its state exists. HUP/INT/TERM exit through it too. The key dir goes first, and no step can stop the
 # others (no errexit here); a step that fails says so and the run keeps its exit status.
-rsbin=; keydir=; operr=; distlogs_armed=0
+rsbin=; keydir=; operr=; distlogs_armed=0; altlogs_armed=0
 cleanup() {
   set +e
   [ -z "$keydir" ] || rm -rf "$keydir" || echo "testflight: could not remove the key dir $keydir; remove it by hand" >&2
+  [ "$altlogs_armed" = 0 ] || rm_altlogs
   [ -z "$operr" ] || rm -f "$operr"
   [ "$distlogs_armed" = 0 ] || rm_distlogs
   [ -z "$rsbin" ] || rm -rf "$rsbin"
@@ -324,5 +326,26 @@ fi
 check_tree
 no_stale_keys
 export API_PRIVATE_KEYS_DIR; API_PRIVATE_KEYS_DIR=$(dirname "$p8")
+# altool writes one log per run, holding the key id and issuer id, to
+# ~/Library/Logs/ContentDelivery/com.apple.itunes.altool/com.apple.itunes.altool_<timestamp>.txt. Remove
+# the files that appear there during the upload (success or failure); keep earlier ones. A new file
+# elsewhere under ContentDelivery is counted (never named), as all_distlogs does.
+cdlogs=$HOME/Library/Logs/ContentDelivery; altlogs=$cdlogs/com.apple.itunes.altool
+cd_files() { [ ! -d "$cdlogs" ] || /usr/bin/find "$cdlogs" ! -type d 2>/dev/null; return 0; }
+pre_cd=$(cd_files)
+rm_altlogs() {
+  local f n=0
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    printf '%s\n' "$pre_cd" | rg -q -x -F -- "$f" && continue
+    case $f in
+      "$altlogs"/*) rm -f "$f" 2>/dev/null && [ ! -e "$f" ] \
+        || echo "testflight: could not remove an altool log in $altlogs (holds the key id and issuer id); remove it by hand" >&2 ;;
+      *) n=$((n + 1)) ;;
+    esac
+  done < <(cd_files)
+  [ $n = 0 ] || echo "testflight: warning: $n new file(s) under ~/Library/Logs/ContentDelivery outside com.apple.itunes.altool appeared during the upload; they may hold the key id and issuer id. Check and remove them by hand." >&2
+}
+altlogs_armed=1
 run xcrun altool --upload-package "$ipa" --api-key "$kid" --api-issuer "$iss"
 echo "testflight: uploaded $version ($build) $commit"

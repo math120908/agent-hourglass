@@ -7,6 +7,11 @@
 #               xcodebuild does the same through a fake `getconf` (FAKE_GETCONF). A stray
 #               AH_DARWIN_TEMP_DIR export is ignored. A new bundle named otherwise (the prefix is a guess)
 #               is kept and reported as a count-only warning.
+#   altlogs-*:  the altool log the upload writes to ~/Library/Logs/ContentDelivery/com.apple.itunes.altool/
+#               (it holds the key id and issuer id; the fake altool writes one under the fake HOME) is
+#               removed after success, failure and SIGTERM; earlier logs stay; a new file elsewhere under
+#               ContentDelivery is kept and reported as a count-only warning; an undeletable log never keeps
+#               the key dir on disk.
 #   verify-device-* / verify-orientation-*: the app and widget must be iPhone only (UIDeviceFamily exactly
 #               [1]) and the app portrait only, with no ~ipad orientations (ITMS-90474).
 #   verify-*:   --verify-archive / --verify-ipa pass a good fixture; each mutated fixture (versions vs each
@@ -182,12 +187,19 @@ case "$1" in
     fi ;;
 esac
 EOF
-# Fake xcrun altool: records the call (ids replaced by KEYID / ISSID), prints the key id and issuer id like
-# a chatty uploader, and fails with FAKE_UPLOAD_FAIL=1.
+# Fake xcrun altool: records the call (ids replaced by KEYID / ISSID), writes a log holding the key id and
+# issuer id to ~/Library/Logs/ContentDelivery/com.apple.itunes.altool/ like the real one (one file per run),
+# prints them like a chatty uploader, and fails with FAKE_UPLOAD_FAIL=1. FAKE_CD_OTHER=1 also writes a file
+# elsewhere under ContentDelivery; FAKE_ALTLOG_UCHG=1 makes the log undeletable; FAKE_UPLOAD_HANG=1 hangs.
 cat > "$bin/xcrun" <<'EOF'
 #!/bin/bash
 [ "$1" = altool ] || exit 2
 a="$*"; a=${a//$FAKE_KEY/KEYID}; a=${a//$FAKE_ISS/ISSID}; echo "xcrun $a" >> "$FAKE_CALLS"
+cd_dir=$HOME/Library/Logs/ContentDelivery; al=$cd_dir/com.apple.itunes.altool/com.apple.itunes.altool_$(date +%Y%m%d%H%M%S)_$$.txt
+mkdir -p "$(dirname "$al")"; echo "apiKey $FAKE_KEY issuer $FAKE_ISS" > "$al"; echo "xcrun altool log written" >> "$FAKE_CALLS"
+[ "${FAKE_ALTLOG_UCHG:-0}" = 0 ] || chflags uchg "$al"
+[ "${FAKE_CD_OTHER:-0}" = 0 ] || { mkdir -p "$cd_dir/other"; echo "apiKey $FAKE_KEY" > "$cd_dir/other/new.log"; }
+[ "${FAKE_UPLOAD_HANG:-0}" = 1 ] && { echo $$ > "$FAKE_STATE/../hang.pid"; sleep 30; }
 [ "$2" = --upload-package ] && [ -f "$3" ] || { echo "no package"; exit 2; }
 d=${API_PRIVATE_KEYS_DIR:-}; [ -n "$d" ] && [ -f "$d/AuthKey_$FAKE_KEY.p8" ] || { echo "ERROR no key in API_PRIVATE_KEYS_DIR"; exit 4; }
 [ "$d/AuthKey_$FAKE_KEY.p8" != "$FAKE_HOME_KEY" ] || { echo "ERROR key from HOME"; exit 4; }
@@ -244,11 +256,21 @@ clean_out() {
 # dir (also holding them). RUN_SCRIPT runs another copy of testflight.sh, RUN_HOME another HOME.
 # RUN_LEFT: the bundles expected afterwards in the two dirs (default: the older ones).
 older='AgentHourglassiOS_older.xcdistributionlogs Older_1.xcdistributionlogs '
+# old_cd_logs <ContentDelivery dir>: a fresh dir with an altool log and another file from earlier runs, which must be kept.
+# cd_files <dir>: the files under it, relative, sorted, space separated.
+cd_older='com.apple.itunes.altool/com.apple.itunes.altool_older.txt older.txt '
+old_cd_logs() {
+  rm -rf "$1"; mkdir -p "$1/com.apple.itunes.altool"
+  echo "earlier run" > "$1/com.apple.itunes.altool/com.apple.itunes.altool_older.txt"; echo "earlier" > "$1/older.txt"
+}
+cd_files() { [ -d "$1" ] || return 0; (cd "$1" && find . -type f | sed 's|^\./||' | sort | tr '\n' ' '); }
 run_flow() {
   local name=$1 want=$2 tmp=$t/tmp-$1 code=0 out left d; shift 2
   local tmpdir=$tmp/
   [ "${RUN_TMPDIR:-}" = other ] && tmpdir=$t/tmpdir-$name/
   for d in "$tmp/" "$tmpdir"; do mkdir -p "${d}Older_1.xcdistributionlogs" "${d}AgentHourglassiOS_older.xcdistributionlogs"; done
+  local cdl=${RUN_HOME:-$t/home}/Library/Logs/ContentDelivery cdleft
+  old_cd_logs "$cdl"
   : > "$FAKE_CALLS"; : > "$FAKE_KEYS"; rm -f "$FAKE_STATE"/*
   snap_out
   out=$(env PATH="${RUN_PATH:-$tpath}" HOME="${RUN_HOME:-$t/home}" ASC_ENV="$t/asc.env" FAKE_GETCONF="$tmp/" TMPDIR="$tmpdir" \
@@ -261,6 +283,11 @@ run_flow() {
       [ "$(basename "$d")" = AgentHourglassiOS_older.xcdistributionlogs ] || rm -rf "$d"
     done
   fi
+  # An undeletable altool log is expected to stay; clear its flag and drop it so the other checks still apply.
+  if [ "${FAKE_ALTLOG_UCHG:-0}" != 0 ]; then
+    chflags -R nouchg "$cdl"; rm -f "$cdl"/com.apple.itunes.altool/com.apple.itunes.altool_2*.txt
+  fi
+  cdleft=$(cd_files "$cdl")
   left=
   # Every key copy the fakes saw must be gone with its dir (an owner's ASC_KEY_PATH file stays).
   local kleft= k kuse
@@ -272,6 +299,7 @@ run_flow() {
   for d in "$tmp" "$tmpdir"; do left="$left$(cd "$d" && ls -d -- *.xcdistributionlogs 2>/dev/null | tr '\n' ' ' || true)"; done
   if [ "$code" != "$want" ]; then bad "$name" "exit $code want $want: $out"
   elif [ "$left" != "${RUN_LEFT:-$older$older}" ]; then bad "$name" "bundles left: '$left'"
+  elif [ "$cdleft" != "${RUN_CD_LEFT:-$cd_older}" ]; then bad "$name" "ContentDelivery files left: '$cdleft'"
   elif [[ "$out" == *"$KEY"* || "$out" == *"$ISS"* ]]; then bad "$name" "key id or issuer id in output"
   elif [ -n "$kleft" ]; then bad "$name" "key copies left:$kleft"
   elif [ -n "${RUN_KEY:-}" ] && [ "$kuse" != "$RUN_KEY" ]; then bad "$name" "want $RUN_KEY key copy uses, got $kuse"
@@ -282,6 +310,13 @@ run_flow() {
 }
 RUN_CALL='/export/AgentHourglass.ipa --api-key KEYID --api-issuer ISSID' run_flow distlogs-upload 0
 RUN_NO_CALL=xcrun run_flow distlogs-dry-run 0 --dry-run
+# altlogs-*: the altool log the upload writes (it holds the key id and issuer id) is removed after success
+# and failure; earlier logs stay; a new file elsewhere under ContentDelivery is kept and counted.
+RUN_CALL='xcrun altool log written' run_flow altlogs-upload 0
+RUN_CALL='xcrun altool log written' RUN_WANT_MSG='fake upload error' FAKE_UPLOAD_FAIL=1 run_flow altlogs-upload-fail 1
+RUN_CD_LEFT="${cd_older}other/new.log " RUN_WANT_MSG='warning: 1 new file(s) under ~/Library/Logs/ContentDelivery' \
+  FAKE_CD_OTHER=1 run_flow altlogs-other-warns 0
+RUN_KEY=3 RUN_WANT_MSG='could not remove' FAKE_ALTLOG_UCHG=1 run_flow altlogs-undeletable-key-still-removed 0
 FAKE_EXPORT_FAIL=1 run_flow distlogs-export-fail 1
 RUN_TMPDIR=other run_flow distlogs-tmpdir-override 0 --dry-run
 # A stray AH_DARWIN_TEMP_DIR (the old test hook) must not replace getconf: the run's bundles are still removed.
@@ -337,27 +372,32 @@ RUN_WANT_MSG='mode 600' RUN_NO_CALL=make FAKE_KEEP_KEY=$lk ASC_KEY_PATH=$lk run_
 chmod 600 "$lk"; cp "$lk" "$t/local/other.p8"
 RUN_WANT_MSG='AuthKey_' RUN_NO_CALL=make ASC_KEY_PATH=$t/local/other.p8 run_flow key-path-name 1 --dry-run
 
-# key-removed-sigterm: TERM to the script and its running xcodebuild (as a terminal or process-group kill
-# does) mid-archive; the key copy and the run's distribution logs are gone afterwards.
-: > "$FAKE_KEYS"; : > "$FAKE_CALLS"; rm -f "$FAKE_STATE"/* "$t/hang.pid"; snap_out
-st=$t/tmp-sigterm; mkdir -p "$st"
-env PATH="$tpath" HOME="$t/home" ASC_ENV="$t/asc.env" FAKE_GETCONF="$st/" TMPDIR="$st/" FAKE_ARCHIVE_HANG=1 \
-  "$script" --dry-run > "$t/sigterm.out" 2>&1 &
-spid=$!; i=0
-while [ ! -s "$t/hang.pid" ] && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
-if [ ! -s "$t/hang.pid" ]; then kill "$spid" 2>/dev/null || true; wait "$spid" || true; clean_out; bad key-removed-sigterm "archive never started: $(cat "$t/sigterm.out")"
-else
+# sigterm_case <name> <hang var> [script args]: TERM to the script and its hanging fake (as a terminal or
+# process-group kill does); the key copy, the run's distribution logs and altool logs are gone afterwards.
+sigterm_case() {
+  local name=$1 hang=$2 st=$t/tmp-$1 h=$t/home-$1 k kw code; shift 2
+  : > "$FAKE_KEYS"; : > "$FAKE_CALLS"; rm -f "$FAKE_STATE"/* "$t/hang.pid"; snap_out
+  mkdir -p "$st" "$h"; old_cd_logs "$h/Library/Logs/ContentDelivery"
+  env PATH="$tpath" HOME="$h" ASC_ENV="$t/asc.env" FAKE_GETCONF="$st/" TMPDIR="$st/" "$hang=1" \
+    "$script" "$@" > "$t/sigterm.out" 2>&1 &
+  local spid=$! i=0
+  while [ ! -s "$t/hang.pid" ] && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
+  if [ ! -s "$t/hang.pid" ]; then kill "$spid" 2>/dev/null || true; wait "$spid" || true; clean_out; bad "$name" "fake never hung: $(cat "$t/sigterm.out")"; return; fi
   k=$(head -n 1 "$FAKE_KEYS")
-  if [ -z "$k" ] || [ ! -f "$k" ]; then kw="no key during archive"; else kw=; fi
+  if [ -z "$k" ] || [ ! -f "$k" ]; then kw="no key during the hang"; else kw=; fi
   kill -TERM "$spid" "$(cat "$t/hang.pid")" 2>/dev/null || true
   code=0; wait "$spid" || code=$?
   clean_out
-  if [ -n "$kw" ]; then bad key-removed-sigterm "$kw"
-  elif [ "$code" = 0 ]; then bad key-removed-sigterm "exit 0 after TERM"
-  elif [ -e "$k" ] || [ -e "$(dirname "$k")" ]; then bad key-removed-sigterm "key copy left after TERM"
-  elif rg -q -F -e "$KEY" -e "$ISS" "$t/sigterm.out"; then bad key-removed-sigterm "key id or issuer id in output"
-  else pass key-removed-sigterm; fi
-fi
+  if [ -n "$kw" ]; then bad "$name" "$kw"
+  elif [ "$code" = 0 ]; then bad "$name" "exit 0 after TERM"
+  elif [ -e "$k" ] || [ -e "$(dirname "$k")" ]; then bad "$name" "key copy left after TERM"
+  elif [ -n "$(cd "$st" && ls -d AgentHourglassiOS_*.xcdistributionlogs 2>/dev/null)" ]; then bad "$name" "distlogs left after TERM"
+  elif [ "$(cd_files "$h/Library/Logs/ContentDelivery")" != "$cd_older" ]; then bad "$name" "altool log left after TERM"
+  elif rg -q -F -e "$KEY" -e "$ISS" "$t/sigterm.out"; then bad "$name" "key id or issuer id in output"
+  else pass "$name"; fi
+}
+sigterm_case key-removed-sigterm FAKE_ARCHIVE_HANG --dry-run
+sigterm_case altlogs-removed-sigterm-upload FAKE_UPLOAD_HANG
 
 # exportoptions-*: --check-export-options guards the export plist's keys.
 eo_case() { # <name> <want 0|1> [PlistBuddy cmd]
