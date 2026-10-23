@@ -118,7 +118,13 @@ p8="$HOME/.appstoreconnect/private_keys/AuthKey_${kid}.p8"
 [ "$(stat -f '%Lp' "$p8")" = 600 ] || die "API key file must be mode 600"
 security find-identity -v -p codesigning | rg -q 'Apple Distribution' || die "no Apple Distribution identity in the keychain"
 # 2. Version and output dir (before the test runs, which log into it).
-build=$(scripts/build-number.sh); commit=$(git rev-parse --short HEAD)
+build=$(scripts/build-number.sh); head=$(git rev-parse HEAD); commit=$(git rev-parse --short "$head")
+# check_tree: the shared worktree can change during the minutes-long tests and archive. Re-check that it
+# is still clean and at the recorded commit before each step that builds or ships it.
+check_tree() {
+  [ -z "$(git status --porcelain)" ] || die "tree changed during run"
+  [ "$(git rev-parse HEAD)" = "$head" ] || die "HEAD changed during run"
+}
 out=build/testflight/$build
 mkdir -p "$out"; chmod 700 "$out"
 # tail_log <log>: last 30 lines to stderr, with any asc.env value lines dropped.
@@ -150,6 +156,7 @@ trap 'rm_distlogs; rm -rf "$rsbin"' EXIT
 run() { "$@" >>"$log" 2>&1 || { tail_log "$log"; die "$2 failed (log: $log)"; }; }
 
 # 4. Archive.
+check_tree
 arc=$out/AgentHourglass.xcarchive
 run xcodebuild archive -project AgentHourglassiOS.xcodeproj -scheme AgentHourglassiOS -configuration Release \
   -destination 'generic/platform=iOS' -archivePath "$arc" "${auth[@]}" \
@@ -164,6 +171,7 @@ if [ $dry -eq 1 ]; then
   opts=$out/ExportOptions-dry.plist; cp ExportOptions.plist "$opts"
   /usr/libexec/PlistBuddy -c 'Set :destination export' "$opts"
 fi
+check_tree
 run xcodebuild -exportArchive -archivePath "$arc" -exportOptionsPlist "$opts" -exportPath "$out/export" "${auth[@]}"
 if [ $dry -eq 1 ]; then
   ipa=$(echo "$out"/export/*.ipa); [ -f "$ipa" ] || die "export produced no .ipa"

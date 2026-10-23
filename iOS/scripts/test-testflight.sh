@@ -15,6 +15,7 @@
 #   asc-*:      asc.env is parsed, never sourced: only ASC_KEY_ID=<10 [A-Z0-9]> and ASC_ISSUER_ID=<uuid>
 #               lines (plus blanks and comments). Anything else exits 1 before make or xcodebuild run,
 #               without executing it; the values never reach a child's environment.
+#   tree-*:     a tracked change or a new HEAD during preflight or archive exits 1 before the next xcodebuild.
 #   preflight-log: a failing preflight `make test` leaves its output in <out>/preflight.log (mode 600)
 #               and the failure message shows the log's tail and path.
 set -euo pipefail
@@ -75,9 +76,19 @@ case " $* " in
   *) exit 2 ;;
 esac
 EOF
+# Fake git: the tree turns dirty once $FAKE_STATE/dirty exists, HEAD moves once $FAKE_STATE/moved exists.
+# fake_touch <flag> (in the fake make and xcodebuild) creates one when FAKE_<WHEN>=<flag> asks for it.
+export FAKE_STATE=$t/state; mkdir -p "$FAKE_STATE"
 cat > "$bin/git" <<'EOF'
 #!/bin/bash
-case "$*" in "status --porcelain") ;; "rev-parse --short HEAD") echo abc1234 ;; *) exit 2 ;; esac
+case "$*" in
+  "status --porcelain") [ ! -e "$FAKE_STATE/dirty" ] || echo " M App/AgentHourglassApp.swift" ;;
+  "rev-parse HEAD") if [ -e "$FAKE_STATE/moved" ]; then echo 1111111111111111111111111111111111111111
+    else echo abc1234000000000000000000000000000000000; fi ;;
+  "rev-parse --short abc1234000000000000000000000000000000000") echo abc1234 ;;
+  "rev-parse --short HEAD") echo abc1234 ;;
+  *) exit 2 ;;
+esac
 EOF
 printf '#!/bin/bash\necho "1) X \\"Apple Distribution: Fake\\""\n' > "$bin/security"
 printf '#!/bin/bash\nexit 0\n' > "$bin/xcodegen"
@@ -86,6 +97,7 @@ cat > "$bin/make" <<'EOF2'
 #!/bin/bash
 echo "make $*" >> "$FAKE_CALLS"
 [ -z "${ASC_KEY_ID:-}${ASC_ISSUER_ID:-}" ] || { echo "ASC_* in make env"; exit 3; }
+[ -z "${FAKE_MAKE_TOUCH:-}" ] || touch "$FAKE_STATE/$FAKE_MAKE_TOUCH"
 [ "${FAKE_MAKE_FAIL:-0}" = 1 ] || exit 0
 for i in $(seq 1 50); do echo "noise $i"; done
 echo "FAKE-MARKER killedHolderReleasesLock failed"; exit 2
@@ -101,8 +113,10 @@ logs=$(mktemp -d "${AH_DARWIN_TEMP_DIR%/}/AgentHourglassiOS_XXXX")
 mv "$logs" "$logs.xcdistributionlogs"; echo "key $(val -authenticationKeyID) $(val -authenticationKeyIssuerID)" > "$logs.xcdistributionlogs/IDEDistribution.log"
 build=; for a in "$@"; do case $a in CURRENT_PROJECT_VERSION=*) build=${a#*=} ;; esac; done
 case "$1" in
-  archive) make_app "$(val -archivePath)/Products/Applications/AgentHourglass.app" "$build" abc1234 ;;
+  archive) make_app "$(val -archivePath)/Products/Applications/AgentHourglass.app" "$build" abc1234
+    [ -z "${FAKE_ARCHIVE_TOUCH:-}" ] || touch "$FAKE_STATE/$FAKE_ARCHIVE_TOUCH" ;;
   -exportArchive)
+    [ -z "${FAKE_EXPORT_TOUCH:-}" ] || touch "$FAKE_STATE/$FAKE_EXPORT_TOUCH"
     [ "${FAKE_EXPORT_FAIL:-0}" = 1 ] && { echo "error: exportArchive fake failure"; exit 70; }
     r=$(command -v rsync); [ "$(readlink -f "$r")" = /usr/bin/rsync ] || { echo "error: exportArchive Copy failed (rsync $r)"; exit 70; }
     if [ "$(/usr/libexec/PlistBuddy -c 'Print :destination' "$(val -exportOptionsPlist)")" = export ]; then
@@ -131,6 +145,7 @@ run_flow() {
   local tmpdir=$tmp/
   [ "${RUN_TMPDIR:-}" = other ] && tmpdir=$t/tmpdir-$name/
   mkdir -p "$tmp/Older_1.xcdistributionlogs" "${tmpdir}Older_1.xcdistributionlogs"
+  : > "$FAKE_CALLS"; rm -f "$FAKE_STATE"/*
   snap_out
   out=$(env PATH="$bin:$PATH" HOME="$t/home" ASC_ENV="$t/asc.env" AH_DARWIN_TEMP_DIR="$tmp/" TMPDIR="$tmpdir" \
     "$script" "$@" 2>&1) || code=$?
@@ -140,12 +155,25 @@ run_flow() {
   if [ "$code" != "$want" ]; then bad "$name" "exit $code want $want: $out"
   elif [ "$left" != "Older_1.xcdistributionlogs Older_1.xcdistributionlogs " ]; then bad "$name" "bundles left: '$left'"
   elif [[ "$out" == *"$KEY"* || "$out" == *"$ISS"* ]]; then bad "$name" "key id or issuer id in output"
+  elif [ -n "${RUN_WANT_MSG:-}" ] && [[ "$out" != *"$RUN_WANT_MSG"* ]]; then bad "$name" "message lacks '$RUN_WANT_MSG': $out"
+  elif [ -n "${RUN_NO_CALL:-}" ] && rg -q -F -- "$RUN_NO_CALL" "$FAKE_CALLS"; then bad "$name" "called $RUN_NO_CALL"
+  elif [ -n "${RUN_CALL:-}" ] && ! rg -q -F -- "$RUN_CALL" "$FAKE_CALLS"; then bad "$name" "did not call $RUN_CALL"
   else pass "$name"; fi
 }
 run_flow distlogs-upload 0
 run_flow distlogs-dry-run 0 --dry-run
 FAKE_EXPORT_FAIL=1 run_flow distlogs-export-fail 1
 RUN_TMPDIR=other run_flow distlogs-tmpdir-override 0 --dry-run
+
+# tree-*: the tree and HEAD are checked again before archive and before export.
+RUN_WANT_MSG='tree changed during run' RUN_NO_CALL='xcodebuild archive' FAKE_MAKE_TOUCH=dirty \
+  run_flow tree-dirty-in-preflight 1 --dry-run
+RUN_WANT_MSG='HEAD changed during run' RUN_NO_CALL='xcodebuild archive' FAKE_MAKE_TOUCH=moved \
+  run_flow tree-head-moved-in-preflight 1 --dry-run
+RUN_WANT_MSG='tree changed during run' RUN_NO_CALL='xcodebuild -exportArchive' FAKE_ARCHIVE_TOUCH=dirty \
+  run_flow tree-dirty-in-archive 1
+RUN_WANT_MSG='HEAD changed during run' RUN_NO_CALL='xcodebuild -exportArchive' FAKE_ARCHIVE_TOUCH=moved \
+  run_flow tree-head-moved-in-archive 1 --dry-run
 
 # asc_case <name> <asc.env content> [env...]: must exit 1 before any make/xcodebuild call, no marker.
 asc_case() {
