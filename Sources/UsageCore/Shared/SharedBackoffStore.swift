@@ -45,4 +45,11 @@ public struct SharedBackoffStore: Sendable {
         try AppSupport.secureWrite(JSONEncoder().encode(Record(nextAllowedFetch: date.timeIntervalSince1970)), to: target)
         SnapshotCache.protect(target)
     }
+
+    /// Deletes the account's backoff file. A missing file is a no-op.
+    public func remove(_ id: AccountID) throws {
+        guard unlink(url(for: id).path) == 0 || errno == ENOENT else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+    }
 }
