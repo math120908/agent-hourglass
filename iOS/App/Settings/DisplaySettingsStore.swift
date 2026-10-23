@@ -11,7 +11,7 @@ final class DisplaySettingsStore {
         didSet {
             guard settings != oldValue else { return }
             settings.save(to: defaults)
-            WidgetCenter.shared.reloadAllTimelines()
+            WidgetReloader.reloadAll()
         }
     }
 

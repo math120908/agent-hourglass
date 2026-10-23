@@ -62,7 +62,7 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .toolbar { EditButton() }
         .environment(\.editMode, $editMode)
-        .onChange(of: themes.theme) { WidgetCenter.shared.reloadAllTimelines() }
+        .onChange(of: themes.theme) { WidgetReloader.reloadAll() }
     }
 
     private var refreshMinutes: Binding<Int> {

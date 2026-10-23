@@ -88,7 +88,7 @@ final class AppModel {
         case .background:
             await poller.stop()
             await poller.setForeground(false)
-            WidgetCenter.shared.reloadAllTimelines()
+            WidgetReloader.reloadAll()
         default:
             break
         }
@@ -105,19 +105,19 @@ final class AppModel {
         if let e = entries.first(where: { $0.id == id }) {
             seed(e, interval: appState.effectiveInterval, at: now())
         }
-        WidgetCenter.shared.reloadAllTimelines()
+        WidgetReloader.reloadAll()
     }
 
     func rename(_ id: AccountID, to name: String) async throws {
         try await env.registry.rename(id, to: name)
         await reloadEntries()
-        WidgetCenter.shared.reloadAllTimelines()
+        WidgetReloader.reloadAll()
     }
 
     func reorder(_ ids: [AccountID]) async throws {
         try await env.registry.reorder(ids)
         await reloadEntries()
-        WidgetCenter.shared.reloadAllTimelines()
+        WidgetReloader.reloadAll()
     }
 
     /// Deletes the Keychain item, snapshot, backoff and registry entry, then drops the card.
@@ -136,7 +136,7 @@ final class AppModel {
         }
         try env.shared.cache.remove(id)
         await poller.remove(client: id)
-        WidgetCenter.shared.reloadAllTimelines()
+        WidgetReloader.reloadAll()
     }
 
     func setRefreshMinutes(_ m: Int) async {
@@ -176,6 +176,17 @@ final class AppModel {
             return
         }
         appState.apply(id, outcome)
+        if case .success = outcome { reloadWidgetsThrottled() }
+    }
+
+    private var lastPollReload: Date?
+
+    /// Foreground polls reload widgets at most once per `WidgetReloader.minInterval`.
+    private func reloadWidgetsThrottled() {
+        let t = now()
+        guard WidgetReloader.shouldReload(lastReload: lastPollReload, now: t) else { return }
+        lastPollReload = t
+        WidgetReloader.reloadAll()
     }
 
     // MARK: - private

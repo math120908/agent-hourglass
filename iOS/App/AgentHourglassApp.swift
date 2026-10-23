@@ -30,6 +30,6 @@ struct AgentHourglassApp: App {
         settings = DisplaySettings.load(from: AppGroup.defaults)
         lines = await ShellStatus.load(env, now: .now)
         ShellStatus.log(lines, process: "app")
-        WidgetCenter.shared.reloadAllTimelines()
+        WidgetReloader.reloadAll()
     }
 }
