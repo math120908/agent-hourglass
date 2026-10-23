@@ -44,7 +44,7 @@ When macOS asks for Keychain access, click **Allow**, never **Always Allow**. Th
 
 ## iPhone
 
-The iPhone app shows the same accounts as the Mac app (Claude, Codex, Copilot): each card has the 5-hour and weekly windows with reset times, and Home Screen and Lock Screen widgets show the most constrained window.
+The iPhone app shows Claude and Codex accounts: each card has the 5-hour and weekly windows with reset times, and Home Screen and Lock Screen widgets show the most constrained window.
 
 | Glass | Instrument |
 |---|---|
@@ -54,14 +54,14 @@ Install: TestFlight, invite only. Accept the invite, then open **TestFlight** > 
 
 Sign-in, per provider:
 
-- **Claude**: in-app web login. If it does not finish (for example with Google sign-in), use the paste path: sign in in the system browser sheet and paste the code back.
-- **Codex** and **Copilot**: device code. The app shows a code; enter it on the provider page.
+- **Claude**: open claude.ai in a private system browser sheet, sign in (any method, Google included), copy the code it shows, and paste it back into the app.
+- **Codex**: device code. The app shows a code; enter it on the provider page.
 
 The phone signs in on its own and never reads the Mac's credentials.
 
 Data locations on the phone: Keychain service `cc.kuoc.agent-hourglass` (this device only, never synced), App Group `group.cc.kuoc.agent-hourglass`.
 
-Known limits: Google sign-in needs the paste path; TestFlight builds expire after 90 days.
+Known limits: TestFlight builds expire after 90 days.
 
 ## Accounts
 

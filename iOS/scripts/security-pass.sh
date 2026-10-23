@@ -88,7 +88,7 @@ else
   else result PASS "S3 keychain ($rows items cku, sync=0)"; fi
 fi
 
-# S4 WKWebView store: no claude/anthropic data persisted in the app container.
+# S4 web store: no claude/anthropic data persisted in the app container (auth session is ephemeral).
 app=$(xcrun simctl get_app_container booted "$BUNDLE" data 2>/dev/null || true)
 if [ -z "$app" ]; then result FAIL "S4 web store (app not installed)"
 else
