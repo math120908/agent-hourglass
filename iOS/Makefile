@@ -1,5 +1,5 @@
 SIM_NAME ?= iPhone 17
-SIM_OS ?= 26.0
+SIM_OS ?= 26.5
 DEST = platform=iOS Simulator,name=$(SIM_NAME),OS=$(SIM_OS)
 DD = build
 XCB = xcodebuild -project AgentHourglassiOS.xcodeproj -scheme AgentHourglassiOS -destination '$(DEST)' -derivedDataPath $(DD) -quiet

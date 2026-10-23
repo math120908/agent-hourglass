@@ -72,7 +72,12 @@ log show --last 1h --info --predicate 'subsystem == "cc.kuoc.agent-hourglass" AN
 
 ## iOS
 
-Requirements: Xcode, XcodeGen, an Apple Distribution identity in the login keychain (team R7V5X99HYA), and for uploads `~/.config/agent-hourglass/asc.env` (defines `ASC_KEY_ID`, `ASC_ISSUER_ID`) plus `~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8`. Both files mode 600, backed up in 1Password, never in the repo.
+Requirements: Xcode, XcodeGen, an Apple Distribution identity in the login keychain (team R7V5X99HYA), and for `archive` and `testflight`:
+
+- `~/.config/agent-hourglass/asc.env`, mode 600, holding only `ASC_KEY_ID=<id>` and `ASC_ISSUER_ID=<uuid>`.
+- The 1Password CLI (`op`) with the 1Password app integration on. The App Store Connect API key (role Admin, needed for cloud signing) lives only in 1Password: vault `Personal`, item `Apple Developer - App Store Connect API key (agent-hourglass)`, file field `p8`, field `Key ID` equal to `ASC_KEY_ID`. Override with `ASC_OP_VAULT` / `ASC_OP_ITEM`.
+
+Each run asks for Touch ID: once when preflight checks the item, and again before the archive if 1Password locked during the tests. Right before the archive the script copies the key into a mode 700 `mktemp -d` dir (file mode 600) for `xcodebuild -authenticationKeyPath` and for altool (`API_PRIVATE_KEYS_DIR`), and removes it on exit (success, failure, Ctrl-C, TERM). The key is never in the repo and not on disk between runs: keep no `AuthKey_*.p8` in `~/.appstoreconnect/private_keys`, `~/private_keys` or `~/.private_keys`, where altool would also look. `ASC_KEY_PATH=/abs/path/AuthKey_<id>.p8` (mode 600) uses a local file instead of 1Password.
 
 - `make -C iOS build`: generate the Xcode project (XcodeGen) and build for the simulator
 - `make -C iOS test`: run the iOS unit tests on the simulator
@@ -87,4 +92,4 @@ Versioning: `MARKETING_VERSION` 1.0.0 in `iOS/project.yml`; build number `YYMMDD
 
 Release checks: [iOS/docs/testflight-checklist.md](iOS/docs/testflight-checklist.md). `make test` includes `make check-ios` (UsageCore builds for iOS) and the source guards and secret scan, which cover `iOS/`.
 
-Simulator defaults: `SIM_NAME=iPhone 17`, `SIM_OS=26.0` (override on the make command line). Signing is automatic with team R7V5X99HYA; simulator builds need no signing.
+Simulator defaults: `SIM_NAME=iPhone 17`, `SIM_OS=26.5` (override on the make command line). Signing is automatic with team R7V5X99HYA; simulator builds need no signing.
