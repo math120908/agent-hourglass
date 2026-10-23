@@ -50,7 +50,6 @@ struct AboutView: View {
         }
         .scrollContentBackground(theme == .instrument ? .hidden : .automatic)
         .background(theme == .instrument ? Self.instrumentBackground : Color.clear)
-        .tint(theme == .instrument ? GlassStyle.claude : Color.accentColor)
         .navigationTitle("About")
     }
 

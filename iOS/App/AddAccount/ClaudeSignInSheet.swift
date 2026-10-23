@@ -18,6 +18,7 @@ struct ClaudeSignInSheet<Web: View>: View {
 
     var body: some View {
         content
+            .tint(GlassStyle.claude)
             .navigationTitle("Claude")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

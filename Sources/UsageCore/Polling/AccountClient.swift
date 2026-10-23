@@ -34,6 +34,12 @@ public actor AccountClient {
 
     private var credential: Credential?
     private var backoff: Backoff
+    /// Set when the account is removed. A fetch still in flight then writes nothing:
+    /// no Keychain item, no shared snapshot, no shared backoff.
+    public private(set) var isCancelled = false
+
+    /// Called by `Poller.remove` before the account's Keychain item and files are deleted.
+    public func cancel() { isCancelled = true }
 
     public init(
         id: AccountID,
@@ -180,7 +186,7 @@ public actor AccountClient {
     }
 
     private func writeSharedBackoff() {
-        guard let shared else { return }
+        guard let shared, !isCancelled else { return }
         do {
             try shared.backoff.setNextAllowedFetch(nextEarliestFetch, for: id)
         } catch {
@@ -200,7 +206,7 @@ public actor AccountClient {
         status = saveFailed ? .stale : .fresh
         let wait = max(Backoff.seconds(provider.minimumInterval), backoff.levelDelay ?? 0)
         nextEarliestFetch = now().addingTimeInterval(wait)
-        if let shared {
+        if let shared, !isCancelled {
             do {
                 try shared.cache.write(snap)
             } catch {
@@ -277,6 +283,7 @@ public actor AccountClient {
 
     /// Write, retry once; if both fail, block the other process from refreshing with a stale refresh token.
     private func persistShared(_ c: Credential, _ shared: SharedAccountState) {
+        guard !isCancelled else { return }
         persist(c)
         if saveFailed { persist(c) }
         guard saveFailed else { return }
@@ -295,6 +302,7 @@ public actor AccountClient {
     }
 
     private func persist(_ c: Credential) {
+        guard !isCancelled else { return }
         do {
             try store.write(c, for: id, label: label)
             saveFailed = false

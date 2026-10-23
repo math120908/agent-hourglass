@@ -30,7 +30,7 @@ enum SnapshotRenderer {
     }
 
     @MainActor private static func snapshot(_ scene: SnapshotScene, theme: Theme, style: UIUserInterfaceStyle) async -> Data? {
-        let host = UIHostingController(rootView: AnyView(scene.make(theme).environment(\.appTheme, theme)))
+        let host = UIHostingController(rootView: AnyView(scene.make(theme).appTheme(theme)))
         host.overrideUserInterfaceStyle = style
         host.safeAreaRegions = []  // snapshots are laid out edge to edge; no status-bar inset
         let size: CGSize

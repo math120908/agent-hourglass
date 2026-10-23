@@ -69,7 +69,9 @@ public actor Poller {
         nextDue[client.id] = now()
     }
 
-    public func remove(client id: AccountID) {
+    /// Cancels the client first, so a fetch still in flight cannot persist after the caller deletes its state.
+    public func remove(client id: AccountID) async {
+        await clients[id]?.cancel()
         clients[id] = nil
         order.removeAll { $0 == id }
         nextDue[id] = nil

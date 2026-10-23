@@ -9,13 +9,13 @@ import UsageCore
 @MainActor @Observable
 final class AppModel {
     let appState: AppState
-    private(set) var entries: [AccountEntry] = []
+    fileprivate(set) var entries: [AccountEntry] = []
     let service: AccountService
     var focusedAccount: AccountID?
 
     private let env: UsageEnvironment
     var http: HTTPClient { env.http }
-    private let displayStore: DisplaySettingsStore
+    let displayStore: DisplaySettingsStore
     private let now: @Sendable () -> Date
     private let poller: Poller
     private static let log = Logger(subsystem: "cc.kuoc.agent-hourglass", category: "AppModel")
@@ -133,7 +133,6 @@ final class AppModel {
             for e in entries { seed(e, interval: appState.effectiveInterval, at: t) }
             throw error
         }
-        try env.shared.cache.remove(id)
         await poller.remove(client: id)
         WidgetReloader.reloadAll()
     }
@@ -245,6 +244,17 @@ extension AppModel {
         model.entries = Fixtures.entries
         for (id, s) in Fixtures.appState().statuses { model.appState.statuses[id] = s }
         return model
+    }
+
+    /// `--fixtures`: seeds state from `Fixtures` with no Poller, for manual UI checks.
+    func loadFixtures() {
+        let src = Fixtures.appState()
+        entries = Fixtures.entries
+        appState.accounts = src.accounts
+        appState.snapshots = src.snapshots
+        appState.statuses = src.statuses
+        appState.names = src.names
+        appState.lastSuccess = src.lastSuccess
     }
 }
 #endif

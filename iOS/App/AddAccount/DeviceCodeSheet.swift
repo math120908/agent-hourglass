@@ -29,6 +29,7 @@ struct DeviceCodeSheet: View {
         }
         .padding(.horizontal, 24)
         .frame(maxWidth: .infinity)
+        .tint(GlassStyle.accent(provider))
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Cancel") { dismiss() }

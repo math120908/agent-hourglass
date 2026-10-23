@@ -27,22 +27,9 @@ private struct GlassCardStack: View {
     var items: [Item]
     var expanded: Bool
 
-    static let pikachu = AccountID(kind: .claude, remoteID: "pikachu-dev")
-    static let ditto = AccountID(kind: .claude, remoteID: "ditto")
-
-    static func entry(_ id: AccountID, _ name: String) -> AccountEntry {
-        AccountEntry(id: id, kind: .claude, displayName: name, remoteLogin: nil, order: 9, addedAt: Fixtures.now, status: "active")
-    }
-
     static func item(_ id: AccountID, _ status: AccountStatus) -> Item {
         let e = Fixtures.entries.first { $0.id == id }!
         return Item(entry: e, snapshot: Fixtures.snapshots()[id], status: status)
-    }
-
-    static var pikachuSnapshot: UsageSnapshot {
-        var s = Fixtures.snapshots()[Fixtures.snorlax]!
-        s.accountID = pikachu
-        return s
     }
 
     static var collapsedItems: [Item] {
@@ -50,7 +37,7 @@ private struct GlassCardStack: View {
             item(Fixtures.snorlax, .fresh),
             item(Fixtures.eevee, .fresh),
             item(Fixtures.mewtwo, .fresh),
-            Item(entry: entry(pikachu, "pikachu-dev"), snapshot: pikachuSnapshot, status: .fresh),
+            Item(entry: Fixtures.claudeExtra(Fixtures.jigglypuff, "Jigglypuff", order: 3), snapshot: Fixtures.jigglypuffSnapshot, status: .fresh),
         ]
     }
 
@@ -61,8 +48,8 @@ private struct GlassCardStack: View {
             stale,
             item(Fixtures.eevee, .needsLogin),
             item(Fixtures.mewtwo, .rateLimited(retryAt: Fixtures.now.addingTimeInterval(25 * 60))),
-            Item(entry: entry(pikachu, "pikachu-dev"), snapshot: pikachuSnapshot, status: .schemaError),
-            Item(entry: entry(ditto, "Ditto"), snapshot: nil, status: .noData),
+            Item(entry: Fixtures.claudeExtra(Fixtures.jigglypuff, "Jigglypuff", order: 3), snapshot: Fixtures.jigglypuffSnapshot, status: .schemaError),
+            Item(entry: Fixtures.claudeExtra(Fixtures.ditto, "Ditto", order: 4), snapshot: nil, status: .noData),
         ]
     }
 

@@ -137,3 +137,29 @@ struct AccountClientSharedTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: dir.path).isEmpty)
     }
 }
+
+struct AccountClientCancelTests {
+    let id = AccountID(kind: .claude, remoteID: "acct-42")
+
+    @Test(arguments: [false, true]) func removedMidRefreshPersistsNothing(sharedState: Bool) async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("acc-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let shared = sharedState ? SharedAccountState.inDirectory(dir) : nil
+        let log = EventLog()
+        let provider = FakeProvider(log: log)
+        provider.refreshDelay = .milliseconds(300)
+        let store = LoggingStore(log: log)
+        try store.inner.write(Credential(kind: .claude, access: Secret("tok-1"), refresh: Secret("ref-1"), expiresAt: Date().addingTimeInterval(10), refreshExpiresAt: nil, scopes: []), for: id, label: "t")
+        let client = AccountClient(id: id, provider: provider, http: HTTPClient(), store: store, clock: ContinuousClock(), now: { Date() }, shared: shared)
+        let poller = Poller(clients: [client], clock: ContinuousClock(), now: { Date() }, jitter: { 0 }) { _, _ in }
+        let fetch = Task { await client.fetch() }
+        try await Task.sleep(for: .milliseconds(100))
+        await poller.remove(client: id)
+        try store.delete(id)
+        _ = await fetch.value
+        #expect(log.events.contains("refresh:tok-2"))
+        #expect(!log.events.contains { $0.hasPrefix("write:") })
+        #expect(try store.read(id) == nil)
+        if let shared { #expect(shared.cache.read(id) == nil) }
+    }
+}
