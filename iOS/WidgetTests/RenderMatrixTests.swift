@@ -58,7 +58,7 @@ final class RenderMatrixTests: XCTestCase {
         }
         let states: [(String, UsageEntry)] = [
             ("stale", F.entry(F.claudeStale, status: .stale)),
-            ("needslogin", F.entry(F.claudeMax, status: .needsLogin)),
+            ("needslogin", F.entry(F.claudeNeedsLogin, status: .needsLogin)),
             ("afterreset", F.entry(F.claudeAfterReset)),
             ("empty", F.entry(nil, account: nil, status: nil)),
             ("codex", F.entry(F.codexPlus, account: F.codexAccount)),
@@ -73,8 +73,9 @@ final class RenderMatrixTests: XCTestCase {
         remaining.showRemaining = true
         var countdown = DisplaySettings.default
         countdown.resetStyle = .countdown
+        // The base renders 24 h times in the fixture locale, so this variant forces 12 h to differ.
         var hour24 = DisplaySettings.default
-        hour24.hour24 = .on
+        hour24.hour24 = .off
         for (variant, settings) in [("remaining", remaining), ("countdown", countdown), ("24h", hour24)] {
             cases.append(Case(name: "small-glass-fullcolor-dark-\(variant)", family: .small, mode: smallModes[1], entry: F.entry(F.claudeMax, settings: settings)))
         }
@@ -127,6 +128,11 @@ final class RenderMatrixTests: XCTestCase {
                 let ratio = Self.differingRatio(image, back)
                 XCTAssertGreaterThanOrEqual(ratio, c.mode.render == .accented ? 0.05 : 0.01, "\(c.name): widget nearly invisible (\(ratio))")
             }
+        }
+        let base = try Data(contentsOf: dir.appendingPathComponent("small-glass-fullcolor-dark.png"))
+        for variant in ["remaining", "countdown", "24h"] {
+            let data = try Data(contentsOf: dir.appendingPathComponent("small-glass-fullcolor-dark-\(variant).png"))
+            XCTAssertNotEqual(data, base, "\(variant) renders identical to its base")
         }
     }
 

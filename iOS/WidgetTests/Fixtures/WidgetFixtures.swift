@@ -36,6 +36,13 @@ enum WidgetFixtures {
         return s
     }
 
+    /// Fetched 3 h before `now`, for the needs-login render.
+    static var claudeNeedsLogin: UsageSnapshot {
+        var s = claudeMax
+        s.fetchedAt = now.addingTimeInterval(-3 * 3600)
+        return s
+    }
+
     /// The 5-hour window reset 1 min before `now`; fetched 6 min ago, before the reset.
     static let claudeAfterReset = UsageSnapshot(accountID: claudeMax.accountID, fetchedAt: now.addingTimeInterval(-6 * 60), meters: [
         Meter(kind: .session5h, label: "5-hour", percentUsed: 97, resetsAt: now.addingTimeInterval(-60), windowLength: .seconds(18000)),
