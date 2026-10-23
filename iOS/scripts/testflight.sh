@@ -9,10 +9,11 @@
 # ASC_KEY_ID=<id> and ASC_ISSUER_ID=<uuid> (parsed, not sourced).
 # The Admin API key (.p8) lives only in 1Password: vault ASC_OP_VAULT (default Personal), item ASC_OP_ITEM
 # (default below), file field p8, text field Key ID equal to ASC_KEY_ID. Preflight checks the item; right
-# before the archive `op read` copies the key into a mode 700 mktemp dir (file mode 600) for xcodebuild
-# (-authenticationKeyPath) and altool (API_PRIVATE_KEYS_DIR), and the EXIT trap removes the dir on success,
-# failure, HUP, INT and TERM. 1Password asks for Touch ID. ASC_KEY_PATH=/abs/AuthKey_<id>.p8 (mode 600) uses
-# a local file instead; ~/.appstoreconnect/private_keys is never read.
+# before the archive (after `make test`) a fresh mode 700 mktemp dir is created and `op read` copies the key
+# into it (file mode 600) for xcodebuild (-authenticationKeyPath) and altool (API_PRIVATE_KEYS_DIR). The EXIT
+# trap removes that dir first, on success, failure, HUP, INT and TERM. 1Password asks for Touch ID.
+# ASC_KEY_PATH=/abs/AuthKey_<id>.p8 (mode 600) uses a local file instead. The run refuses to start, and to
+# upload, while any AuthKey_*.p8 sits in a dir altool searches before API_PRIVATE_KEYS_DIR.
 # Key ID, issuer ID, the key and its path are never echoed. Preflight test output goes to <out>/preflight.log,
 # xcodebuild and altool output to <out>/xcodebuild.log (both 600); failures show a redacted tail.
 set -euo pipefail
@@ -57,6 +58,10 @@ verify_bundles() { # <app> <build> <commit> <dist> <label>
   [ "$(plist CFBundleIdentifier "$app/Info.plist")" = "$APP_ID" ] || die "verify: app bundle id"
   [ "$(plist CFBundleIdentifier "$appex/Info.plist")" = "$WIDGET_ID" ] || die "verify: widget bundle id"
   [ "$(plist GitCommit "$app/Info.plist")" = "$commit" ] || die "verify: GitCommit is not $commit"
+  # The internal-only export stamps the app Info.plist (seen in the 261023.201712 ipa); the archive has none.
+  if [ "$dist" = 1 ] && [ "$(plist TFInternalTestingOnly "$app/Info.plist")" != true ]; then
+    die "verify: app TFInternalTestingOnly is not true"
+  fi
   for b in "$app:$APP_ID" "$appex:$WIDGET_ID"; do
     id=${b##*:}; b=${b%:*}; name=$(basename "$b")
     ent=$(codesign -d --entitlements :- "$b" 2>/dev/null || true)
@@ -117,12 +122,15 @@ case "${1:-}" in
 esac
 
 # Cleanup for every exit of a run (the --verify-* modes above exit before this). Each part is armed once
-# its state exists. HUP/INT/TERM exit through it too.
-rsbin=; keydir=; distlogs_armed=0
+# its state exists. HUP/INT/TERM exit through it too. The key dir goes first, and no step can stop the
+# others (no errexit here); a step that fails says so and the run keeps its exit status.
+rsbin=; keydir=; operr=; distlogs_armed=0
 cleanup() {
+  set +e
+  [ -z "$keydir" ] || rm -rf "$keydir" || echo "testflight: could not remove the key dir $keydir; remove it by hand" >&2
+  [ -z "$operr" ] || rm -f "$operr"
   [ "$distlogs_armed" = 0 ] || rm_distlogs
   [ -z "$rsbin" ] || rm -rf "$rsbin"
-  [ -z "$keydir" ] || rm -rf "$keydir"
 }
 trap cleanup EXIT
 trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM
@@ -155,6 +163,17 @@ unset line
 # tail_log <log>: last 30 lines to stderr, with any asc.env value lines dropped.
 tail_log() { tail -n 30 "$1" | rg -v -F -e "$kid" -e "$iss" >&2 || true; }
 check_export_options ExportOptions.plist
+# altool searches these dirs for AuthKey_<id>.p8 before API_PRIVATE_KEYS_DIR (`xcrun altool --help`): a
+# leftover key there would be used instead of the 1Password copy. Checked now and again before the upload.
+no_stale_keys() {
+  local d f
+  for d in ./private_keys "$HOME/private_keys" "$HOME/.private_keys" "$HOME/.appstoreconnect/private_keys"; do
+    for f in "$d"/AuthKey_*.p8; do
+      [ ! -e "$f" ] && [ ! -L "$f" ] || die "an AuthKey_*.p8 is in $d, which altool searches first: move it into 1Password and delete it"
+    done
+  done
+}
+no_stale_keys
 security find-identity -v -p codesigning | rg -q 'Apple Distribution' || die "no Apple Distribution identity in the keychain"
 
 # API key. check_p8 <file> <label>: a regular file (not a symlink), mode 600, a PEM private key; never printed.
@@ -173,9 +192,7 @@ else
   # The item is checked now (Touch ID prompt); the key itself is copied only right before the archive, so
   # it is not on disk during the minutes of `make test`, which run repo and package code as this user.
   command -v op >/dev/null || die "1Password CLI 'op' not found: install it and enable the 1Password app integration, or set ASC_KEY_PATH"
-  keydir=$(mktemp -d); chmod 700 "$keydir"
-  [ "$(/usr/bin/stat -f '%Lp' "$keydir")" = 700 ] || die "key dir must be mode 700"
-  operr=$keydir/op.log
+  operr=$(umask 077; mktemp)
   item=$( (umask 077; op item get "$ASC_OP_ITEM" --vault "$ASC_OP_VAULT" --format json 2>"$operr") ) \
     || { tail_log "$operr"; die "1Password: cannot read item \"$ASC_OP_ITEM\" in vault $ASC_OP_VAULT (unlock 1Password and approve Touch ID)"; }
   # Count-only checks; prints only a status word and the vault and item ids for the op:// reference.
@@ -192,10 +209,17 @@ else
     *) die "1Password: cannot parse item \"$ASC_OP_ITEM\"" ;;
   esac
 fi
-# fetch_key: copy the key from 1Password into the private dir (no-op with ASC_KEY_PATH).
+# fetch_key: create a fresh private dir and copy the key from 1Password into it (no-op with ASC_KEY_PATH).
+# The dir does not exist before this, so nothing run by `make test` can plant a file or link at its path.
 fetch_key() {
   [ -z "$p8" ] || return 0
+  [ -z "$keydir" ] || die "key dir already exists"
+  keydir=$(umask 077; mktemp -d) || die "cannot create the key dir"
+  chmod 700 "$keydir"
+  [ -d "$keydir" ] && [ ! -L "$keydir" ] && [ "$(/usr/bin/stat -f '%u %Lp' "$keydir")" = "$(id -u) 700" ] \
+    && [ -z "$(ls -A "$keydir")" ] || die "key dir must be a new empty dir of this user, mode 700"
   local f=$keydir/$keyfile
+  [ ! -e "$f" ] && [ ! -L "$f" ] || die "key file path already exists"
   ( umask 077; op read --file-mode 0600 --out-file "$f" "$opref" ) >>"$operr" 2>&1 \
     || { tail_log "$operr"; die "1Password: op read of the p8 file failed (approve Touch ID)"; }
   check_p8 "$f" 1Password; p8=$f
@@ -220,14 +244,24 @@ log=$out/xcodebuild.log; ( umask 077; : > "$log" )
 xcodegen generate --spec project.yml --quiet
 # xcodebuild with -authenticationKey* writes the key id and issuer id into *.xcdistributionlogs bundles
 # in `getconf DARWIN_USER_TEMP_DIR`, even when TMPDIR is overridden. Scan that dir, and $TMPDIR too when it
-# differs. Remove the bundles that appear during this run (success or failure); keep any that existed
-# before. AH_DARWIN_TEMP_DIR stands in for getconf in tests.
-dtmp=${AH_DARWIN_TEMP_DIR:-$(getconf DARWIN_USER_TEMP_DIR)}; dtmp=${dtmp%/}
+# differs. Remove this scheme's bundles that appear during this run (success or failure); keep any that
+# existed before, and other schemes' bundles.
+dtmp=$(getconf DARWIN_USER_TEMP_DIR); dtmp=${dtmp%/}
 [ -n "$dtmp" ] && [ -d "$dtmp" ] || die "cannot resolve DARWIN_USER_TEMP_DIR"
 tdirs=("$dtmp"); [ -n "${TMPDIR:-}" ] && [ "${TMPDIR%/}" != "$dtmp" ] && tdirs+=("${TMPDIR%/}")
-distlogs() { local d t; for t in "${tdirs[@]}"; do for d in "$t"/*.xcdistributionlogs; do [ -e "$d" ] && echo "$d"; done; done; return 0; }
+distlogs() {
+  local d t
+  for t in "${tdirs[@]}"; do for d in "$t"/AgentHourglassiOS_*.xcdistributionlogs; do [ -e "$d" ] && echo "$d"; done; done
+  return 0
+}
 pre_logs=$(distlogs)
-rm_distlogs() { local d; distlogs | while IFS= read -r d; do printf '%s\n' "$pre_logs" | rg -q -x -F -- "$d" || rm -rf "$d"; done; }
+rm_distlogs() {
+  local d
+  while IFS= read -r d; do
+    printf '%s\n' "$pre_logs" | rg -q -x -F -- "$d" || rm -rf "$d" 2>/dev/null \
+      || echo "testflight: could not remove $d (holds the key id and issuer id); remove it by hand" >&2
+  done < <(distlogs)
+}
 distlogs_armed=1
 # Xcode's IPA step runs /usr/bin/rsync (openrsync), which starts its local server as `rsync` from PATH.
 # Homebrew rsync 3.x there rejects --extended-attributes and export fails with only "Copy failed".
@@ -262,6 +296,7 @@ fi
 # 7. Upload the verified ipa. altool finds AuthKey_<id>.p8 in $API_PRIVATE_KEYS_DIR (`xcrun altool --help`,
 # --api-key); iOS/private_keys, which altool searches first, is not in the clean tree.
 check_tree
+no_stale_keys
 export API_PRIVATE_KEYS_DIR; API_PRIVATE_KEYS_DIR=$(dirname "$p8")
 run xcrun altool --upload-package "$ipa" --api-key "$kid" --api-issuer "$iss"
 echo "testflight: uploaded $version ($build) $commit"
