@@ -87,4 +87,4 @@ Versioning: `MARKETING_VERSION` 1.0.0 in `iOS/project.yml`; build number `YYMMDD
 
 Release checks: [iOS/docs/testflight-checklist.md](iOS/docs/testflight-checklist.md). `make test` includes `make check-ios` (UsageCore builds for iOS) and the source guards and secret scan, which cover `iOS/`.
 
-Simulator defaults: `SIM_NAME=iPhone 17`, `SIM_OS=26.0` (override on the make command line). Signing is automatic with team R7V5X99HYA; simulator builds need no signing.
+Simulator defaults: `SIM_NAME=iPhone 17`, `SIM_OS=26.5` (override on the make command line). Signing is automatic with team R7V5X99HYA; simulator builds need no signing.

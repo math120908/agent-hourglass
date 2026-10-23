@@ -3,7 +3,7 @@
 # Usage: run-sim.sh <app path> [args...]   (SIM_NAME / SIM_OS from env)
 set -euo pipefail
 app="$1"; shift
-udid="$("$(dirname "$0")/sim-udid.sh" "${SIM_NAME:-iPhone 17}" "${SIM_OS:-26.0}")"
+udid="$("$(dirname "$0")/sim-udid.sh" "${SIM_NAME:-iPhone 17}" "${SIM_OS:-26.5}")"
 xcrun simctl boot "$udid" 2>/dev/null || true
 xcrun simctl bootstatus "$udid" -b >/dev/null
 # Simulator.app is optional (absent on headless machines).

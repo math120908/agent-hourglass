@@ -4,7 +4,7 @@
 set -euo pipefail
 dir="$(cd "$(dirname "$0")" && pwd)"
 ios="$(cd "$dir/.." && pwd)"
-udid="$("$dir/sim-udid.sh" "${SIM_NAME:-iPhone 17}" "${SIM_OS:-26.0}")"
+udid="$("$dir/sim-udid.sh" "${SIM_NAME:-iPhone 17}" "${SIM_OS:-26.5}")"
 xcrun simctl boot "$udid" 2>/dev/null || true
 xcrun simctl bootstatus "$udid" -b >/dev/null
 xcrun simctl install "$udid" "$1"
