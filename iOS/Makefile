@@ -10,7 +10,7 @@ generate:
 	xcodegen generate --quiet
 
 build: generate
-	$(XCB) build
+	$(XCB) build GIT_COMMIT=$$(git rev-parse --short HEAD)
 
 test: generate
-	$(XCB) test
+	$(XCB) test GIT_COMMIT=$$(git rev-parse --short HEAD)
