@@ -29,6 +29,18 @@ final class ClaudeWebAuthPolicyTests: XCTestCase {
         XCTAssertEqual(d("about:blank"), .block)
     }
 
+    func test_G3_unlistedSubdomainBlocked() {
+        XCTAssertEqual(d("https://support.claude.com/"), .block)
+        XCTAssertEqual(d("https://docs.anthropic.com/"), .block)
+        XCTAssertEqual(d("https://usercontent.claude.ai/x"), .block)
+        XCTAssertEqual(d("https://anthropic.com/"), .block)
+        XCTAssertEqual(d("https://platform.claude.com/login"), .allow)
+        XCTAssertEqual(d("https://www.claude.ai/"), .block)
+        XCTAssertEqual(d("https://challenges.cloudflare.com/turnstile"), .allow)
+        XCTAssertEqual(d("https://x.challenges.cloudflare.com/"), .allow)
+        XCTAssertEqual(d("https://cloudflare.com/"), .block)
+    }
+
     func testConstantTimeEqualPublic() {
         XCTAssertTrue(constantTimeEqual("a", "a"))
         XCTAssertFalse(constantTimeEqual("a", "b"))

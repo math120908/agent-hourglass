@@ -10,11 +10,14 @@ public enum ClaudeWebAuthPolicy {
         case block
     }
 
-    /// Matched on a dot boundary: the host equals a suffix or ends with "." + suffix.
-    /// `hcaptcha.com` is required by the authorize page (S4 spike: newassets.hcaptcha.com).
-    public static let allowedHostSuffixes: [String] = [
-        "claude.com", "claude.ai", "anthropic.com", "challenges.cloudflare.com", "hcaptcha.com",
+    /// First-party hosts, matched exactly: no other subdomain loads inside the sign-in view (S3).
+    public static let allowedHosts: Set<String> = [
+        "claude.ai", "claude.com", "platform.claude.com", "console.anthropic.com",
     ]
+
+    /// Third-party challenge providers, matched on a dot boundary (host equals the suffix or ends
+    /// with "." + suffix). `hcaptcha.com` is required by the authorize page (S4 spike: newassets.hcaptcha.com).
+    public static let allowedHostSuffixes: [String] = ["challenges.cloudflare.com", "hcaptcha.com"]
 
     private static let callback = URLComponents(string: ClaudePKCEFlow.manualRedirectURI)!
 
@@ -28,7 +31,8 @@ public enum ClaudeWebAuthPolicy {
             return .capture(code: p.code, state: p.state)
         }
         guard c.user == nil, c.password == nil else { return .block }
-        let ok = allowedHostSuffixes.contains { host == $0 || host.hasSuffix("." + $0) }
+        let ok = allowedHosts.contains(host)
+            || allowedHostSuffixes.contains { host == $0 || host.hasSuffix("." + $0) }
         return ok ? .allow : .block
     }
 }
