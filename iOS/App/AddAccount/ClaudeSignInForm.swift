@@ -3,7 +3,7 @@ import UsageCore
 /// View-side state of the Claude paste sign-in: what the user has done on this screen. The
 /// server outcome lives in `ClaudeSignInModel.State`; the pasteboard is never read here.
 struct ClaudeSignInForm: Equatable {
-    enum Step: Equatable { case todo, current, done }
+    typealias Step = SignInStep
 
     var text = ""
     /// The sign-in page was shown at least once (the auth session completion handler fired).

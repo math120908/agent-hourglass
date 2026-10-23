@@ -26,6 +26,11 @@ enum SheetTone {
         scheme == .dark ? Color(red: 1.0, green: 0.76, blue: 0.60) : Color(red: 0.72, green: 0.35, blue: 0.18)
     }
 
+    /// Current-step ring: Claude keeps its ring tone, Codex uses its readable accent.
+    static func ring(_ kind: ProviderKind, _ scheme: ColorScheme) -> Color {
+        kind == .claude ? claude(scheme) : accentText(kind, scheme)
+    }
+
     /// Accent label on a quiet (tinted) pill: lifted on dark, deep on light, >= 4.5:1 on the pill.
     static func accentText(_ kind: ProviderKind, _ scheme: ColorScheme) -> Color {
         switch (kind, scheme) {
@@ -97,18 +102,21 @@ struct SheetStatus: View {
     }
 }
 
-/// Disabled primary: a faded Claude capsule with a readable label, so the user sees where the
+/// Disabled primary: a faded provider capsule with a readable label, so the user sees where the
 /// action will appear. Enabled callers use `.borderedProminent`; this only draws the disabled look.
+/// `compact` matches a regular-size capsule (the Codex `Copy` pill) instead of a large button.
 struct FadedProminentStyle: ButtonStyle {
+    var kind: ProviderKind = .claude
     let tint: Color
+    var compact = false
     @Environment(\.colorScheme) private var scheme
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.body)
-            .foregroundStyle(scheme == .dark ? Color.white.opacity(0.78) : SheetTone.accentText(.claude, .light))
-            .padding(.horizontal, 20)
-            .frame(minHeight: 50)
+            .foregroundStyle(scheme == .dark ? Color.white.opacity(0.78) : SheetTone.accentText(kind, .light))
+            .padding(.horizontal, compact ? 14 : 20)
+            .frame(minHeight: compact ? 34 : 50)
             .background {
                 // Light: a white base keeps the faded tint (and its label contrast) the same on
                 // the lilac Glass gradient and on white.
