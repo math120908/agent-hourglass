@@ -32,8 +32,7 @@ struct AboutView: View {
                 .listRowBackground(Color.clear)
             }
             Section {
-                LabeledContent("Version", value: BuildInfo.version).listRowBackground(rowBackground)
-                LabeledContent("Build", value: BuildInfo.build).listRowBackground(rowBackground)
+                LabeledContent("Version", value: BuildInfo.displayVersion).listRowBackground(rowBackground)
                 LabeledContent("Commit") {
                     Text(BuildInfo.commit)
                         .font(.body.monospaced())
