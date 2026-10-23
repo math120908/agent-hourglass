@@ -92,4 +92,57 @@ struct StoredAddTests {
         let store = SharedBackoffStore(directory: dir)
         try store.remove(AccountID(kind: .claude, remoteID: "none"))
     }
+
+    func codexCred(_ tok: String, account: String?) -> Credential {
+        Credential(kind: .codex, access: Secret(tok), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: [], remoteAccountID: account)
+    }
+
+    @Test func addCodexStoresCredentialAndRegisters() async throws {
+        let (svc, store, registry, _) = try make()
+        let id = try await svc.addCodex(credential: codexCred("c1", account: "acct-1"))
+        #expect(id.rawValue == "codex:acct-1")
+        #expect(try store.read(id)?.access.reveal() == "c1")
+        let entries = await registry.accounts()
+        #expect(entries.count == 1)
+        #expect(entries.first?.kind == .codex)
+        #expect(entries.first?.displayName == "Codex")
+        #expect(store.labels == [AccountService.keychainLabel(kind: .codex, number: 1)])
+        #expect(log.all == ["keychain", "fetch"])
+    }
+
+    @Test func addCodexSecondAccountNumbered() async throws {
+        let (svc, store, registry, _) = try make()
+        try await svc.addCodex(credential: codexCred("c1", account: "acct-1"))
+        let id2 = try await svc.addCodex(credential: codexCred("c2", account: "acct-2"))
+        #expect(await registry.accounts().first { $0.id == id2 }?.displayName == "Codex #2")
+        #expect(store.labels.last == AccountService.keychainLabel(kind: .codex, number: 2))
+        #expect(store.labels.last == "Claude Usage – codex #2")
+    }
+
+    @Test func addCodexSameAccountIsReauth() async throws {
+        let (svc, store, registry, _) = try make()
+        let id = try await svc.addCodex(credential: codexCred("c1", account: "acct-1"))
+        try await registry.rename(id, to: "Work")
+        try await svc.addCodex(credential: codexCred("c2", account: "acct-1"))
+        let accounts = await registry.accounts()
+        #expect(accounts.count == 1)
+        #expect(accounts.first?.displayName == "Work")
+        #expect(try store.read(id)?.access.reveal() == "c2")
+    }
+
+    @Test func addCodexWithoutAccountIDThrows() async throws {
+        let (svc, store, registry, _) = try make()
+        await #expect(throws: AccountServiceError.missingAccountID) {
+            try await svc.addCodex(credential: codexCred("c1", account: nil))
+        }
+        await #expect(throws: AccountServiceError.missingAccountID) {
+            try await svc.addCodex(credential: codexCred("c1", account: ""))
+        }
+        await #expect(throws: AccountServiceError.missingAccountID) {
+            try await svc.addCodex(credential: Credential(kind: .claude, access: Secret("x"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: [], remoteAccountID: "acct-1"))
+        }
+        #expect(store.labels.isEmpty)
+        #expect(log.all.isEmpty)
+        #expect(await registry.accounts().isEmpty)
+    }
 }

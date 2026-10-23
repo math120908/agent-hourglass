@@ -5,6 +5,7 @@ public enum AccountServiceError: Error, Equatable {
     case signInInProgress
     case differentAccount
     case unknownAccount
+    case missingAccountID
 }
 
 /// Orchestrates AccountRegistry + CredentialStore + Poller (spec §4, §5).
@@ -126,6 +127,18 @@ public actor AccountService {
         if existing != nil { await poller.remove(client: id) }
         await poller.add(client: makeClient(id))
         await poller.refreshAll(force: false)
+        return id
+    }
+
+    /// Adds a Codex account whose credential came from the device-code login (iOS). The credential's
+    /// `remoteAccountID` is the stable id; an id already in the registry is a re-auth.
+    @discardableResult
+    public func addCodex(credential: Credential) async throws -> AccountID {
+        guard credential.kind == .codex, let remote = credential.remoteAccountID, !remote.isEmpty else {
+            throw AccountServiceError.missingAccountID
+        }
+        let id = AccountID(kind: .codex, remoteID: remote)
+        try await commit(credential, id: id, kind: .codex, defaultName: { $0 == 1 ? "Codex" : "Codex #\($0)" }, remoteLogin: nil)
         return id
     }
 
