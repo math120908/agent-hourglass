@@ -96,10 +96,14 @@ pre "make -C iOS test" make test
 log=$out/xcodebuild.log; ( umask 077; : > "$log" )
 xcodegen generate --spec project.yml --quiet
 auth=(-allowProvisioningUpdates -authenticationKeyPath "$p8" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
-# xcodebuild with -authenticationKey* writes the key id and issuer id into $TMPDIR/*.xcdistributionlogs.
-# Remove the bundles that appear during this run (success or failure); keep any that existed before.
-tmpdir=${TMPDIR:-$(getconf DARWIN_USER_TEMP_DIR)}; tmpdir=${tmpdir%/}
-distlogs() { local d; for d in "$tmpdir"/*.xcdistributionlogs; do [ -e "$d" ] && echo "$d"; done; return 0; }
+# xcodebuild with -authenticationKey* writes the key id and issuer id into *.xcdistributionlogs bundles
+# in `getconf DARWIN_USER_TEMP_DIR`, even when TMPDIR is overridden. Scan that dir, and $TMPDIR too when it
+# differs. Remove the bundles that appear during this run (success or failure); keep any that existed
+# before. AH_DARWIN_TEMP_DIR stands in for getconf in tests.
+dtmp=${AH_DARWIN_TEMP_DIR:-$(getconf DARWIN_USER_TEMP_DIR)}; dtmp=${dtmp%/}
+[ -n "$dtmp" ] && [ -d "$dtmp" ] || die "cannot resolve DARWIN_USER_TEMP_DIR"
+tdirs=("$dtmp"); [ -n "${TMPDIR:-}" ] && [ "${TMPDIR%/}" != "$dtmp" ] && tdirs+=("${TMPDIR%/}")
+distlogs() { local d t; for t in "${tdirs[@]}"; do for d in "$t"/*.xcdistributionlogs; do [ -e "$d" ] && echo "$d"; done; done; return 0; }
 pre_logs=$(distlogs)
 rm_distlogs() { local d; distlogs | while IFS= read -r d; do printf '%s\n' "$pre_logs" | rg -q -x -F -- "$d" || rm -rf "$d"; done; }
 # Xcode's IPA step runs /usr/bin/rsync (openrsync), which starts its local server as `rsync` from PATH.

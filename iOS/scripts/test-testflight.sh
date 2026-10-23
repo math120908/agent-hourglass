@@ -1,8 +1,10 @@
 #!/bin/bash
 # Tests for testflight.sh with fake tools on PATH (no real archive, export or upload).
-#   distlogs-*: the run removes the .xcdistributionlogs bundles its own xcodebuild calls write to
-#               $TMPDIR (they hold the ASC key id and issuer id), on success and on failure, and
-#               leaves bundles that existed before the run alone.
+#   distlogs-*: the run removes the .xcdistributionlogs bundles its own xcodebuild calls write
+#               (they hold the ASC key id and issuer id), on success and on failure, and leaves
+#               bundles that existed before the run alone. Real xcodebuild writes them to
+#               `getconf DARWIN_USER_TEMP_DIR` even when TMPDIR is overridden; the fake writes to
+#               AH_DARWIN_TEMP_DIR, which testflight.sh reads in place of getconf.
 #   relpath:    --verify-archive resolves a relative path against the caller's cwd.
 #   rsync:      export runs with rsync resolving to /usr/bin/rsync. Xcode's IPA step runs /usr/bin/rsync
 #               (openrsync), which starts its local server as `rsync` from PATH; Homebrew rsync 3.x there
@@ -59,11 +61,12 @@ cat > "$bin/make" <<'EOF2'
 for i in $(seq 1 50); do echo "noise $i"; done
 echo "FAKE-MARKER killedHolderReleasesLock failed"; exit 2
 EOF2
-# Fake xcodebuild: like Xcode with -authenticationKey*, writes the key id into a $TMPDIR bundle.
+# Fake xcodebuild: like Xcode with -authenticationKey*, writes the key id into a bundle in the
+# Darwin user temp dir (AH_DARWIN_TEMP_DIR here), not in $TMPDIR.
 cat > "$bin/xcodebuild" <<'EOF'
 #!/bin/bash
 args=("$@"); val() { local i; for ((i=0; i<${#args[@]}; i++)); do [ "${args[i]}" = "$1" ] && echo "${args[i+1]}"; done; }
-logs=$(mktemp -d "${TMPDIR%/}/AgentHourglassiOS_XXXX")
+logs=$(mktemp -d "${AH_DARWIN_TEMP_DIR%/}/AgentHourglassiOS_XXXX")
 mv "$logs" "$logs.xcdistributionlogs"; echo "key $(val -authenticationKeyID) $(val -authenticationKeyIssuerID)" > "$logs.xcdistributionlogs/IDEDistribution.log"
 build=; for a in "$@"; do case $a in CURRENT_PROJECT_VERSION=*) build=${a#*=} ;; esac; done
 case "$1" in
@@ -82,27 +85,33 @@ EOF
 printf '#!/bin/bash\nexit 1\n' > "$bin/rsync"
 chmod +x "$bin"/*
 
-# run_flow <name> <want exit> [script args...]: full flow in a scratch TMPDIR holding one older bundle.
+# run_flow <name> <want exit> [script args...]: full flow with a scratch Darwin temp dir holding one
+# older bundle. RUN_TMPDIR=other runs with TMPDIR set to a different scratch dir (also holding one).
 run_flow() {
-  local name=$1 want=$2 tmp=$t/tmp-$1 code=0 out left; shift 2
-  mkdir -p "$tmp/Older_1.xcdistributionlogs"
+  local name=$1 want=$2 tmp=$t/tmp-$1 code=0 out left d; shift 2
+  local tmpdir=$tmp/
+  [ "${RUN_TMPDIR:-}" = other ] && tmpdir=$t/tmpdir-$name/
+  mkdir -p "$tmp/Older_1.xcdistributionlogs" "${tmpdir}Older_1.xcdistributionlogs"
   local before; before=$(ls "$outroot" 2>/dev/null || true)
-  out=$(env PATH="$bin:$PATH" HOME="$t/home" ASC_ENV="$t/asc.env" TMPDIR="$tmp/" "$script" "$@" 2>&1) || code=$?
+  out=$(env PATH="$bin:$PATH" HOME="$t/home" ASC_ENV="$t/asc.env" AH_DARWIN_TEMP_DIR="$tmp/" TMPDIR="$tmpdir" \
+    "$script" "$@" 2>&1) || code=$?
   for d in "$outroot"/*; do [ -e "$d" ] || continue; printf '%s\n' "$before" | rg -q -x -F -- "$(basename "$d")" || rm -rf "$d"; done
-  left=$(cd "$tmp" && ls -d -- *.xcdistributionlogs 2>/dev/null | tr '\n' ' ' || true)
+  left=
+  for d in "$tmp" "$tmpdir"; do left="$left$(cd "$d" && ls -d -- *.xcdistributionlogs 2>/dev/null | tr '\n' ' ' || true)"; done
   if [ "$code" != "$want" ]; then bad "$name" "exit $code want $want: $out"
-  elif [ "$left" != "Older_1.xcdistributionlogs " ]; then bad "$name" "bundles left in TMPDIR: '$left'"
+  elif [ "$left" != "Older_1.xcdistributionlogs Older_1.xcdistributionlogs " ]; then bad "$name" "bundles left: '$left'"
   elif [[ "$out" == *"$KEY"* || "$out" == *"$ISS"* ]]; then bad "$name" "key id or issuer id in output"
   else pass "$name"; fi
 }
 run_flow distlogs-upload 0
 run_flow distlogs-dry-run 0 --dry-run
 FAKE_EXPORT_FAIL=1 run_flow distlogs-export-fail 1
+RUN_TMPDIR=other run_flow distlogs-tmpdir-override 0 --dry-run
 
 # preflight-log: the build number is pinned so the run's output dir is known.
 pb=261023.120000; pdir=$outroot/$pb; plog=$pdir/preflight.log
 [ ! -e "$pdir" ] || bad preflight-log "$pdir already exists"
-code=0; out=$(env PATH="$bin:$PATH" HOME="$t/home" ASC_ENV="$t/asc.env" TMPDIR="$t/" FAKE_MAKE_FAIL=1 \
+code=0; out=$(env PATH="$bin:$PATH" HOME="$t/home" ASC_ENV="$t/asc.env" AH_DARWIN_TEMP_DIR="$t/" TMPDIR="$t/" FAKE_MAKE_FAIL=1 \
   BUILD_NUMBER_NOW=2026-10-23T12:00:00Z "$script" --dry-run 2>&1) || code=$?
 if [ $code = 0 ]; then bad preflight-log "exit 0"
 elif [[ "$out" != *"FAKE-MARKER killedHolderReleasesLock failed"* ]]; then bad preflight-log "no tail in output: $out"
