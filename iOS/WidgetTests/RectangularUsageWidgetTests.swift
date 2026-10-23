@@ -25,7 +25,7 @@ final class RectangularUsageWidgetTests: XCTestCase {
         XCTAssertFalse(c.ageText.isEmpty)
     }
 
-    func testStalenessDerivedFromEntryDate() {
+    @MainActor func testStalenessDerivedFromEntryDate() {
         let late = F.now.addingTimeInterval(WidgetFreshness.staleAfter + 60)
         let c = RectangularUsageContent.make(entry([], at: late), calendar: F.calendar, locale: F.locale)!
         XCTAssertEqual(c.freshness, .stale)
