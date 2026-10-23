@@ -34,3 +34,14 @@ struct DeepLinkTests {
         #expect(DeepLink.accountID(from: URL(string: "agenthourglass://account?id=")!) == nil)
     }
 }
+
+struct DeepLinkExtraTests {
+    @Test func testAtSignRoundTrip() {
+        let id = AccountID(rawValue: "claude:snor@lax.example")!
+        #expect(DeepLink.accountID(from: DeepLink.url(for: id)) == id)
+    }
+
+    @Test func testPathFormRejected() {
+        #expect(DeepLink.accountID(from: URL(string: "agenthourglass://account/claude:x")!) == nil)
+    }
+}
