@@ -65,7 +65,8 @@ out=$(rg -n 'UsageHistory|GRDB' iOS/project.yml 2>/dev/null)
 # PasteButton reads; writes and hasStrings are fine), no dump(. Full-line // comments are ignored.
 # Sources/UsageCore is linked into the iOS app, so it gets the WebKit, pasteboard and session
 # rules too (S7); neither the Mac app nor UsageCore uses WebKit or UIPasteboard.
-IOSSRC=(iOS/App iOS/Widget iOS/Shared)
+# All of iOS/ (so a new extension directory is covered) except test targets and build output.
+IOSSRC=(iOS -g '!iOS/Tests/**' -g '!iOS/WidgetTests/**' -g '!iOS/build/**' -g '!**/DerivedData/**')
 IOSLINKED=("${IOSSRC[@]}" Sources/UsageCore)
 nocomment() { rg -v '^[^:]+:[0-9]+:\s*//'; }
 # Any attributes (with arguments) and access level before import, any import kind, after ; too;

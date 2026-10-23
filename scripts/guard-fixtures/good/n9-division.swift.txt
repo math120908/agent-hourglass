@@ -1,0 +1,8 @@
+// fixture: iOS/App/AddAccount/PasteBrowser.swift
+import AuthenticationServices
+func make(_ u: URL, w: Double) -> any PasteAuthSession {
+    let half = w / 2, third = (w) / 3 /* ratio */
+    let s = ASWebAuthenticationSession(url: u, callbackURLScheme: "x\(Int(half / third))") { _, _ in }
+    s.prefersEphemeralWebBrowserSession = true
+    return s
+}

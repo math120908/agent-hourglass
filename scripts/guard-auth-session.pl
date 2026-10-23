@@ -6,6 +6,8 @@
 #   $c  comments blanked (strings kept)       -> where every mention is looked for
 #   $b  comments and string bodies blanked    -> where code shape is checked
 # It knows "..." / """...""" / #"..."# raw strings, \( ) interpolation (nested), // and nested /* */.
+# It fails closed on what it cannot parse: a regex literal (#/.../# or a bare /.../ in operand
+# position), or a string, block comment or interpolation still open at EOF, is a violation.
 # Rules:
 #   - every construction is `let X = ASWebAuthenticationSession(...) { ... }` and the very next
 #     statement is `X.prefersEphemeralWebBrowserSession = true` (nothing after `true` but ; } or EOL);
@@ -21,10 +23,11 @@ open(my $fh, '<', $file) or die "$file: $!\n";
 my $src = do { local $/; <$fh> };
 close $fh;
 
-my ($c, $b) = lex($src);
 my @bad;
 sub line_of { my ($pos) = @_; return 1 + (substr($src, 0, $pos) =~ tr/\n//); }
 sub bad { my ($pos, $why) = @_; push @bad, sprintf("%s:%d: %s", $file, line_of($pos), $why); }
+my ($c, $b, $lexerr) = lex($src);
+bad(@$_) for @$lexerr;
 
 my $ID = qr/ASWebAuthenticationSession\w*/;
 my $PE = qr/prefersEphemeralWebBrowserSession/;
@@ -60,9 +63,11 @@ exit(@bad ? 1 : 0);
 sub lex {
     my ($s) = @_;
     my ($c, $b) = ('', '');
+    my @err;
     my $n = length $s;
-    # Frames: ['code', parens] (parens counts '(' inside an interpolation) or ['str', hashes, multi].
-    my @st = (['code', -1]);
+    # Frames: ['code', parens, pos] (parens counts '(' inside an interpolation) or
+    # ['str', hashes, multi, pos]; pos is where the frame opened.
+    my @st = (['code', -1, 0]);
     my $i = 0;
     while ($i < $n) {
         my $f = $st[-1];
@@ -79,12 +84,19 @@ sub lex {
                     if (substr($s, $j, 2) eq '*/') { $d--; $j += 2; last if $d == 0; next; }
                     $j++;
                 }
+                push @err, [$i, "unterminated block comment at EOF"] if $d > 0;
                 (my $w = substr($s, $i, $j - $i)) =~ s/[^\n]/ /g; $c .= $w; $b .= $w; $i = $j; next;
+            }
+            if (substr($s, $i) =~ /\A#+\//) {
+                push @err, [$i, "regex literal #/.../# is forbidden here (the guard cannot lex it)"];
+            }
+            elsif ($ch eq '/' && $b =~ /(?:\A|[=(\[{,:;!&|?^~<>+\-*%]|\b(?:return|case|in|try|await|throw|where|if|guard|while))\s*\z/) {
+                push @err, [$i, "bare regex literal /.../ is forbidden here (the guard cannot lex it)"];
             }
             if (substr($s, $i) =~ /\A(#*)("""|")/) {
                 my $open = $1 . $2;
-                $c .= $open; $b .= $open; $i += length $open;
-                push @st, ['str', length $1, $2 eq '"""']; next;
+                push @st, ['str', length $1, $2 eq '"""', $i];
+                $c .= $open; $b .= $open; $i += length $open; next;
             }
             if ($f->[1] >= 0) {  # inside \( ... )
                 if ($ch eq '(') { $f->[1]++; }
@@ -107,12 +119,16 @@ sub lex {
             if ($nx eq '(') {
                 my $t = $esc . '(';
                 $c .= $t; $b .= ' ' x (length($t) - 1) . '('; $i += length $t;
-                push @st, ['code', 0]; next;
+                push @st, ['code', 0, $i - length $t]; next;
             }
             my $t = $esc . $nx;
             $c .= $t; (my $w = $t) =~ s/[^\n]/ /g; $b .= $w; $i += length $t; next;
         }
         $c .= $ch; $b .= ($ch eq "\n" ? "\n" : ' '); $i++;
     }
-    return ($c, $b);
+    if (@st > 1) {
+        my $f = $st[1];
+        push @err, [$f->[-1], ($f->[0] eq 'str' ? "unterminated string" : "unterminated interpolation") . " at EOF"];
+    }
+    return ($c, $b, \@err);
 }
