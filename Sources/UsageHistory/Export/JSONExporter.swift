@@ -1,3 +1,4 @@
+import UsageCore
 import Foundation
 
 /// Spec §11 JSON shape, written by hand so key order is stable for golden tests.

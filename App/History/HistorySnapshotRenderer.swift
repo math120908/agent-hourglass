@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import UsageCore
+import UsageHistory
 
 /// Debug: writes history-<range>-<mode>.png (instr-history-* for Instrument) and history-empty-light.png from a seeded in-memory store.
 @MainActor

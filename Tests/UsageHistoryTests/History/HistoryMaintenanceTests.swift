@@ -2,6 +2,7 @@ import Foundation
 import GRDB
 import Testing
 @testable import UsageCore
+@testable import UsageHistory
 
 @Suite struct HistoryMaintenanceTests {
     let t0: Int64 = 1_800_000_000 / 3600 * 3600

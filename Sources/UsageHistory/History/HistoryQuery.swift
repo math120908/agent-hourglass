@@ -1,24 +1,6 @@
+import UsageCore
 import Foundation
 import GRDB
-
-public struct SeriesPoint: Equatable, Sendable {
-    public var t: Date
-    /// nil marks a gap (no data); charts break the line there.
-    public var percent: Double?
-}
-
-public struct Series: Equatable, Sendable {
-    /// `meter@resets_at`: one id per reset window so step lines never join across resets.
-    public var id: String
-    public var meter: String
-    public var points: [SeriesPoint]
-}
-
-public struct RangeSummary: Equatable, Sendable {
-    public var peakSession: Double?
-    public var windowsOver90: Int
-    public var weeklyAtEnd: Double?
-}
 
 /// Read side of the history store (spec §10.7): raw rows inside the raw window, hourly rollups before it.
 public struct HistoryQuery: Sendable {

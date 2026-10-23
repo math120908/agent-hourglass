@@ -1,6 +1,7 @@
 import Observation
 import SwiftUI
 import UsageCore
+import UsageHistory
 
 /// Settings > History state. Retention feeds `UsageEngine.rawDays` through UserDefaults.
 @MainActor @Observable

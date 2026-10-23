@@ -2,6 +2,7 @@ import Foundation
 import GRDB
 import Testing
 @testable import UsageCore
+@testable import UsageHistory
 
 @Suite struct HistoryQueryTests {
     let acct = AccountID(rawValue: "claude:A")!

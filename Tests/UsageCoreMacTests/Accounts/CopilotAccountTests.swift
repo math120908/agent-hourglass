@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import UsageCore
 @testable import UsageCoreMac
+import UsageHistory
 
 private let ghToken = "gho_" + String(repeating: "y", count: 36)
 

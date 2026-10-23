@@ -2,6 +2,7 @@ import AppKit
 import Observation
 import UniformTypeIdentifiers
 import UsageCore
+import UsageHistory
 
 enum HistoryRange: String, CaseIterable, Identifiable {
     case day = "24 Hours", week = "7 Days", month = "30 Days", quarter = "90 Days"

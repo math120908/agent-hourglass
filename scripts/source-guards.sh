@@ -49,5 +49,11 @@ macgate Sources/UsageCore/Storage/LegacyMigration.swift '^public enum LegacyMigr
 out=$(rg -l -e 'ClaudeCodeKeychainReader' -e 'LegacyMigration' iOS 2>/dev/null)
 [ -n "$out" ] && report "iOS/ references Mac-only credential code:" "$out"
 
+# GRDB stays in UsageHistory (Mac app + usagectl); UsageCore and iOS must never link it.
+out=$(rg -l '^import (GRDB|UsageHistory)' Sources/UsageCore iOS 2>/dev/null)
+[ -n "$out" ] && report "GRDB/UsageHistory import in UsageCore or iOS/:" "$out"
+out=$(rg -n 'UsageHistory|GRDB' iOS/project.yml 2>/dev/null)
+[ -n "$out" ] && report "iOS target depends on UsageHistory/GRDB:" "$out"
+
 [ $fail -eq 0 ] && echo "source-guards: ok"
 exit $fail

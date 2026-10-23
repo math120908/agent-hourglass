@@ -1,3 +1,4 @@
+import UsageCore
 import GRDB
 
 /// Spec §8 schema. Migration v1 only; later versions append migrations.
