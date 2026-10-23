@@ -26,6 +26,10 @@ out=$(rg -n 'rawValue, privacy: \.public' Sources App 2>/dev/null)
 # Error text can embed file paths and Keychain attributes: log type(of:) and the code only (S2).
 out=$(rg -n 'String\(describing: error\), privacy: \.public' Sources App iOS 2>/dev/null)
 [ -n "$out" ] && report "raw error logged with privacy: .public (log type(of: error) + code):" "$out"
+# Sign-in web view: no WKUIDelegate, so new-window requests (target=_blank, window.open) are dropped
+# and every load, including server 3xx redirects, re-enters decidePolicyFor navigationAction (S4).
+out=$(rg -n -e 'uiDelegate\s*=' -e 'createWebViewWith' iOS/App/AddAccount 2>/dev/null)
+[ -n "$out" ] && report "WKUIDelegate / createWebViewWith in iOS/App/AddAccount (sign-in policy bypass):" "$out"
 
 # Portability: UsageCore must build for iOS; its tests must not depend on macOS-only modules.
 out=$(rg -l '^import (AppKit|ServiceManagement)' Sources/UsageCore 2>/dev/null)
