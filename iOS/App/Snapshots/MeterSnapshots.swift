@@ -26,15 +26,6 @@ private struct MeterGallery: View {
         let session = snaps[Fixtures.snorlax]!.meters[0]
         let eeveeWeekly = snaps[Fixtures.eevee]!.meters[1]
         let codex = snaps[Fixtures.mewtwo]!.meters[0]
-        let copilot = Meter(
-            kind: .copilotPremium,
-            label: "Premium requests",
-            percentUsed: 33.7,
-            used: 101,
-            limit: 300,
-            unit: "requests",
-            resetsAt: now.addingTimeInterval(9 * 86_400)
-        )
         let base = DisplaySettings.default
         var h24 = base; h24.hour24 = .on
         var countdown = h24; countdown.resetStyle = .countdown
@@ -44,7 +35,6 @@ private struct MeterGallery: View {
             Item(meter: all, settings: countdown),
             Item(meter: all, settings: remaining),
             Item(meter: eeveeWeekly, settings: h24),
-            Item(meter: copilot, settings: h24),
             Item(meter: codex, settings: h24),
             Item(meter: session, settings: h24),
         ]

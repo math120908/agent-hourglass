@@ -66,17 +66,14 @@ struct MeterView: View {
                     }
                 }
                 Spacer()
-                Text(percent(d))
+                Text(d.percentText)
                     .font(.system(size: d.fraction == nil ? 13 : 20, weight: .semibold).monospacedDigit())
                     .foregroundStyle(d.fraction == nil ? dim : glassTint(d.severity, color))
             }
             if d.fraction != nil {
                 GlassMeterBar(fraction: d.fraction, paceTick: d.paceTick, color: color)
             }
-            footer(left: leftText(d), right: d.detailText != nil ? d.resetText : (d.paceText ?? ""))
-            if let money = moneyText(d) {
-                footer(left: money, right: remainingText(d), tappable: false)
-            }
+            footer(left: d.resetText, right: d.paceText ?? "")
         }
     }
 
@@ -91,7 +88,7 @@ struct MeterView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(instrumentLabel(d)).font(.system(size: 12))
                 Spacer(minLength: 10)
-                Text(percent(d))
+                Text(d.percentText)
                     .font(.system(size: 12, weight: .semibold).monospacedDigit())
                     .foregroundStyle(d.fraction == nil ? dim : instrumentTint(d.severity))
             }
@@ -99,7 +96,7 @@ struct MeterView: View {
                 GlassMeterBar(fraction: d.fraction, paceTick: d.paceTick, color: GlassStyle.color(d.severity, kind), height: 4)
                     .padding(.top, 5)
             }
-            footer(left: leftText(d), right: instrumentRight(d))
+            footer(left: d.resetText, right: d.paceText ?? (d.fraction == 0 ? "idle" : ""))
                 .padding(.top, 7)
         }
         .padding(.top, 9)
@@ -109,12 +106,6 @@ struct MeterView: View {
         if kind == .claude && d.paceTick == nil && d.paceText == nil && d.label == "Session" { return "Session (5h)" }
         if kind == .codex { return d.label }
         return d.paceText != nil || d.paceTick != nil ? "\(d.label), weekly" : d.label
-    }
-
-    private func instrumentRight(_ d: MeterDisplay) -> String {
-        if let money = moneyText(d) { return money }
-        if d.detailText == nil, kind == .copilot { return "" }
-        return d.paceText ?? (d.fraction == 0 ? "idle" : "")
     }
 
     private func instrumentTint(_ s: Meter.Severity) -> Color {
@@ -135,32 +126,10 @@ struct MeterView: View {
 
     private var dim: Color { scheme == .dark ? .white.opacity(0.90) : .secondary }
 
-    /// Copilot premium keeps one decimal (33.7%), as on the Mac.
-    private func percent(_ d: MeterDisplay) -> String {
-        guard d.detailText != nil, let f = d.fraction else { return d.percentText }
-        return String(format: "%.1f%%", f * 100)
-    }
-
-    private func leftText(_ d: MeterDisplay) -> String {
-        guard let detail = d.detailText else { return d.resetText }
-        return String(detail.split(separator: " (≈").first ?? "")
-    }
-
-    private func moneyText(_ d: MeterDisplay) -> String? {
-        guard let detail = d.detailText, let r = detail.range(of: "(≈ ") else { return nil }
-        return "≈ " + detail[r.upperBound...].dropLast()
-    }
-
-    private func remainingText(_ d: MeterDisplay) -> String {
-        guard let f = d.fraction else { return "" }
-        let used = d.isRemaining ? 1 - f : f
-        return String(format: "%.1f%% remaining", (1 - used) * 100)
-    }
-
-    /// Footer line; the left text toggles the reset style when it is the reset text and a handler exists.
-    private func footer(left: String, right: String, tappable: Bool = true) -> some View {
+    /// Footer line; the reset text toggles the reset style when a handler exists.
+    private func footer(left: String, right: String) -> some View {
         HStack {
-            resetLabel(left, tappable: tappable && left == display.resetText)
+            resetLabel(left)
             Spacer(minLength: 6)
             Text(right).lineLimit(1)
         }
@@ -169,8 +138,8 @@ struct MeterView: View {
     }
 
     @ViewBuilder
-    private func resetLabel(_ text: String, tappable: Bool) -> some View {
-        if tappable, let onToggleReset {
+    private func resetLabel(_ text: String) -> some View {
+        if let onToggleReset {
             Button(action: onToggleReset) {
                 Text(text).lineLimit(1)
                     .frame(minHeight: 44, alignment: .leading)
