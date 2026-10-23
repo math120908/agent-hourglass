@@ -42,11 +42,21 @@ final class TimelinePlanTests: XCTestCase {
     func testDedupeWithin60s() {
         let reset = now.addingTimeInterval(330)
         let dates = TimelinePlan.entryDates(now: now, resets: [reset], staleAt: nil)
-        XCTAssertFalse(dates.contains(reset))
-        XCTAssertTrue(dates.contains(now.addingTimeInterval(300)))
+        XCTAssertTrue(dates.contains(reset))
+        XCTAssertFalse(dates.contains(now.addingTimeInterval(300)))
         for (a, b) in zip(dates, dates.dropFirst()) {
             XCTAssertGreaterThanOrEqual(b.timeIntervalSince(a), 60)
         }
+    }
+
+    func testInsertedDateBeatsEarlierOrLaterGridDate() {
+        let before = now.addingTimeInterval(870)
+        let after = now.addingTimeInterval(1830)
+        let dates = TimelinePlan.entryDates(now: now, resets: [before], staleAt: after)
+        XCTAssertTrue(dates.contains(before))
+        XCTAssertTrue(dates.contains(after))
+        XCTAssertFalse(dates.contains(now.addingTimeInterval(900)))
+        XCTAssertFalse(dates.contains(now.addingTimeInterval(1800)))
     }
 
     func testCountAtMost45() {
