@@ -21,6 +21,7 @@ struct ClaudeSignInView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ScaledMetric(relativeTo: .headline) private var markSize: CGFloat = 20
 
     init(model: ClaudeSignInModel, onDone: @escaping (AccountID) -> Void) {
         self.init(model: model, form: ClaudeSignInForm(), onDone: onDone)
@@ -37,8 +38,12 @@ struct ClaudeSignInView: View {
     private var steps: [ClaudeSignInForm.Step] { form.steps(state) }
     private var isGlass: Bool { theme == .glass }
     private var isSuccess: Bool { if case .success = state { true } else { false } }
-    private var fresh: Color { scheme == .dark ? Color(red: 0.59, green: 0.93, blue: 0.59) : .green }
-    private var critical: Color { scheme == .dark ? GlassStyle.darkAccent(.critical, .claude) : GlassStyle.critical }
+    private var isFinished: Bool {
+        switch state {
+        case .success, .failed: true
+        case .browsing, .exchanging: false
+        }
+    }
 
     var body: some View {
         // Scrolls only when it must (AX type sizes); otherwise everything is pinned top.
@@ -59,11 +64,12 @@ struct ClaudeSignInView: View {
         .background { AppBackdrop().ignoresSafeArea() }
         .tint(GlassStyle.claude)
         .animation(reduceMotion ? nil : .snappy, value: steps)
+        // Cancel stays in every state (as on the Codex sheet) so the layout never jumps.
         .toolbar {
-            if !isSuccess {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
+            ToolbarItem(placement: .cancellationAction) {
+                // Provider accent on every theme, in its readable variant (the stock accent is ~3:1 on
+                // the light toolbar pill).
+                Button("Cancel") { dismiss() }.tint(SheetTone.accentText(.claude, scheme))
             }
         }
         .onChange(of: scenePhase) { _, phase in
@@ -86,7 +92,7 @@ struct ClaudeSignInView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            ProviderIcon(kind: .claude, size: 20)
+            ProviderIcon(kind: .claude, size: markSize)
                 .foregroundStyle(GlassStyle.claude)
                 .accessibilityHidden(true)
             Text("Add Claude account").font(.headline)
@@ -104,11 +110,28 @@ struct ClaudeSignInView: View {
             row(2, "Sign in and copy the code", combine: true) { EmptyView() }
             divider
             row(3, "Paste the code", combine: false) { pasteControl }
+            if isFinished {
+                divider
+                outcome.padding(14)
+            }
         }
-        if isGlass {
-            rows.glassCardBackground()
-        } else {
-            rows
+        rows.sheetCard()
+    }
+
+    /// Success / failure line, on the card so the status glyph keeps its contrast.
+    @ViewBuilder private var outcome: some View {
+        switch state {
+        case .success:
+            SheetStatus(text: "Added", systemImage: "checkmark.circle.fill", tint: SheetTone.success(scheme))
+        case .failed(let message):
+            SheetStatus(
+                text: message,
+                systemImage: "exclamationmark.triangle.fill",
+                tint: SheetTone.criticalGlyph(scheme),
+                font: .subheadline,
+            )
+        case .browsing, .exchanging:
+            EmptyView()
         }
     }
 
@@ -126,13 +149,13 @@ struct ClaudeSignInView: View {
             ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
             : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
         return layout {
-            StepIndicator(number: n, step: step, glass: isGlass)
+            StepIndicator(number: n, step: step, glass: isGlass, scheme: scheme)
             VStack(alignment: .leading, spacing: 10) {
                 Group {
-                    if step == .todo {
-                        secondary(Text(label).font(.body))
-                    } else {
-                        Text(label).font(.body)
+                    switch step {
+                    case .todo: Text(label).font(.body).foregroundStyle(SheetTone.secondary(scheme, glass: isGlass))
+                    case .current: Text(label).font(.body.weight(.semibold))
+                    case .done: Text(label).font(.body)
                     }
                 }
                 .fixedSize(horizontal: false, vertical: true)
@@ -153,7 +176,8 @@ struct ClaudeSignInView: View {
                 if steps[0] == .current {
                     Button(action: openSignIn) { label }.buttonStyle(.borderedProminent)
                 } else {
-                    Button(action: openSignIn) { label }.buttonStyle(.bordered)
+                    Button(action: openSignIn) { label }
+                        .quietBordered(.claude, scheme: scheme, glass: isGlass)
                 }
             }
             .buttonBorderShape(.capsule)
@@ -172,9 +196,7 @@ struct ClaudeSignInView: View {
                     pasteButton
                 }
                 if state == .browsing, form.showsInvalid, form.isInvalid {
-                    Text("That code isn't complete")
-                        .font(.caption)
-                        .foregroundStyle(critical)
+                    invalidCaption
                 }
             }
             .disabled(state == .exchanging)
@@ -186,41 +208,69 @@ struct ClaudeSignInView: View {
     /// a tap still lands on the secure field underneath.
     private var codeField: some View {
         let masked = !fieldFocused && !form.text.isEmpty
-        return ZStack(alignment: .leading) {
-            SecureField("Code", text: $form.text)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .privacySensitive()
-                .submitLabel(.go)
-                .focused($fieldFocused)
-                .onSubmit(submit)
-                .accessibilityLabel("Code")
-                .opacity(masked ? 0 : 1)
-            if masked {
-                Text(String(repeating: "\u{2022}", count: min(form.text.count, 16)))
-                    .font(.body.monospaced())
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+        return HStack(spacing: 8) {
+            ZStack(alignment: .leading) {
+                SecureField("Code", text: $form.text)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .privacySensitive()
+                    .submitLabel(.go)
+                    .focused($fieldFocused)
+                    .onSubmit(submit)
+                    .accessibilityLabel("Code")
+                    .opacity(masked ? 0 : 1)
+                if masked {
+                    // As many dots as fit (max 16), never an ellipsis: at AX sizes fewer dots show.
+                    ViewThatFits(in: .horizontal) {
+                        ForEach([16, 12, 8, 6, 4], id: \.self) { n in
+                            Text(String(repeating: "\u{2022}", count: min(form.text.count, n)))
+                                .font(.body.monospaced())
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
+                    }
+                    .opacity(state == .exchanging ? 0.6 : 1)
                     .accessibilityHidden(true)
                     .allowsHitTesting(false)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            validationGlyph
         }
         .padding(.leading, 16)
-        .padding(.trailing, 36)
+        .padding(.trailing, 12)
         .frame(minHeight: 44)
         .background(Capsule().fill(Color.primary.opacity(0.06)))
         .overlay(Capsule().strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
-        .overlay(alignment: .trailing) { validationGlyph.padding(.trailing, 12) }
+    }
+
+    /// On Glass dark a red text tone tops out near 4.3:1 on the grey card, so the text stays
+    /// near-white (4.8:1) and a red glyph carries the hue.
+    @ViewBuilder private var invalidCaption: some View {
+        let text = Text("That code isn't complete").foregroundStyle(SheetTone.criticalText(scheme, glass: isGlass))
+        Group {
+            if isGlass, scheme == .dark {
+                Label {
+                    text
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(SheetTone.criticalGlyph(scheme))
+                }
+                .labelStyle(.titleAndIcon)
+            } else {
+                text
+            }
+        }
+        .font(.caption)
     }
 
     @ViewBuilder private var validationGlyph: some View {
         if form.parsable {
             Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(fresh)
+                .foregroundStyle(SheetTone.success(scheme))
                 .accessibilityLabel("Code complete")
         } else if form.isInvalid {
             Image(systemName: "exclamationmark.circle.fill")
-                .foregroundStyle(critical)
+                .foregroundStyle(SheetTone.criticalGlyph(scheme))
                 .accessibilityLabel("Code incomplete")
         }
     }
@@ -236,6 +286,14 @@ struct ClaudeSignInView: View {
         }
         .buttonBorderShape(.capsule)
         .tint(GlassStyle.claude)
+        // UIPasteControl ignores `.controlSize` and draws a 34 pt capsule centered in its frame:
+        // a 44 pt frame gives the touch target, a same-tint capsule behind it the 44 pt look.
+        .frame(minWidth: 34, minHeight: 44)
+        .padding(.horizontal, 5)
+        // Drawn whenever the button shows, so the 44 pt size holds while exchanging; faded there
+        // to sit with the system disabled capsule.
+        .background { Capsule().fill(GlassStyle.claude).opacity(state == .browsing ? 1 : 0.5) }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     // MARK: Primary / result
@@ -243,45 +301,34 @@ struct ClaudeSignInView: View {
     @ViewBuilder private var result: some View {
         switch state {
         case .browsing:
-            Button(action: submit) {
-                Text("Continue").frame(maxWidth: .infinity)
+            let label = Text("Continue").frame(maxWidth: .infinity)
+            if form.canContinue(state) {
+                Button(action: submit) { label }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+            } else {
+                Button(action: submit) { label }
+                    .buttonStyle(FadedProminentStyle(tint: GlassStyle.claude))
+                    .disabled(true)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .disabled(!form.canContinue(state))
         case .exchanging:
             HStack(spacing: 8) {
-                ProgressView()
+                ProgressView().tint(isGlass && scheme == .dark ? .white : nil)
                 secondary(Text("Signing in").font(.subheadline))
             }
             .frame(maxWidth: .infinity, minHeight: 50)
             .accessibilityElement(children: .combine)
         case .success(let id):
-            VStack(spacing: 16) {
-                Label("Added", systemImage: "checkmark.circle.fill")
-                    .font(.title3)
-                    .foregroundStyle(fresh)
-                Button("Done") { onDone(id) }
-                    .buttonStyle(.borderedProminent)
-            }
-        case .failed(let message):
-            VStack(spacing: 16) {
-                Label(message, systemImage: "exclamationmark.triangle.fill")
-                    .font(.subheadline)
-                    .foregroundStyle(critical)
-                    .multilineTextAlignment(.center)
-                Button("Try again", action: tryAgain)
-                    .buttonStyle(.borderedProminent)
-            }
+            Button("Done") { onDone(id) }
+                .buttonStyle(.borderedProminent)
+        case .failed:
+            Button("Try again", action: tryAgain)
+                .buttonStyle(.borderedProminent)
         }
     }
 
-    @ViewBuilder private func secondary(_ text: Text) -> some View {
-        if isGlass {
-            text.glassTone()
-        } else {
-            text.foregroundStyle(.secondary)
-        }
+    private func secondary(_ text: Text) -> some View {
+        text.foregroundStyle(SheetTone.secondary(scheme, glass: isGlass))
     }
 
     // MARK: Actions
@@ -333,6 +380,7 @@ private struct StepIndicator: View {
     let number: Int
     let step: ClaudeSignInForm.Step
     let glass: Bool
+    let scheme: ColorScheme
 
     @ScaledMetric(relativeTo: .body) private var size: CGFloat = 28
 
@@ -341,15 +389,17 @@ private struct StepIndicator: View {
             switch step {
             case .todo:
                 if glass {
-                    Circle().fill(Color.primary.opacity(0.10))
-                    Text("\(number)").font(.subheadline.weight(.semibold)).glassTone()
+                    // Dark: a darker disc keeps the light number at 4.5:1; light: unchanged.
+                    Circle().fill(scheme == .dark ? Color.black.opacity(0.12) : Color.primary.opacity(0.10))
+                    Text("\(number)").font(.subheadline.weight(.semibold)).foregroundStyle(SheetTone.secondary(scheme, glass: true))
                 } else {
                     Circle().strokeBorder(Color.primary.opacity(0.18), lineWidth: 2)
-                    Text("\(number)").font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+                    Text("\(number)").font(.subheadline.weight(.semibold)).foregroundStyle(SheetTone.secondary(scheme, glass: false))
                 }
             case .current:
-                Circle().strokeBorder(GlassStyle.claude, lineWidth: 2)
-                Text("\(number)").font(.subheadline.weight(.semibold)).foregroundStyle(GlassStyle.claude)
+                // Lifted (dark) / deepened (light) ring clears 3:1 on every card; the number stays primary.
+                Circle().strokeBorder(SheetTone.claude(scheme), lineWidth: 2.5)
+                Text("\(number)").font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
             case .done:
                 Circle().fill(GlassStyle.claude)
                 Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(.white)

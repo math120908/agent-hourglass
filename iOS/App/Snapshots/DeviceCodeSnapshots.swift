@@ -19,12 +19,11 @@ enum DeviceCodeSnapshots {
     )
 
     private static func scene(_ name: String, _ state: DeviceCodeFlowModel.State) -> SnapshotScene {
-        SnapshotScene(name: name, size: .device) { theme in
+        SnapshotScene(name: name, size: .device) { _ in
             AnyView(
                 NavigationStack {
                     DeviceCodeSheet(model: DeviceCodeFlowModel(title: "Add Codex account", state: state), provider: .codex) { _ in }
                 }
-                .appTheme(theme)
                 .tint(GlassStyle.codex)
             )
         }

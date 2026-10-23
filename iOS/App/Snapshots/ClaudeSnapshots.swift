@@ -15,7 +15,7 @@ enum ClaudeSnapshots {
         scene("claude-exchanging", .exchanging, form(opened: true, text: code)),
         scene("claude-success", .success(AccountID(kind: .claude, remoteID: "demo")), form(opened: true)),
         scene("claude-failed", .failed("That code has expired. Sign in again."), form(opened: true)),
-        scene("claude-ready-ax", .browsing, form(opened: true, text: code), typeSize: .accessibility2),
+        scene("claude-ready-ax", .browsing, form(opened: true, text: code), typeSize: .accessibility2, height: 1300),
     ]
 
     private static func form(opened: Bool, hasStrings: Bool = false, text: String = "", showsInvalid: Bool = false) -> ClaudeSignInForm {
@@ -27,15 +27,18 @@ enum ClaudeSnapshots {
         _ state: ClaudeSignInModel.State,
         _ form: ClaudeSignInForm,
         typeSize: DynamicTypeSize = .large,
+        height: CGFloat? = nil,
     ) -> SnapshotScene {
-        SnapshotScene(name: name, size: .device) { theme in
+        // A taller frame for AX sizes so the bottom of the (scrolling) sheet shows in the render.
+        let size: SnapshotSize = height == nil ? .device : .fitting(width: SnapshotSize.deviceSize.width)
+        return SnapshotScene(name: name, size: size) { _ in
             AnyView(
                 NavigationStack {
                     ClaudeSignInView(model: ClaudeSignInModel(state: state), form: form, onDone: { _ in })
                 }
-                .appTheme(theme)
                 .tint(GlassStyle.claude)
                 .dynamicTypeSize(typeSize)
+                .frame(height: height)
             )
         }
     }
