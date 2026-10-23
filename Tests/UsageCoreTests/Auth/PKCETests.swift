@@ -7,6 +7,13 @@ struct PKCETests {
         #expect(PKCE.challenge(for: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk") == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
     }
 
+    @Test func constantTimeEqualRejectsLengthDifferingByMultipleOf256() {
+        let expected = "abc123state"
+        #expect(constantTimeEqual(expected, expected))
+        #expect(!constantTimeEqual(expected + String(repeating: "\0", count: 256), expected))
+        #expect(!constantTimeEqual(expected, expected + String(repeating: "\0", count: 256)))
+    }
+
     @Test func makeProducesUnpaddedBase64url() {
         let p = PKCE.make()
         #expect(p.verifier.reveal().count == 43)

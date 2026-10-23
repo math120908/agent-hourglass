@@ -34,9 +34,9 @@ public struct PKCE: Sendable {
 /// Constant-time comparison of two strings' UTF-8 bytes.
 package func constantTimeEqual(_ a: String, _ b: String) -> Bool {
     let x = Array(a.utf8), y = Array(b.utf8)
-    var diff = UInt8(truncatingIfNeeded: x.count ^ y.count)
-    for i in 0..<max(x.count, y.count) {
-        diff |= (i < x.count ? x[i] : 0) ^ (i < y.count ? y[i] : 0)
-    }
+    // Length is not secret; an early exit avoids UInt8-folded length collisions.
+    guard x.count == y.count else { return false }
+    var diff: UInt8 = 0
+    for i in 0..<x.count { diff |= x[i] ^ y[i] }
     return diff == 0
 }

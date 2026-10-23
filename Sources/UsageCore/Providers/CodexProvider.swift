@@ -12,7 +12,8 @@ public struct CodexProvider: UsageProvider {
     public let kind: ProviderKind = .codex
     /// R5 politeness: one request per account per 5 min at most.
     public let minimumInterval: Duration = .seconds(300)
-    /// `nil` means no login source on this platform: every fetch reports not signed in.
+    /// `nil` means owned mode: the provider uses the stored Credential (device-code login).
+    /// Non-nil means borrowed mode, as on the Mac: tokens come from the login source.
     public let auth: (any CodexLoginSource)?
 
     public init(auth: (any CodexLoginSource)?) { self.auth = auth }

@@ -280,7 +280,7 @@ public actor AccountClient {
         persist(c)
         if saveFailed { persist(c) }
         guard saveFailed else { return }
-        Self.log.error("credential save failed twice kind=\(self.id.kind?.rawValue ?? "unknown")")
+        Self.log.error("credential save failed twice kind=\(self.id.kind?.rawValue ?? "unknown", privacy: .public)")
         do {
             try shared.backoff.setNextAllowedFetch(now().addingTimeInterval(60), for: id)
         } catch {
