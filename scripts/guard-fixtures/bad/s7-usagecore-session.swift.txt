@@ -1,0 +1,3 @@
+// fixture: Sources/UsageCore/GuardProbe.swift auth-session
+import AuthenticationServices
+public let mk = ASWebAuthenticationSession.self

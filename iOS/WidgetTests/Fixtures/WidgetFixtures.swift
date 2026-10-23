@@ -9,6 +9,8 @@ enum WidgetFixtures {
         return c
     }()
     static let locale = Locale(identifier: "en_US")
+    /// Render-matrix locale: 24 h by default, so the 12 h settings variant differs from its base.
+    static let renderLocale = Locale(identifier: "en_GB")
 
     static let claudeMax = UsageSnapshot(accountID: AccountID(rawValue: "claude:max")!, fetchedAt: now, meters: [
         Meter(kind: .session5h, label: "5-hour", percentUsed: 34, resetsAt: now.addingTimeInterval(2 * 3600 + 10 * 60), windowLength: .seconds(18000)),

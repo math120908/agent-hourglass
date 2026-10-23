@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import UsageCore
 
-/// Drives the Claude authorization-code + PKCE sign-in for the in-app web view and the paste flow.
+/// Drives the Claude authorization-code + PKCE paste sign-in.
 /// The verifier, code and state are never logged or shown.
 @MainActor @Observable final class ClaudeSignInModel {
     enum State: Equatable {
@@ -53,9 +53,11 @@ import UsageCore
         state = .exchanging
         do {
             let (cred, remoteID) = try await flow.exchange(code: code, pkce: expected, redirectURI: ClaudePKCEFlow.manualRedirectURI)
-            let id = try await app.service.addClaude(credential: cred, remoteID: remoteID)
-            await app.accountAdded(id)
+            let service = app.service
+            let id = try await app.add { try await service.addClaude(credential: cred, remoteID: remoteID) }
             state = .success(id)
+        } catch ProviderError.invalidGrant {
+            state = .failed("That code has expired. Sign in again.")
         } catch AccountServiceError.differentAccount {
             state = .failed("That was a different account")
         } catch {

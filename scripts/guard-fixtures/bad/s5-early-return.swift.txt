@@ -1,0 +1,8 @@
+// fixture: iOS/App/AddAccount/PasteBrowser.swift ephemeral
+import AuthenticationServices
+func make(_ u: URL, _ x: Bool) -> any PasteAuthSession {
+    let s = ASWebAuthenticationSession(url: u, callbackURLScheme: "x") { _, _ in }
+    if x { return s }
+    s.prefersEphemeralWebBrowserSession = true
+    return s
+}

@@ -37,7 +37,7 @@ struct AccountRegistryTests {
         #expect(json["menuBarAccountID"] as? String == "claude:a")
         let fresh = AccountRegistry(directory: dir)
         let loaded = try await fresh.load()
-        #expect(loaded == (try await reg.accounts()))
+        #expect(loaded == (await reg.accounts()))
         #expect(loaded.map(\.displayName) == ["Personal", "Acct"])
         #expect(await fresh.menuBarAccountID?.rawValue == "claude:a")
     }
@@ -61,7 +61,7 @@ struct AccountRegistryTests {
         var again = entry("a")
         again.status = "needsLogin"
         try await reg.upsert(again)
-        let all = try await reg.accounts()
+        let all = await reg.accounts()
         #expect(all.count == 2)
         #expect(all[0].id.rawValue == "claude:a" && all[0].order == 0 && all[0].status == "needsLogin")
     }

@@ -123,11 +123,14 @@ public struct MeterDisplay: Sendable, Equatable {
         format(options.use24Hour ? "HH:mm" : "h:mm a", date, options)
     }
 
+    /// Formats with a fixed pattern. The locale is rebuilt from its identifier so device overrides
+    /// (e.g. AppleICUForce24HourTime) cannot rewrite the explicit hour cycle chosen by `use24Hour`;
+    /// `.system` already resolved `use24Hour` from the device locale.
     static func format(_ fmt: String, _ date: Date, _ options: MeterDisplayOptions) -> String {
         let f = DateFormatter()
         f.calendar = options.calendar
         f.timeZone = options.calendar.timeZone
-        f.locale = options.locale
+        f.locale = Locale(identifier: options.locale.identifier)
         f.dateFormat = fmt
         return f.string(from: date)
     }

@@ -1,0 +1,3 @@
+// fixture: Sources/UsageCore/GuardProbe.swift webkit
+import WebKit
+public typealias Browser = WKWebView

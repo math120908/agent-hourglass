@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import os
 import UsageCore
 
 /// Drives a device-code sign-in: `start` fetches a prompt, `complete` polls until the user approves.
@@ -19,6 +20,7 @@ import UsageCore
     @ObservationIgnored private let start: @Sendable () async throws -> DeviceCodePrompt
     @ObservationIgnored private let complete: @Sendable (DeviceCodePrompt) async throws -> AccountID
     @ObservationIgnored private let now: @Sendable () -> Date
+    @ObservationIgnored private let wake: (@Sendable () -> Void)?
     @ObservationIgnored private var task: Task<Void, Never>?
 
     init(
@@ -26,11 +28,13 @@ import UsageCore
         start: @escaping @Sendable () async throws -> DeviceCodePrompt,
         complete: @escaping @Sendable (DeviceCodePrompt) async throws -> AccountID,
         now: @escaping @Sendable () -> Date = { Date() },
+        wake: (@Sendable () -> Void)? = nil,
     ) {
         self.title = title
         self.start = start
         self.complete = complete
         self.now = now
+        self.wake = wake
     }
 
     /// Fixed-state init for previews and snapshots.
@@ -47,9 +51,25 @@ import UsageCore
 
     func restart() { begin() }
 
+    /// The app is back in the foreground: let the poll run now if its interval has elapsed.
+    func foreground() {
+        if case .waiting = state { wake?() }
+    }
+
     func cancel() {
         task?.cancel()
         task = nil
+    }
+
+    private nonisolated static let log = Logger(subsystem: "cc.kuoc.agent-hourglass", category: "DeviceCodeFlow")
+
+    /// Type name plus, for the secret-free error enums, the case (status codes, hosts, key names).
+    nonisolated static func describe(_ error: Error) -> String {
+        switch error {
+        case let e as ProviderError: "ProviderError \(e.description)"
+        case let e as DeviceFlowError: "DeviceFlowError \(e)"
+        default: String(describing: type(of: error))
+        }
     }
 
     private enum Outcome: Sendable {
@@ -72,7 +92,10 @@ import UsageCore
         let remaining = prompt.expiresAt.timeIntervalSince(now())
         let outcome: Outcome = await withTaskGroup(of: Outcome.self) { group in
             group.addTask {
-                do { return .done(try await complete(prompt)) } catch { return .failed }
+                do { return .done(try await complete(prompt)) } catch {
+                    Self.log.error("device login complete failed: \(Self.describe(error), privacy: .public)")
+                    return .failed
+                }
             }
             group.addTask {
                 if remaining > 0 { try? await Task.sleep(for: .seconds(remaining)) }

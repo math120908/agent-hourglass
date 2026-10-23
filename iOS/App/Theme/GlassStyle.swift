@@ -6,6 +6,9 @@ enum GlassStyle {
     static let claude = Color(red: 0.80, green: 0.42, blue: 0.24)
     /// Codex: neutral teal, clear of Claude orange.
     static let codex = Color(red: 0.05, green: 0.52, blue: 0.50)
+    /// Deeper teal for filled controls (prominent buttons, done discs): white label 5.2:1, where
+    /// `codex` gives 4.48:1. Bars, icons and chips keep `codex`.
+    static let codexFill = Color(red: 0.045, green: 0.48, blue: 0.46)
     static let warning = Color(red: 0.86, green: 0.62, blue: 0.10)
     static let critical = Color(red: 0.86, green: 0.25, blue: 0.24)
 
@@ -29,6 +32,11 @@ enum GlassStyle {
         case .copilot: Color.gray
         case .codex: codex
         }
+    }
+
+    /// Fill behind a white label or glyph: `codexFill` for Codex, the accent otherwise.
+    static func fill(_ kind: ProviderKind) -> Color {
+        kind == .codex ? codexFill : accent(kind)
     }
 
     static func color(_ severity: Meter.Severity, _ kind: ProviderKind) -> Color {

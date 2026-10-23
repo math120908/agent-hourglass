@@ -1,0 +1,2 @@
+// fixture: iOS/App/GuardProbe.swift webkit
+func f(_ c: WKHTTPCookieStore) {}

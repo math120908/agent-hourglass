@@ -16,7 +16,7 @@ struct SmallWidgetContent {
                 .map { WidgetMeterModel.row($0, at: entry.date, settings: entry.settings, calendar: calendar, locale: locale) }
         } ?? []
         freshness = WidgetFreshness.freshness(fetchedAt: snap?.fetchedAt, status: entry.status, at: entry.date)
-        ageText = snap.map { WidgetFreshness.ageText(fetchedAt: $0.fetchedAt, at: entry.date, calendar: calendar, settings: entry.settings) }
+        ageText = snap.map { WidgetFreshness.ageText(fetchedAt: $0.fetchedAt, at: entry.date, calendar: calendar, locale: locale, settings: entry.settings) }
         plan = snap?.plan
     }
 
@@ -54,11 +54,13 @@ struct SmallUsageEntryView: View {
 struct SmallWidgetFrame<Content: View>: View {
     var entry: UsageEntry
     var style: WidgetRenderStyle
+    @Environment(\.calendar) private var calendar
+    @Environment(\.locale) private var locale
     var content: (AccountEntry, SmallWidgetContent) -> Content
 
     var body: some View {
         if let account = entry.account {
-            let c = SmallWidgetContent(entry)
+            let c = SmallWidgetContent(entry, calendar: calendar, locale: locale)
             if c.rows.isEmpty, c.freshness == .noData {
                 WidgetEmptyView(family: .small, style: style, reason: .noData)
                     .widgetURL(DeepLink.url(for: account.id))

@@ -22,7 +22,7 @@ enum SnapshotCatalog {
             + CardSnapshots.scenes
             + CardSnapshots.instrumentScenes
             + HomeSnapshots.scenes
-            + DeviceCodeSnapshots.scenes
+            + CodexSnapshots.scenes
             + ClaudeSnapshots.scenes
             + AddMenuSnapshots.scenes
             + SettingsSnapshots.scenes

@@ -21,7 +21,6 @@ private struct MeterGallery: View {
 
     private var items: [Item] {
         let snaps = Fixtures.snapshots()
-        let now = Fixtures.now
         let all = snaps[Fixtures.snorlax]!.meters[1]
         let session = snaps[Fixtures.snorlax]!.meters[0]
         let eeveeWeekly = snaps[Fixtures.eevee]!.meters[1]

@@ -68,7 +68,7 @@ final class TimelineBuilderTests: XCTestCase {
     }
 
     func testConfiguredAccountMissingGivesEmptyEntry() async {
-        var intent = SelectAccountMetersIntent()
+        let intent = SelectAccountMetersIntent()
         intent.account = AccountEntity(id: "claude:gone", name: "Gone", kind: .claude)
         let t = await provider { _ in (F.claudeMax, .fresh) }.makeTimeline(intent: intent, family: .small)
         XCTAssertEqual(t.entries.count, 1)

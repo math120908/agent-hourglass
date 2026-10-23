@@ -19,15 +19,20 @@ public struct CodexDeviceAuth: Sendable {
     private let http: HTTPClient
     private let sleep: @Sendable (Duration) async throws -> Void
     private let now: @Sendable () -> Date
+    /// Measures the poll interval. `ContinuousClock` keeps counting while the device sleeps and
+    /// ignores wall-clock changes, so elapsed time is real time, suspension included.
+    private let monotonic: @Sendable () -> ContinuousClock.Instant
 
     public init(
         http: HTTPClient,
         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        monotonic: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now }
     ) {
         self.http = http
         self.sleep = sleep
         self.now = now
+        self.monotonic = monotonic
     }
 
     public func start() async throws -> DeviceCodePrompt {
@@ -48,7 +53,8 @@ public struct CodexDeviceAuth: Sendable {
         )
     }
 
-    public func poll(_ p: DeviceCodePrompt) async throws -> Credential {
+    /// `wake` (foreground return) polls at once when the interval has already elapsed.
+    public func poll(_ p: DeviceCodePrompt, wake: DevicePollWake? = nil) async throws -> Credential {
         let deadline = min(p.expiresAt, now().addingTimeInterval(Self.maxLifetime))
         var interval = max(p.interval, Self.minInterval)
         let body = ["device_auth_id": p.deviceCode.reveal(), "user_code": p.userCode]
@@ -58,8 +64,11 @@ public struct CodexDeviceAuth: Sendable {
                 Self.log.info("device login expired")
                 throw DeviceFlowError.expired
             }
+            let polledAt = monotonic()
             do {
                 let data = try await post("api/accounts/deviceauth/token", json: body, step: "poll")
+                // A restart cancelled this login while the POST was in flight: drop its answer.
+                try Task.checkCancellation()
                 guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                     throw ProviderError.schema(keys: [])
                 }
@@ -67,9 +76,12 @@ public struct CodexDeviceAuth: Sendable {
                       let verifier = obj["code_verifier"] as? String else {
                     throw ProviderError.schema(keys: obj.keys.sorted())
                 }
-                return try await exchange(code: code, verifier: verifier)
+                return try await exchange(code: code, verifier: verifier, deadline: deadline, interval: interval)
             } catch let ProviderError.http(status, _, _) where status == 403 || status == 404 {
                 // pending
+            } catch ProviderError.transport {
+                // Suspension in Safari drops the connection (-999 / -1005); retry on the next interval.
+                Self.log.info("device login poll: transport error, retrying")
             } catch ProviderError.rateLimited {
                 interval += Self.slowDownStep
                 Self.log.info("device login slow_down")
@@ -79,11 +91,33 @@ public struct CodexDeviceAuth: Sendable {
             } catch ProviderError.unauthorized {
                 throw DeviceFlowError.unexpected(status: 401)
             }
-            try await sleep(interval)
+            try await pause(interval, since: polledAt, wake: wake)
         }
     }
 
-    private func exchange(code: String, verifier: String) async throws -> Credential {
+    /// Sleeps `interval` after the poll at `since`. A wake ends the wait early only when the
+    /// whole interval has elapsed on the monotonic clock; otherwise the rest of it is slept.
+    private func pause(_ interval: Duration, since: ContinuousClock.Instant, wake: DevicePollWake?) async throws {
+        guard let wake else { return try await sleep(interval) }
+        var remaining = interval
+        while true {
+            let sleep = self.sleep, wait = remaining
+            let woke = try await withThrowingTaskGroup(of: Bool.self) { group in
+                group.addTask { try await sleep(wait); return false }
+                group.addTask { await wake.wait(); return true }
+                defer { group.cancelAll() }
+                return try await group.next() ?? false
+            }
+            try Task.checkCancellation()
+            guard woke else { return }
+            let elapsed = monotonic() - since
+            if elapsed >= interval { return }
+            remaining = interval - elapsed
+        }
+    }
+
+    /// Transport errors (app suspended mid-request) retry until `deadline`; any HTTP answer is final.
+    private func exchange(code: String, verifier: String, deadline: Date, interval: Duration) async throws -> Credential {
         var c = URLComponents()
         c.queryItems = [
             URLQueryItem(name: "grant_type", value: "authorization_code"),
@@ -93,14 +127,26 @@ public struct CodexDeviceAuth: Sendable {
             URLQueryItem(name: "code_verifier", value: verifier),
         ]
         let form = (c.percentEncodedQuery ?? "").replacingOccurrences(of: "+", with: "%2B")
-        let data: Data
-        do {
-            data = try await send(path: "oauth/token", body: Data(form.utf8), contentType: "application/x-www-form-urlencoded")
-        } catch let ProviderError.http(status, _, _) {
-            Self.log.error("device login exchange failed: HTTP \(status, privacy: .public)")
-            throw DeviceFlowError.unexpected(status: status)
+        while true {
+            do {
+                let data = try await send(path: "oauth/token", body: Data(form.utf8), contentType: "application/x-www-form-urlencoded")
+                return try Self.credential(fromTokenResponse: data, now: now())
+            } catch ProviderError.transport {
+                Self.log.info("device login exchange: transport error, retrying")
+            } catch let ProviderError.http(status, _, _) {
+                Self.log.error("device login exchange failed: HTTP \(status, privacy: .public)")
+                throw DeviceFlowError.unexpected(status: status)
+            } catch let error as ProviderError {
+                Self.log.error("device login exchange failed: \(error.description, privacy: .public)")
+                throw error
+            }
+            try await sleep(interval)
+            try Task.checkCancellation()
+            guard now() < deadline else {
+                Self.log.info("device login expired")
+                throw DeviceFlowError.expired
+            }
         }
-        return try Self.credential(fromTokenResponse: data, now: now())
     }
 
     public static let refreshScope = "openid profile email"
@@ -233,7 +279,7 @@ public struct CodexDeviceAuth: Sendable {
         do {
             return try await send(path: path, body: try JSONSerialization.data(withJSONObject: json), contentType: "application/json")
         } catch let error as ProviderError {
-            if case .http = error {} else { Self.log.error("device login \(step) failed: \(error.description, privacy: .public)") }
+            if case .http = error {} else { Self.log.error("device login \(step, privacy: .public) failed: \(error.description, privacy: .public)") }
             throw error
         }
     }

@@ -1,4 +1,5 @@
-ID ?= 11D5CDDF2B4CC1D70C994AAD3DEDFD29562C5F51
+# Empty ID: resolved from the keychain by team (scripts/mac-sign-id.sh). Override with ID=<sha1>.
+ID ?=
 NOTARY_PROFILE ?= agent-hourglass
 APP := build/Build/Products/Release/AgentHourglass.app
 
@@ -11,12 +12,15 @@ test:
 	swift test
 	$(MAKE) check-ios
 	scripts/secret-scan.sh
+	scripts/test-mac-sign-id.sh
 	scripts/source-guards.sh
+	scripts/test-source-guards.sh
 
 check-ios:
 	xcodebuild -workspace . -scheme UsageCore -destination 'generic/platform=iOS Simulator' -derivedDataPath build/check-ios -quiet build
 
 app:
+	@[ -n "$(ID)" ] || scripts/mac-sign-id.sh >/dev/null
 	xcodegen generate --quiet
 	xcodebuild -project AgentHourglass.xcodeproj -scheme AgentHourglass -configuration Release \
 	  -derivedDataPath build CODE_SIGNING_ALLOWED=YES -quiet build
@@ -26,7 +30,8 @@ app:
 	$(MAKE) sign ID=$(ID)
 
 sign:
-	codesign --force --options runtime --timestamp -s "$(ID)" "$(APP)"
+	@id="$(ID)"; [ -n "$$id" ] || id=$$(scripts/mac-sign-id.sh) || exit 1; \
+	  echo "codesign with $$id"; codesign --force --options runtime --timestamp -s "$$id" "$(APP)"
 	codesign --verify --strict "$(APP)"
 	@codesign -dvv "$(APP)" 2>&1 | grep -q '^TeamIdentifier=[A-Z0-9]\{10\}$$' || { echo "sign: no TeamIdentifier (not a Developer ID build)"; exit 1; }
 

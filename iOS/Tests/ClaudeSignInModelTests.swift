@@ -48,6 +48,19 @@ struct ClaudeSignInModelTests {
         #expect(calls.value == 1)
     }
 
+    /// An expired or used code (OAuth invalid_grant on exchange) gets its own copy; anything else stays generic.
+    @Test(arguments: [
+        (ProviderError.invalidGrant as any Error & Sendable, "That code has expired. Sign in again."),
+        (ProviderError.http(status: 500, host: "platform.claude.com", retryAfter: nil), "Sign-in failed"),
+        (ProviderError.transport(host: "platform.claude.com"), "Sign-in failed"),
+    ])
+    func testExchangeFailureCopy(_ error: any Error & Sendable, _ copy: String) async throws {
+        let m = ClaudeSignInModel(app: try app(), flow: ClaudePKCEFlow { _, _, _ in throw error })
+        let s = try #require(query(m.authorizeURL, "state"))
+        await m.receive(code: "c", state: s)
+        #expect(m.state == .failed(copy))
+    }
+
     @Test func testRestartChangesState() throws {
         let m = ClaudeSignInModel(app: try app())
         let before = query(m.authorizeURL, "state")
