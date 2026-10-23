@@ -63,30 +63,38 @@ out=$(rg -n 'UsageHistory|GRDB' iOS/project.yml 2>/dev/null)
 # iOS sign-in surfaces: no embedded web view at all (Claude signs in through an ephemeral
 # ASWebAuthenticationSession plus paste), no programmatic pasteboard reads (only the system
 # PasteButton reads; writes and hasStrings are fine), no dump(. Full-line // comments are ignored.
+# Sources/UsageCore is linked into the iOS app, so it gets the WebKit, pasteboard and session
+# rules too (S7); neither the Mac app nor UsageCore uses WebKit or UIPasteboard.
 IOSSRC=(iOS/App iOS/Widget iOS/Shared)
+IOSLINKED=("${IOSSRC[@]}" Sources/UsageCore)
 nocomment() { rg -v '^[^:]+:[0-9]+:\s*//'; }
-# Any attribute or import kind before the module; SwiftUI WebPage/WebView; SFSafariViewController
-# (persistent cookie store). ASWebAuthenticationSession lives in AuthenticationServices: allowed.
-out=$(rg -n -P -g '*.swift' -e '^\s*(@\w+\s+)*import\s+(\w+\s+)?(WebKit|SafariServices)\b' \
-  -e '\bWK(WebView|UserScript)\b' -e '\bWeb(Page|View)\b' -e '\bSFSafariViewController\b' "${IOSSRC[@]}" 2>/dev/null | nocomment)
-[ -n "$out" ] && report "WebKit / WebView / SafariServices in iOS/ (sign in with ASWebAuthenticationSession):" "$out"
+# Any attributes (with arguments) and access level before import, any import kind, after ; too;
+# any WK* type, SwiftUI WebPage/WebView, any SFSafari* type (persistent cookie store).
+# ASWebAuthenticationSession lives in AuthenticationServices: allowed, but see [ephemeral].
+out=$(rg -n -P -g '*.swift' \
+  -e '(^|;)\s*((@\w+(\([^)]*\))?|public|package|internal|fileprivate|private)\s*)*\bimport\s+(\w+\s+)?(WebKit|SafariServices)\b' \
+  -e '\bWK[A-Z]\w*' -e '\bWeb(Page|View)\b' -e '\bSFSafari\w*' "${IOSLINKED[@]}" 2>/dev/null | nocomment)
+[ -n "$out" ] && report "[webkit] WebKit / WebView / SafariServices in iOS-linked code (sign in with ASWebAuthenticationSession):" "$out"
 # Allowlist: every UIPasteboard use must be UIPasteboard.general.hasStrings or a write
 # UIPasteboard.general.string = ...; aliases, split member access and any other API fail.
-out=$(rg -n -g '*.swift' 'UIPasteboard' "${IOSSRC[@]}" 2>/dev/null | nocomment |
+out=$(rg -n -g '*.swift' 'UIPasteboard' "${IOSLINKED[@]}" 2>/dev/null | nocomment |
   perl -ne '($c = $_) =~ s/^[^:]+:\d+://; $c =~ s/\bUIPasteboard\.general\.hasStrings\b//g; $c =~ s/\bUIPasteboard\.general\.string\s*=(?!=)//g; print if $c =~ /UIPasteboard/')
-[ -n "$out" ] && report "UIPasteboard use outside the allowlist in iOS/ (only .general.hasStrings and .general.string = ...; reads use PasteButton):" "$out"
-# Every ASWebAuthenticationSession file sets prefersEphemeralWebBrowserSession = true in code
-# (not in a comment), never assigns it anything else, and never mentions = false.
-for f in $(rg -l -g '*.swift' 'ASWebAuthenticationSession\(' "${IOSSRC[@]}" 2>/dev/null); do
-  code=$(sed -E 's#//.*$##' "$f")
-  echo "$code" | rg -q -P 'prefersEphemeralWebBrowserSession\s*=\s*true\b' ||
-    report "ASWebAuthenticationSession without prefersEphemeralWebBrowserSession = true (in code):" "$f"
-  bad=$( { rg -n -P 'prefersEphemeralWebBrowserSession\s*=\s*false\b' "$f"
-    echo "$code" | rg -n -P 'prefersEphemeralWebBrowserSession\s*=(?!=)(?!\s*true\b)'; } 2>/dev/null)
-  [ -n "$bad" ] && report "prefersEphemeralWebBrowserSession set to something other than true in $f:" "$bad"
-done
+[ -n "$out" ] && report "[pasteboard] UIPasteboard use outside the allowlist in iOS-linked code (only .general.hasStrings and .general.string = ...; reads use PasteButton):" "$out"
+# One file builds the web-auth session; everywhere else (Mac app included) it is never named, and
+# SwiftUI's webAuthenticationSession environment value is never used.
+AUTH='iOS/App/AddAccount/PasteBrowser.swift'
+out=$(rg -n -g '*.swift' -e '\bASWebAuthenticationSession\w*' -e 'prefersEphemeralWebBrowserSession' Sources App iOS 2>/dev/null |
+  grep -v "^$AUTH:" | nocomment)
+[ -n "$out" ] && report "[auth-session] ASWebAuthenticationSession outside $AUTH:" "$out"
+out=$(rg -n -g '*.swift' '\b[Ww]ebAuthenticationSession\b' Sources App iOS 2>/dev/null | nocomment)
+[ -n "$out" ] && report "[auth-session] SwiftUI WebAuthenticationSession (use PasteBrowser's ephemeral session):" "$out"
+# In that file: each `let X = ASWebAuthenticationSession(...)` is immediately followed by
+# `X.prefersEphemeralWebBrowserSession = true` in code; no other mention, .init, Self, #if or KVC.
+if [ -f "$AUTH" ]; then
+  out=$(perl scripts/guard-auth-session.pl "$AUTH" 2>&1) || report "[ephemeral] $AUTH must build only ephemeral sessions:" "$out"
+fi
 out=$(rg -n -g '*.swift' '\bdump\(' "${IOSSRC[@]}" 2>/dev/null)
-[ -n "$out" ] && report "dump( in iOS/:" "$out"
+[ -n "$out" ] && report "[dump] dump( in iOS/:" "$out"
 
 [ $fail -eq 0 ] && echo "source-guards: ok"
 exit $fail

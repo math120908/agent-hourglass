@@ -1,0 +1,7 @@
+// fixture: iOS/App/GuardProbe.swift auth-session
+import AuthenticationServices
+func f(_ u: URL) {
+    let s = ASWebAuthenticationSession(url: u, callbackURLScheme: "x") { _, _ in }
+    s.prefersEphemeralWebBrowserSession = true
+    s.start()
+}

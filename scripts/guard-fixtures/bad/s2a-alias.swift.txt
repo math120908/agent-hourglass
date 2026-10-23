@@ -1,0 +1,4 @@
+// fixture: iOS/App/GuardProbe.swift pasteboard
+import UIKit
+let pb = UIPasteboard.general
+let s = pb.string

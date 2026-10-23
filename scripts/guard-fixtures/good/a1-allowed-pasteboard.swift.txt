@@ -1,0 +1,8 @@
+// fixture: iOS/App/GuardProbe.swift
+import AuthenticationServices
+import UIKit
+func f() {
+    UIPasteboard.general.string = "x"
+    _ = UIPasteboard.general.hasStrings
+    if UIPasteboard.general.hasStrings { UIPasteboard.general.string = "y" }
+}

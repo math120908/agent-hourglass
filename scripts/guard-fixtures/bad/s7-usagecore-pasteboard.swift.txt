@@ -1,0 +1,5 @@
+// fixture: Sources/UsageCore/GuardProbe.swift pasteboard
+#if canImport(UIKit)
+import UIKit
+public func clip() -> String? { UIPasteboard.general.string }
+#endif

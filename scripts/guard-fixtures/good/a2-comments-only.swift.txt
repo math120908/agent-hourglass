@@ -1,0 +1,4 @@
+// fixture: iOS/App/GuardProbe.swift
+// import WebKit, WebView, SFSafariViewController, let pb = UIPasteboard.general
+/// UIPasteboard.general.strings in a doc comment
+/// ASWebAuthenticationSession with prefersEphemeralWebBrowserSession = false
