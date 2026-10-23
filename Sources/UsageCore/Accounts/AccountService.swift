@@ -12,7 +12,8 @@ public enum AccountServiceError: Error, Equatable {
 public actor AccountService {
     /// `(loginHint, expectedRemoteID) -> (credential, remoteID)`. The remote id is the stable account id.
     public typealias ClaudeLogin = @Sendable (String?, String?) async throws -> (Credential, String)
-    public typealias MakeClient = @Sendable (AccountID) -> AccountClient
+    /// nil for a kind this platform cannot poll (iOS v1: Copilot); the account is then not polled.
+    public typealias MakeClient = @Sendable (AccountID) -> AccountClient?
 
     private let registry: AccountRegistry
     private let store: CredentialStoring
@@ -102,7 +103,7 @@ public actor AccountService {
             status: "ok"
         ))
         if existing != nil { await poller.remove(client: id) }
-        await poller.add(client: makeClient(id))
+        if let client = makeClient(id) { await poller.add(client: client) }
         await poller.refreshAll(force: false)
         return id
     }
@@ -125,7 +126,7 @@ public actor AccountService {
             status: "ok"
         ))
         if existing != nil { await poller.remove(client: id) }
-        await poller.add(client: makeClient(id))
+        if let client = makeClient(id) { await poller.add(client: client) }
         await poller.refreshAll(force: false)
         return id
     }
@@ -157,7 +158,7 @@ public actor AccountService {
             status: "ok"
         ))
         if existing != nil { await poller.remove(client: id) }
-        await poller.add(client: makeClient(id))
+        if let client = makeClient(id) { await poller.add(client: client) }
         await poller.refreshAll(force: false)
         return id
     }
@@ -165,7 +166,7 @@ public actor AccountService {
     /// "Try again" for Claude Code (local): a fresh client clears a denied state; still read-only.
     private func readdClaudeCodeLocal() async throws {
         await poller.remove(client: .claudeCodeLocal)
-        await poller.add(client: makeClient(.claudeCodeLocal))
+        if let client = makeClient(.claudeCodeLocal) { await poller.add(client: client) }
         await poller.refreshAll(force: false)
     }
 
@@ -241,7 +242,7 @@ public actor AccountService {
             status: "ok"
         ))
         if existing != nil { await poller.remove(client: id) }
-        await poller.add(client: makeClient(id))
+        if let client = makeClient(id) { await poller.add(client: client) }
         await poller.refreshAll(force: false)
     }
 }

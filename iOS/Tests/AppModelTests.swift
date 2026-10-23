@@ -66,6 +66,18 @@ struct AppModelTests {
         #expect(model.appState.snapshots[id]?.accountID == id)
     }
 
+    @Test func testCopilotEntrySkipped() async throws {
+        let (model, env) = try await make()
+        let claude = AccountID(kind: .claude, remoteID: "ok")
+        let copilot = AccountID(kind: .copilot, remoteID: "1")
+        try await seed(env, claude, name: "c", fetchedAt: Date())
+        try await env.registry.upsert(AccountEntry(id: copilot, kind: .copilot, displayName: "gh", remoteLogin: "gh", order: 1, addedAt: Date(), status: "ok"))
+        await model.load()
+        #expect(model.entries.map(\.id) == [claude])
+        #expect(!model.appState.accounts.contains(copilot))
+        await model.refresh()
+    }
+
     @Test func testResultForRemovedAccountIgnored() async throws {
         let (model, env) = try await make()
         let id = AccountID(kind: .claude, remoteID: "gone")

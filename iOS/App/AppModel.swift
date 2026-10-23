@@ -36,10 +36,7 @@ final class AppModel {
             poller: poller,
             history: NoHistory(),
             claudeLogin: { _, _ in throw AccountServiceError.unknownAccount },
-            makeClient: { id in
-                guard let client = env.makeClient(id) else { preconditionFailure("AppModel: unsupported kind on iOS") }
-                return client
-            },
+            makeClient: { env.makeClient($0) },
             now: now,
             http: env.http,
             shared: env.shared
@@ -67,6 +64,7 @@ final class AppModel {
             Self.log.error("registry load failed error=\(String(describing: type(of: error)), privacy: .public)")
             entries = []
         }
+        entries = supported(entries)
         let interval = await poller.interval
         appState.effectiveInterval = interval
         let t = now()
@@ -190,8 +188,13 @@ final class AppModel {
         appState.statuses[e.id] = Self.cachedStatus(fetchedAt: snap.fetchedAt, now: t, interval: interval)
     }
 
+    /// Drops entries this platform cannot poll (iOS v1: Copilot), so they never show or crash.
+    private func supported(_ list: [AccountEntry]) -> [AccountEntry] {
+        list.filter { env.makeClient($0.id) != nil }
+    }
+
     private func reloadEntries() async {
-        entries = await env.registry.accounts()
+        entries = supported(await env.registry.accounts())
         let ids = entries.map(\.id)
         appState.accounts = ids
         for e in entries { appState.names[e.id] = e.displayName }
