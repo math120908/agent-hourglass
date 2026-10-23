@@ -73,7 +73,7 @@ final class RenderMatrixTests: XCTestCase {
         remaining.showRemaining = true
         var countdown = DisplaySettings.default
         countdown.resetStyle = .countdown
-        // The base renders 24 h times in the fixture locale, so this variant forces 12 h to differ.
+        // The base renders 24 h times in the en_GB render locale, so this variant forces 12 h to differ.
         var hour12 = DisplaySettings.default
         hour12.hour24 = .off
         for (variant, settings) in [("remaining", remaining), ("countdown", countdown), ("12h", hour12)] {

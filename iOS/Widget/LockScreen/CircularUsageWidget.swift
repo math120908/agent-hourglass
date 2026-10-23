@@ -29,6 +29,8 @@ private struct CircularUsageEntryView: View {
 struct CircularUsageView: View {
     var entry: UsageEntry
     var style: WidgetRenderStyle
+    @Environment(\.calendar) private var calendar
+    @Environment(\.locale) private var locale
 
     struct Content: Equatable, Sendable {
         var row: WidgetMeterRow
@@ -49,7 +51,7 @@ struct CircularUsageView: View {
         else { return nil }
         let row = WidgetMeterModel.row(meter, at: e.date, settings: e.settings, calendar: calendar, locale: locale)
         let freshness = WidgetFreshness.freshness(fetchedAt: s.fetchedAt, status: e.status, at: e.date)
-        let age = WidgetFreshness.ageText(fetchedAt: s.fetchedAt, at: e.date, calendar: calendar, settings: e.settings)
+        let age = WidgetFreshness.ageText(fetchedAt: s.fetchedAt, at: e.date, calendar: calendar, locale: locale, settings: e.settings)
         let isProblem: Bool
         let isFailed: Bool
         switch freshness {
@@ -65,7 +67,7 @@ struct CircularUsageView: View {
     var body: some View {
         ZStack {
             AccessoryWidgetBackground()
-            if let c = Self.content(entry, calendar: .current, locale: .current) {
+            if let c = Self.content(entry, calendar: calendar, locale: locale) {
                 ring(c)
             } else {
                 WidgetEmptyView(family: .circular, style: style, reason: entry.account == nil ? .noAccount : .noData)

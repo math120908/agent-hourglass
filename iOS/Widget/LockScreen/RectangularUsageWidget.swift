@@ -34,7 +34,7 @@ struct RectangularUsageContent: Equatable {
         return RectangularUsageContent(
             kind: account.kind,
             name: account.displayName,
-            ageText: WidgetFreshness.ageText(fetchedAt: snapshot.fetchedAt, at: entry.date, calendar: calendar, settings: entry.settings),
+            ageText: WidgetFreshness.ageText(fetchedAt: snapshot.fetchedAt, at: entry.date, calendar: calendar, locale: locale, settings: entry.settings),
             freshness: WidgetFreshness.freshness(fetchedAt: snapshot.fetchedAt, status: entry.status, at: entry.date),
             rows: meters.map { WidgetMeterModel.row($0, at: entry.date, settings: entry.settings, calendar: calendar, locale: locale) }
         )
@@ -57,9 +57,11 @@ private struct RectangularUsageEntryView: View {
 struct RectangularUsageView: View {
     var entry: UsageEntry
     var style: WidgetRenderStyle
+    @Environment(\.calendar) private var calendar
+    @Environment(\.locale) private var locale
 
     var body: some View {
-        if let c = RectangularUsageContent.make(entry) {
+        if let c = RectangularUsageContent.make(entry, calendar: calendar, locale: locale) {
             content(c)
         } else {
             WidgetEmptyView(family: .rectangular, style: style, reason: entry.account == nil ? .noAccount : .noData)

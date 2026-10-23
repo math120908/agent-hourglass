@@ -19,10 +19,12 @@ struct InlineUsageWidget: Widget {
 struct InlineUsageView: View {
     var entry: UsageEntry
     var style: WidgetRenderStyle
+    @Environment(\.calendar) private var calendar
+    @Environment(\.locale) private var locale
 
     var body: some View {
         Label {
-            Text(InlineText.text(entry))
+            Text(InlineText.text(entry, calendar: calendar, locale: locale))
         } icon: {
             Image(systemName: "hourglass")
         }

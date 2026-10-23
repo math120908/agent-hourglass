@@ -24,7 +24,7 @@ enum WidgetFreshness {
     /// Empty-state copy shared by every family.
     static func emptyMessage(hasAccount: Bool) -> String { hasAccount ? "No data yet" : "Choose account" }
 
-    static func ageText(fetchedAt: Date, at: Date, calendar: Calendar, settings: DisplaySettings) -> String {
-        MeterDisplay.ageShort(fetchedAt: fetchedAt, now: at, options: settings.meterOptions(calendar: calendar))
+    static func ageText(fetchedAt: Date, at: Date, calendar: Calendar, locale: Locale = .current, settings: DisplaySettings) -> String {
+        MeterDisplay.ageShort(fetchedAt: fetchedAt, now: at, options: settings.meterOptions(calendar: calendar, locale: locale))
     }
 }
