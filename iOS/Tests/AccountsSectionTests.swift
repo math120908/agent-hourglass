@@ -1,6 +1,7 @@
 import Testing
 @testable import AgentHourglass
 
+@MainActor
 struct AccountsSectionTests {
     @Test func testBlankRenameReverts() {
         #expect(AccountsSection.committedName("  ", current: "Snorlax") == nil)

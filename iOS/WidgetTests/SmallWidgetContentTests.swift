@@ -18,7 +18,7 @@ final class SmallWidgetContentTests: XCTestCase {
         XCTAssertNotNil(c.ageText)
     }
 
-    func testStaleDerivedFromEntryDateNotDimmed() {
+    @MainActor func testStaleDerivedFromEntryDateNotDimmed() {
         let c = SmallWidgetContent(entry(F.claudeMax, at: F.now.addingTimeInterval(31 * 60)), calendar: F.calendar, locale: F.locale)
         XCTAssertEqual(c.freshness, .stale)
         XCTAssertFalse(c.isDimmed)
@@ -26,7 +26,7 @@ final class SmallWidgetContentTests: XCTestCase {
         XCTAssertEqual(AgeLabel.glyph(.stale), "clock")
     }
 
-    func testNeedsLoginKeepsNumbersDimmedWithAge() {
+    @MainActor func testNeedsLoginKeepsNumbersDimmedWithAge() {
         let c = SmallWidgetContent(entry(F.claudeMax, status: .needsLogin), calendar: F.calendar, locale: F.locale)
         XCTAssertEqual(c.rows.count, 2)
         XCTAssertTrue(c.isDimmed)
