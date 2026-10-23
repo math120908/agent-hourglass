@@ -5,6 +5,7 @@ import UsageCore
 struct AgentHourglassApp: App {
     @State private var themeStore = ThemeStore.appGroup()
     @State private var model = AppModel(env: UsageEnvironment.live(), displayStore: DisplaySettingsStore(defaults: AppGroup.defaults))
+    // TODO(P4 Task 15): present SettingsView when showSettings is true.
     @State private var showSettings = false
     @Environment(\.scenePhase) private var scenePhase
 

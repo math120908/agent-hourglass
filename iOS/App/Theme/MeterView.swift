@@ -78,7 +78,17 @@ struct MeterView: View {
     }
 
     private func glassTint(_ s: Meter.Severity, _ c: Color) -> Color {
-        scheme == .dark && s == .normal && kind == .codex ? Color(red: 0.72, green: 0.96, blue: 0.93) : c
+        guard scheme == .dark else { return c }
+        switch s {
+        case .normal:
+            switch kind {
+            case .claude: return Color(red: 1.0, green: 0.72, blue: 0.56)
+            case .copilot: return Color(red: 0.88, green: 0.82, blue: 1.0)
+            case .codex: return Color(red: 0.72, green: 0.96, blue: 0.93)
+            }
+        case .warning: return Color(red: 1.0, green: 0.82, blue: 0.45)
+        case .critical: return Color(red: 1.0, green: 0.66, blue: 0.62)
+        }
     }
 
     // MARK: Instrument

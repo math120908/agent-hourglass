@@ -30,7 +30,7 @@ struct HomeHeader: View {
             Text(Self.statusLine(state, calendar: calendar))
         }
         .font(.subheadline)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(scheme == .dark ? Color.white.opacity(0.88) : Color.primary.opacity(0.7))
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
