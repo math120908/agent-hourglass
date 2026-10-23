@@ -19,15 +19,20 @@ public struct CodexDeviceAuth: Sendable {
     private let http: HTTPClient
     private let sleep: @Sendable (Duration) async throws -> Void
     private let now: @Sendable () -> Date
+    /// Measures the poll interval. `ContinuousClock` keeps counting while the device sleeps and
+    /// ignores wall-clock changes, so elapsed time is real time, suspension included.
+    private let monotonic: @Sendable () -> ContinuousClock.Instant
 
     public init(
         http: HTTPClient,
         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
-        now: @escaping @Sendable () -> Date = { Date() }
+        now: @escaping @Sendable () -> Date = { Date() },
+        monotonic: @escaping @Sendable () -> ContinuousClock.Instant = { ContinuousClock.now }
     ) {
         self.http = http
         self.sleep = sleep
         self.now = now
+        self.monotonic = monotonic
     }
 
     public func start() async throws -> DeviceCodePrompt {
@@ -59,9 +64,11 @@ public struct CodexDeviceAuth: Sendable {
                 Self.log.info("device login expired")
                 throw DeviceFlowError.expired
             }
-            let polledAt = now()
+            let polledAt = monotonic()
             do {
                 let data = try await post("api/accounts/deviceauth/token", json: body, step: "poll")
+                // A restart cancelled this login while the POST was in flight: drop its answer.
+                try Task.checkCancellation()
                 guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                     throw ProviderError.schema(keys: [])
                 }
@@ -89,8 +96,8 @@ public struct CodexDeviceAuth: Sendable {
     }
 
     /// Sleeps `interval` after the poll at `since`. A wake ends the wait early only when the
-    /// whole interval has elapsed by the clock; otherwise the rest of it is slept.
-    private func pause(_ interval: Duration, since: Date, wake: DevicePollWake?) async throws {
+    /// whole interval has elapsed on the monotonic clock; otherwise the rest of it is slept.
+    private func pause(_ interval: Duration, since: ContinuousClock.Instant, wake: DevicePollWake?) async throws {
         guard let wake else { return try await sleep(interval) }
         var remaining = interval
         while true {
@@ -103,7 +110,7 @@ public struct CodexDeviceAuth: Sendable {
             }
             try Task.checkCancellation()
             guard woke else { return }
-            let elapsed = Duration.seconds(now().timeIntervalSince(since))
+            let elapsed = monotonic() - since
             if elapsed >= interval { return }
             remaining = interval - elapsed
         }

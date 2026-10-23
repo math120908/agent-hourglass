@@ -13,6 +13,38 @@ private final class StubTransport: HTTPTransport, @unchecked Sendable {
     }
 }
 
+/// Answers by path. The first token poll is held until `release` (ignoring cancellation, like an
+/// in-flight POST) and returns a code; later polls are pending. Records exchange calls.
+private final class RestartTransport: HTTPTransport, @unchecked Sendable {
+    private let lock = NSLock()
+    private var polls = 0, exchanges = 0
+    private var entered = false, released = false
+    let tokens: String
+    init(tokens: String) { self.tokens = tokens }
+    var firstPollEntered: Bool { lock.withLock { entered } }
+    var exchangeCount: Int { lock.withLock { exchanges } }
+    func release() { lock.withLock { released = true } }
+    func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        let (status, body): (Int, String)
+        switch request.url?.path() {
+        case "/api/accounts/deviceauth/usercode":
+            (status, body) = (200, #"{"device_auth_id":"DAID-SENTINEL","user_code":"ABCD-1234","interval":"5"}"#)
+        case "/api/accounts/deviceauth/token":
+            let first = lock.withLock { polls += 1; if polls == 1 { entered = true }; return polls == 1 }
+            if first {
+                while !lock.withLock({ released }) { try? await Task.sleep(for: .milliseconds(5)) }
+                (status, body) = (200, #"{"authorization_code":"AUTHCODE-SENTINEL","code_challenge":"c","code_verifier":"VERIFIER-SENTINEL"}"#)
+            } else {
+                (status, body) = (403, "")
+            }
+        default:
+            lock.withLock { exchanges += 1 }
+            (status, body) = (200, tokens)
+        }
+        return (Data(body.utf8), HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!)
+    }
+}
+
 /// Scripted status + body per request; counts token polls.
 private final class StatusTransport: HTTPTransport, @unchecked Sendable {
     private let lock = NSLock()
@@ -81,8 +113,8 @@ private func jwt(_ payload: String) -> String { "\(b64url("{\"alg\":\"none\"}"))
             (200, #"{"authorization_code":"AUTHCODE-SENTINEL","code_challenge":"c","code_verifier":"VERIFIER-SENTINEL"}"#),
             (200, "{\"id_token\":\"\(idToken)\",\"access_token\":\"\(accessToken)\",\"refresh_token\":\"REFRESH-SENTINEL\"}"),
         ])
-        let t0 = Date()
-        let clock = Box(t0)
+        let m0 = ContinuousClock.now
+        let mono = Box(m0)
         let sleeps = Box(0)
         let tmp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let env = try UsageEnvironment.make(base: tmp, service: "cc.kuoc.agent-hourglass.ios-tests", accessGroup: AppGroup.keychainAccessGroup)
@@ -91,7 +123,7 @@ private func jwt(_ payload: String) -> String { "\(b64url("{\"alg\":\"none\"}"))
         let auth = CodexDeviceAuth(
             http: HTTPClient(transport: transport),
             sleep: { _ in sleeps.value += 1; try await Task.sleep(for: .seconds(600)) },
-            now: { clock.value },
+            monotonic: { mono.value },
         )
         let m = CodexAddFlow.model(app: app, auth: auth)
         m.begin()
@@ -100,7 +132,7 @@ private func jwt(_ payload: String) -> String { "\(b64url("{\"alg\":\"none\"}"))
         m.foreground()
         try await Task.sleep(for: .milliseconds(100))
         #expect(transport.polls == 1, "back within the interval: no early poll")
-        clock.value = t0.addingTimeInterval(6)
+        mono.value = m0 + .seconds(6)
         m.foreground()
         for _ in 0..<300 {
             if case .success = m.state { break }
@@ -110,5 +142,28 @@ private func jwt(_ payload: String) -> String { "\(b64url("{\"alg\":\"none\"}"))
         #expect(m.state == .success(expected))
         #expect(transport.polls == 2)
         try? await app.remove(expected)
+    }
+
+    @Test func testRestartDropsTheOldLoginsInFlightCode() async throws {
+        let idToken = jwt(#"{"https://api.openai.com/auth":{"chatgpt_account_id":"acct-stale"}}"#)
+        let accessToken = jwt(#"{"exp":4000000000}"#)
+        let transport = RestartTransport(tokens: "{\"id_token\":\"\(idToken)\",\"access_token\":\"\(accessToken)\",\"refresh_token\":\"REFRESH-SENTINEL\"}")
+        let tmp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        let env = try UsageEnvironment.make(base: tmp, service: "cc.kuoc.agent-hourglass.ios-tests", accessGroup: AppGroup.keychainAccessGroup)
+        let app = AppModel(env: env, displayStore: DisplaySettingsStore(defaults: UserDefaults(suiteName: UUID().uuidString)!))
+        let auth = CodexDeviceAuth(http: HTTPClient(transport: transport), sleep: { _ in try await Task.sleep(for: .seconds(600)) })
+        let m = CodexAddFlow.model(app: app, auth: auth)
+        m.begin()
+        for _ in 0..<300 where !transport.firstPollEntered { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(transport.firstPollEntered)
+        m.restart()
+        transport.release()
+        try await Task.sleep(for: .milliseconds(300))
+        let stale = AccountID(kind: .codex, remoteID: "acct-stale")
+        #expect(transport.exchangeCount == 0, "the old login's code is never exchanged")
+        #expect(!(await env.registry.accounts().contains { $0.id == stale }))
+        if case .waiting = m.state {} else { Issue.record("expected the new login to be waiting, got \(m.state)") }
+        m.cancel()
+        try? await app.remove(stale)
     }
 }

@@ -15,6 +15,8 @@ enum CodexAddFlow {
             start: { try await auth.start() },
             complete: { prompt in
                 let cred = try await auth.poll(prompt, wake: wake)
+                // Restarted while the exchange was in flight: never add the old login's account.
+                try Task.checkCancellation()
                 return try await app.add { try await service.addCodex(credential: cred) }
             },
             wake: { wake.fire() },
