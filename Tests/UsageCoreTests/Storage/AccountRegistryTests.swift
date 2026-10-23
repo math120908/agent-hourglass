@@ -42,6 +42,16 @@ struct AccountRegistryTests {
         #expect(await fresh.menuBarAccountID?.rawValue == "claude:a")
     }
 
+    @Test func setStatusPersistsAndSkipsNoOp() async throws {
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let reg = AccountRegistry(directory: dir)
+        _ = try await reg.load()
+        try await reg.upsert(entry("a"))
+        try await reg.setStatus(AccountID(rawValue: "claude:a")!, "needsLogin")
+        #expect(try await AccountRegistry(directory: dir).load().first?.status == "needsLogin")
+        await #expect(throws: AccountRegistryError.self) { try await reg.setStatus(AccountID(rawValue: "claude:zz")!, "ok") }
+    }
+
     @Test func upsertSameIdNoDuplicate() async throws {
         defer { try? FileManager.default.removeItem(at: dir) }
         let reg = AccountRegistry(directory: dir)

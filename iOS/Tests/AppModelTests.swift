@@ -92,6 +92,19 @@ struct AppModelTests {
         #expect(env.shared.cache.read(id) == nil)
     }
 
+    @Test func testNeedsLoginPersistsStatusAndSuccessClearsIt() async throws {
+        let (model, env) = try await make()
+        let id = AccountID(kind: .claude, remoteID: "signed-out")
+        try await seed(env, id, name: "x", fetchedAt: Date())
+        await model.load()
+        model.deliver(id, .failure(.needsLogin))
+        await model.pendingStatusWrite?.value
+        #expect(try await env.registry.load().first { $0.id == id }?.status == "needsLogin")
+        model.deliver(id, .success(UsageSnapshot(accountID: id, fetchedAt: Date(), meters: [])))
+        await model.pendingStatusWrite?.value
+        #expect(try await env.registry.load().first { $0.id == id }?.status == "ok")
+    }
+
     @Test func testHandleURL() async throws {
         let (model, env) = try await make()
         let id = AccountID(kind: .claude, remoteID: "u@x")

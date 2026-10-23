@@ -110,6 +110,15 @@ public actor AccountRegistry {
         try commit(next, menuBar: menuBarAccountID)
     }
 
+    /// Persists the `Diagnostics.statusName` spelling the widget reads; a no-op when unchanged.
+    public func setStatus(_ id: AccountID, _ status: String) throws {
+        guard let i = entries.firstIndex(where: { $0.id == id }) else { throw AccountRegistryError.unknownAccount }
+        guard entries[i].status != status else { return }
+        var next = entries
+        next[i].status = status
+        try commit(next, menuBar: menuBarAccountID)
+    }
+
     public func setMenuBarAccount(_ id: AccountID) throws {
         guard entries.contains(where: { $0.id == id }) else { throw AccountRegistryError.unknownAccount }
         try commit(entries, menuBar: id)

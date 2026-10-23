@@ -174,7 +174,31 @@ final class AppModel {
             return
         }
         appState.apply(id, outcome)
+        persistStatus(id, outcome)
         if case .success = outcome { reloadWidgetsThrottled() }
+    }
+
+    /// The last registry status write; tests await it.
+    @ObservationIgnored private(set) var pendingStatusWrite: Task<Void, Never>?
+
+    /// Persists needsLogin so the widget can show its sign-in state without a live fetch; success clears it.
+    private func persistStatus(_ id: AccountID, _ outcome: FetchOutcome) {
+        let raw: String
+        switch outcome {
+        case .success: raw = "ok"
+        case .failure(.needsLogin): raw = Diagnostics.statusName(.needsLogin)
+        case .failure: return
+        }
+        let registry = env.registry, previous = pendingStatusWrite
+        pendingStatusWrite = Task {
+            await previous?.value
+            do {
+                try await registry.setStatus(id, raw)
+                if raw != "ok" { WidgetReloader.reloadAll() }
+            } catch {
+                Self.log.error("status persist failed error=\(String(describing: type(of: error)), privacy: .public)")
+            }
+        }
     }
 
     @ObservationIgnored private var lastPollReload: Date?
