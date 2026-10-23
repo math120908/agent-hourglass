@@ -1,7 +1,8 @@
 import Foundation
 
 /// OpenAI Codex (ChatGPT plan) usage from `GET chatgpt.com/backend-api/wham/usage` (R5).
-/// The token is borrowed read-only from the Codex CLI; the `credential` argument is ignored.
+/// Borrowed mode (`auth != nil`, Mac): the token is read from the Codex CLI; the `credential` argument is ignored.
+/// Owned mode (`auth == nil`, iPhone): the stored device-login credential is used and refreshed via `CodexDeviceAuth`.
 public struct CodexProvider: UsageProvider {
     public static let usageURL = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
     static let knownKeys: Set<String> = [
@@ -16,11 +17,16 @@ public struct CodexProvider: UsageProvider {
 
     public init(auth: (any CodexLoginSource)?) { self.auth = auth }
 
+    /// True when the token comes from the Codex CLI (no Keychain item, never refreshed).
+    public var isBorrowed: Bool { auth != nil }
+
     /// Placeholder handed to `fetch`; Codex never keeps a credential of its own.
     static let borrowed = Credential(kind: .codex, access: Secret(""), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: [])
 
     /// 401 drops the cached token, re-reads auth.json once and retries once; a second 401 is `invalidGrant`.
+    /// Owned mode: one request; a 401 propagates as `.unauthorized` so `AccountClient` refreshes and retries once.
     public func fetch(credential: Credential, http: HTTPClient) async throws -> UsageSnapshot {
+        guard isBorrowed else { return try await fetchOwned(credential, http) }
         do {
             return try await fetchOnce(http)
         } catch ProviderError.unauthorized {
@@ -43,8 +49,21 @@ public struct CodexProvider: UsageProvider {
         return try Self.decode(data, accountID: AccountID(kind: .codex, remoteID: login.accountID), now: Date())
     }
 
-    /// Never refreshes: rotating the CLI's refresh token would log the CLI out.
-    public func refresh(credential: Credential, http: HTTPClient) async throws -> Credential? { nil }
+    private func fetchOwned(_ c: Credential, _ http: HTTPClient) async throws -> UsageSnapshot {
+        guard let account = c.remoteAccountID, !account.isEmpty else { throw ProviderError.invalidGrant }
+        var req = URLRequest(url: Self.usageURL)
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue(account, forHTTPHeaderField: "ChatGPT-Account-Id")
+        let (data, _) = try await http.send(req, bearer: c.access)
+        return try Self.decode(data, accountID: AccountID(kind: .codex, remoteID: account), now: Date())
+    }
+
+    /// Borrowed: never refreshes (rotating the CLI's refresh token would log the CLI out).
+    /// Owned: rotates the single-use refresh token; the caller persists the result.
+    public func refresh(credential: Credential, http: HTTPClient) async throws -> Credential? {
+        guard !isBorrowed else { return nil }
+        return try await CodexDeviceAuth(http: http).refresh(credential)
+    }
 
     public static func decode(_ data: Data, accountID: AccountID, now: Date) throws -> UsageSnapshot {
         guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {

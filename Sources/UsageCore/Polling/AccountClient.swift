@@ -68,13 +68,14 @@ public actor AccountClient {
         if let shared, let gated = sharedGate(shared) { return gated }
         if let claudeCode { return await fetchClaudeCode(claudeCode) }
         if let gh { return await fetchCopilot(gh.source, login: gh.login) }
-        if provider.kind == .codex { return await fetchBorrowed() }
+        if (provider as? CodexProvider)?.isBorrowed == true { return await fetchBorrowed() }
         if saveFailed, let credential {
             if let shared { persistShared(credential, shared) } else { persist(credential) }
         }
         do {
             var cred = try currentCredential()
-            if let exp = cred.expiresAt, exp.timeIntervalSince(now()) < Self.proactiveWindow {
+            if let exp = cred.expiresAt, exp.timeIntervalSince(now()) < Self.proactiveWindow,
+               provider.kind != .codex || CodexDeviceAuth.shouldRefresh(cred, now: now()) {
                 cred = try await refresh(replacing: cred)
             }
             var snap: UsageSnapshot
@@ -210,16 +211,21 @@ public actor AccountClient {
         return .success(snap)
     }
 
+    /// Owned Codex with no Keychain item has never signed in; other kinds lost their login.
+    private var missingCredential: any Error {
+        provider.kind == .codex ? CodexAuthError.missing : ProviderError.invalidGrant
+    }
+
     private func currentCredential() throws -> Credential {
         if shared != nil {
             // No cache across the refresh boundary: the other process may have rotated it.
             if saveFailed, let credential { return credential }
-            guard let stored = try store.read(id) else { throw ProviderError.invalidGrant }
+            guard let stored = try store.read(id) else { throw missingCredential }
             credential = stored
             return stored
         }
         if let credential { return credential }
-        guard let stored = try store.read(id) else { throw ProviderError.invalidGrant }
+        guard let stored = try store.read(id) else { throw missingCredential }
         credential = stored
         return stored
     }
