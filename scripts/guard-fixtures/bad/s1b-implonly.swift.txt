@@ -1,0 +1,2 @@
+// fixture: iOS/App/GuardProbe.swift webkit
+@_implementationOnly import WebKit

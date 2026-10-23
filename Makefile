@@ -12,6 +12,7 @@ test:
 	$(MAKE) check-ios
 	scripts/secret-scan.sh
 	scripts/source-guards.sh
+	scripts/test-source-guards.sh
 
 check-ios:
 	xcodebuild -workspace . -scheme UsageCore -destination 'generic/platform=iOS Simulator' -derivedDataPath build/check-ios -quiet build

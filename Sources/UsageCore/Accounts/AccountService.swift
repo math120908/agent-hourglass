@@ -68,7 +68,7 @@ public actor AccountService {
         return id
     }
 
-    /// Adds a Claude account whose credential was obtained elsewhere (iOS WKWebView login). No sign-in;
+    /// Adds a Claude account whose credential was obtained elsewhere (iOS paste-code login). No sign-in;
     /// an id already in the registry is a re-auth. Writes Keychain → registry → one fetch.
     @discardableResult
     public func addClaude(credential: Credential, remoteID: String) async throws -> AccountID {

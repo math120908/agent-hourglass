@@ -48,22 +48,11 @@ struct AddFlowSheet: View {
 private struct ClaudeFlowView: View {
     @State var model: ClaudeSignInModel
     let onDone: (AccountID) -> Void
-    @State private var path: [Int] = []
-    @State private var exchange: Task<Void, Never>?
 
     var body: some View {
-        NavigationStack(path: $path) {
-            ClaudeSignInSheet(
-                model: model,
-                web: ClaudeWebView(url: model.authorizeURL) { code, state in
-                    exchange = Task { await model.receive(code: code, state: state) }
-                },
-                onPasteInstead: { path = [0] },
-                onDone: onDone,
-            )
-            .navigationDestination(for: Int.self) { _ in ClaudePasteView(model: model, onDone: onDone) }
+        NavigationStack {
+            ClaudeSignInView(model: model, onDone: onDone)
         }
-        .onDisappear { exchange?.cancel() }
     }
 }
 

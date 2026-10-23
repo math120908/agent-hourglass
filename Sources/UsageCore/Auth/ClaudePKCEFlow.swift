@@ -53,7 +53,15 @@ public struct ClaudePKCEFlow: Sendable {
             "code_verifier": pkce.verifier.reveal(),
             "state": pkce.state,
         ])
-        let (data, resp) = try await http.send(req, bearer: nil)
+        // HTTPClient drops the body on non-2xx, so the expired / used code (OAuth `invalid_grant`)
+        // is recognized by its status, the same way as on refresh.
+        let data: Data
+        let resp: HTTPURLResponse
+        do {
+            (data, resp) = try await http.send(req, bearer: nil)
+        } catch ProviderError.http(status: 400, _, _) {
+            throw ProviderError.invalidGrant
+        }
         guard resp.statusCode == 200,
               let j = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let access = j["access_token"] as? String

@@ -1,0 +1,2 @@
+// fixture: iOS/App/GuardProbe.swift auth-session
+@Environment(\.webAuthenticationSession) private var auth
