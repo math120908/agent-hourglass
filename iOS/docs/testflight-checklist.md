@@ -11,5 +11,5 @@ Run before every TestFlight upload. Runtime checks run against the booted simula
 | S4 WKWebView store | `make -C iOS security-pass` | `PASS S4 web store` (no claude/anthropic data in Cookies, WebKit, Caches) | |
 | S5 Diagnostics | `make -C iOS security-pass` | `PASS S5 diagnostics` (has `accounts:`, no uuid, no `@`) | |
 | Static guards | `make test` | `source-guards: ok`, `secret-scan: ok` | |
-| Mac logins | `iOS/scripts/mac-logins-check.sh` | every line `PASS` | |
+| Mac logins | `iOS/scripts/mac-logins-check.sh` | every line `PASS` | PASS x4 (2026-10-23, baseline before phone sign-in) |
 | Upload | `make -C iOS testflight` | `testflight: uploaded 1.0.0 (<build>) <commit>` | |
