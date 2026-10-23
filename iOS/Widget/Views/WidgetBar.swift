@@ -9,13 +9,17 @@ struct WidgetBar: View {
     var severity: Meter.Severity
     var kind: ProviderKind
     var height: CGFloat = 5
+    /// Instrument theme: square caps instead of capsules.
+    var squared: Bool = false
+
+    private var radius: CGFloat { squared ? 0 : height / 2 }
 
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .leading) {
-                Capsule().fill(style.track())
+                RoundedRectangle(cornerRadius: radius).fill(style.track())
                 if let fraction {
-                    Capsule()
+                    RoundedRectangle(cornerRadius: radius)
                         .fill(style.fill(severity, kind))
                         .frame(width: max(height, geo.size.width * fraction))
                         .widgetAccentable()
