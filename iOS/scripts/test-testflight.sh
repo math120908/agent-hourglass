@@ -1,0 +1,91 @@
+#!/bin/bash
+# Tests for testflight.sh with fake tools on PATH (no real archive, export or upload).
+#   distlogs-*: the run removes the .xcdistributionlogs bundles its own xcodebuild calls write to
+#               $TMPDIR (they hold the ASC key id and issuer id), on success and on failure, and
+#               leaves bundles that existed before the run alone.
+#   relpath:    --verify-archive resolves a relative path against the caller's cwd.
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+script=$here/testflight.sh
+outroot=$here/../build/testflight
+fail=0
+pass() { echo "PASS $1"; }
+bad() { echo "FAIL $1: $2"; fail=1; }
+
+t=$(mktemp -d); trap 'rm -rf "$t"' EXIT
+bin=$t/bin; mkdir -p "$bin" "$t/home/.appstoreconnect/private_keys"
+KEY=FAKEKEY123; ISS=fake-issuer-0000
+printf 'ASC_KEY_ID=%s\nASC_ISSUER_ID=%s\n' "$KEY" "$ISS" > "$t/asc.env"; chmod 600 "$t/asc.env"
+: > "$t/home/.appstoreconnect/private_keys/AuthKey_$KEY.p8"; chmod 600 "$t/home/.appstoreconnect/private_keys/AuthKey_$KEY.p8"
+
+# make_app <app> <build> <commit>: minimal app + widget bundle with the Info.plist keys verify reads.
+cat > "$bin/make_app" <<'EOF'
+#!/bin/bash
+set -e
+app=$1; mkdir -p "$app/PlugIns/W.appex"
+for p in "$app:cc.kuoc.agent-hourglass.ios" "$app/PlugIns/W.appex:cc.kuoc.agent-hourglass.ios.widget"; do
+  d=${p%%:*}; f=$d/Info.plist; rm -f "$f"
+  /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string ${p#*:}" -c "Add :CFBundleVersion string $2" \
+    -c 'Add :CFBundleShortVersionString string 1.0.0' -c "Add :GitCommit string $3" "$f" >/dev/null
+done
+EOF
+cat > "$bin/codesign" <<'EOF'
+#!/bin/bash
+cat <<X
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>com.apple.security.application-groups</key><array><string>group.cc.kuoc.agent-hourglass</string></array>
+<key>get-task-allow</key><false/>
+<key>keychain-access-groups</key><array><string>R7V5X99HYA.cc.kuoc.agent-hourglass.shared</string></array>
+</dict></plist>
+X
+EOF
+cat > "$bin/git" <<'EOF'
+#!/bin/bash
+case "$*" in "status --porcelain") ;; "rev-parse --short HEAD") echo abc1234 ;; *) exit 2 ;; esac
+EOF
+printf '#!/bin/bash\necho "1) X \\"Apple Distribution: Fake\\""\n' > "$bin/security"
+printf '#!/bin/bash\nexit 0\n' > "$bin/make"; cp "$bin/make" "$bin/xcodegen"
+# Fake xcodebuild: like Xcode with -authenticationKey*, writes the key id into a $TMPDIR bundle.
+cat > "$bin/xcodebuild" <<'EOF'
+#!/bin/bash
+args=("$@"); val() { local i; for ((i=0; i<${#args[@]}; i++)); do [ "${args[i]}" = "$1" ] && echo "${args[i+1]}"; done; }
+logs=$(mktemp -d "${TMPDIR%/}/AgentHourglassiOS_XXXX")
+mv "$logs" "$logs.xcdistributionlogs"; echo "key $(val -authenticationKeyID) $(val -authenticationKeyIssuerID)" > "$logs.xcdistributionlogs/IDEDistribution.log"
+build=; for a in "$@"; do case $a in CURRENT_PROJECT_VERSION=*) build=${a#*=} ;; esac; done
+case "$1" in
+  archive) make_app "$(val -archivePath)/Products/Applications/AgentHourglass.app" "$build" abc1234 ;;
+  -exportArchive)
+    [ "${FAKE_EXPORT_FAIL:-0}" = 1 ] && { echo "error: exportArchive fake failure"; exit 70; }
+    if [ "$(/usr/libexec/PlistBuddy -c 'Print :destination' "$(val -exportOptionsPlist)")" = export ]; then
+      arc=$(val -archivePath); exp=$(val -exportPath); s=$(mktemp -d)
+      mkdir -p "$s/Payload" "$exp"; cp -R "$arc"/Products/Applications/*.app "$s/Payload/"
+      ditto -c -k "$s" "$exp/AgentHourglass.ipa"; rm -rf "$s"
+    fi ;;
+esac
+EOF
+chmod +x "$bin"/*
+
+# run_flow <name> <want exit> [script args...]: full flow in a scratch TMPDIR holding one older bundle.
+run_flow() {
+  local name=$1 want=$2 tmp=$t/tmp-$1 code=0 out left; shift 2
+  mkdir -p "$tmp/Older_1.xcdistributionlogs"
+  local before; before=$(ls "$outroot" 2>/dev/null || true)
+  out=$(env PATH="$bin:$PATH" HOME="$t/home" ASC_ENV="$t/asc.env" TMPDIR="$tmp/" "$script" "$@" 2>&1) || code=$?
+  for d in "$outroot"/*; do [ -e "$d" ] || continue; printf '%s\n' "$before" | rg -q -x -F -- "$(basename "$d")" || rm -rf "$d"; done
+  left=$(cd "$tmp" && ls -d -- *.xcdistributionlogs 2>/dev/null | tr '\n' ' ' || true)
+  if [ "$code" != "$want" ]; then bad "$name" "exit $code want $want: $out"
+  elif [ "$left" != "Older_1.xcdistributionlogs " ]; then bad "$name" "bundles left in TMPDIR: '$left'"
+  elif [[ "$out" == *"$KEY"* || "$out" == *"$ISS"* ]]; then bad "$name" "key id or issuer id in output"
+  else pass "$name"; fi
+}
+run_flow distlogs-upload 0
+run_flow distlogs-dry-run 0 --dry-run
+FAKE_EXPORT_FAIL=1 run_flow distlogs-export-fail 1
+
+# relpath: a relative archive path from the caller's cwd.
+mkdir -p "$t/cwd"; PATH="$bin:$PATH" make_app "$t/cwd/rel.xcarchive/Products/Applications/AgentHourglass.app" 1.1 abc1234
+code=0; out=$(cd "$t/cwd" && PATH="$bin:$PATH" "$script" --verify-archive rel.xcarchive 1.1 abc1234 2>&1) || code=$?
+[ $code = 0 ] && pass relpath || bad relpath "exit $code: $out"
+exit $fail

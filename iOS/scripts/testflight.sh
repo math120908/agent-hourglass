@@ -10,6 +10,10 @@
 # Upload fallback (manual, not automatic): if destination=upload fails after a good export, run
 #   xcrun altool --upload-app -f <out>/export/*.ipa -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
 set -euo pipefail
+# --verify-* paths are relative to the caller's cwd, not iOS/.
+if [ $# -ge 2 ] && { [ "$1" = --verify-archive ] || [ "$1" = --verify-ipa ]; } && [[ "$2" != /* ]]; then
+  set -- "$1" "$PWD/$2" "${@:3}"
+fi
 cd "$(dirname "$0")/.."
 
 TEAM=R7V5X99HYA
@@ -87,6 +91,13 @@ mkdir -p "$out"; chmod 700 "$out"
 log=$out/xcodebuild.log; ( umask 077; : > "$log" )
 xcodegen generate --spec project.yml --quiet
 auth=(-allowProvisioningUpdates -authenticationKeyPath "$p8" -authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID")
+# xcodebuild with -authenticationKey* writes the key id and issuer id into $TMPDIR/*.xcdistributionlogs.
+# Remove the bundles that appear during this run (success or failure); keep any that existed before.
+tmpdir=${TMPDIR:-$(getconf DARWIN_USER_TEMP_DIR)}; tmpdir=${tmpdir%/}
+distlogs() { local d; for d in "$tmpdir"/*.xcdistributionlogs; do [ -e "$d" ] && echo "$d"; done; return 0; }
+pre_logs=$(distlogs)
+rm_distlogs() { local d; distlogs | while IFS= read -r d; do printf '%s\n' "$pre_logs" | rg -q -x -F -- "$d" || rm -rf "$d"; done; }
+trap rm_distlogs EXIT
 run() { "$@" >>"$log" 2>&1 || { tail -n 30 "$log" | rg -v -F -e "$ASC_KEY_ID" -e "$ASC_ISSUER_ID" >&2; die "$2 failed (log: $log)"; }; }
 
 # 4. Archive.
