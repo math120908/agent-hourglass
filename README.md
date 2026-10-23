@@ -42,6 +42,27 @@ The app installs as `~/Applications/AgentHourglass.app`. It is a different app f
 
 When macOS asks for Keychain access, click **Allow**, never **Always Allow**. The app only reads its own items.
 
+## iPhone
+
+The iPhone app shows the same accounts as the Mac app (Claude, Codex, Copilot): each card has the 5-hour and weekly windows with reset times, and Home Screen and Lock Screen widgets show the most constrained window.
+
+| Glass | Instrument |
+|---|---|
+| ![Glass](iOS/docs/screenshots/app/home-glass-dark.png) | ![Instrument](iOS/docs/screenshots/app/home-instrument-dark.png) |
+
+Install: TestFlight, invite only. Accept the invite, then open **TestFlight** > **Agent Hourglass** > **Install**.
+
+Sign-in, per provider:
+
+- **Claude**: in-app web login. If it does not finish (for example with Google sign-in), use the paste path: sign in in the system browser sheet and paste the code back.
+- **Codex** and **Copilot**: device code. The app shows a code; enter it on the provider page.
+
+The phone signs in on its own and never reads the Mac's credentials.
+
+Data locations on the phone: Keychain service `cc.kuoc.agent-hourglass` (this device only, never synced), App Group `group.cc.kuoc.agent-hourglass`.
+
+Known limits: Google sign-in needs the paste path; TestFlight builds expire after 90 days.
+
 ## Accounts
 
 Settings > Accounts > **Add Account** menu (the list refreshes as soon as an account is added). Settings > History has an **Open Usage History** link.

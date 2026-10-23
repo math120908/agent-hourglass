@@ -28,4 +28,11 @@ if [ -n "$hits" ]; then
   echo "$hits" >&2
   exit 1
 fi
+# Private keys, App Store Connect env files, and issuer ids in any tracked file.
+hits=$(git ls-files -z | gxargs -0 rg -n -l -e '-----BEGIN [A-Z ]*PRIVATE KEY-----' -e 'ASC_ISSUER_ID=[0-9a-f-]{8,}' 2>/dev/null; git ls-files | rg -e '(^|/)asc\.env$')
+if [ -n "$hits" ]; then
+  echo "secret-scan: private key / App Store Connect material tracked by git:" >&2
+  echo "$hits" >&2
+  exit 1
+fi
 echo "secret-scan: ok"

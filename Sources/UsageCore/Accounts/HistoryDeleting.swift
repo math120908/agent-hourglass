@@ -9,3 +9,8 @@ public struct NoHistory: HistoryDeleting {
     public init() {}
     public func deleteAccount(_ id: AccountID) async throws {}
 }
+
+/// Accepts successful snapshots for history. `HistoryStore` conforms; the Poller holds an optional one.
+public protocol HistoryRecording: Sendable {
+    func record(_ snapshot: UsageSnapshot) async throws
+}

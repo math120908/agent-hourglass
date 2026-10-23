@@ -48,6 +48,9 @@ struct ClaudeWebView: UIViewRepresentable {
         web.loadHTMLString("", baseURL: nil)
     }
 
+    /// Every load is policed in `decidePolicyFor navigationAction`, including server 3xx redirects
+    /// (WebKit re-enters this callback per hop, so a redirect to the callback is captured). There is
+    /// deliberately no `WKUIDelegate`: new-window requests are dropped. Pinned by source-guards.sh (S4).
     final class Coordinator: NSObject, WKNavigationDelegate {
         var onCapture: (String, String) -> Void
         var loaded: URL?

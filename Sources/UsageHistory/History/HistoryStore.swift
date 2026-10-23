@@ -1,3 +1,4 @@
+import UsageCore
 import Foundation
 import GRDB
 
@@ -50,8 +51,10 @@ public final class HistoryStore: Sendable {
     }
 
     private static func tightenSidecars(_ url: URL) {
+        SnapshotCache.protect(url)
         for suffix in ["-wal", "-shm"] {
             chmod(url.path + suffix, 0o600)
+            SnapshotCache.protect(URL(fileURLWithPath: url.path + suffix))
         }
     }
 

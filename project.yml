@@ -16,6 +16,8 @@ targets:
         product: UsageCore
       - package: UsageCore
         product: UsageCoreMac
+      - package: UsageCore
+        product: UsageHistory
     info:
       path: App/Info.plist
       properties:

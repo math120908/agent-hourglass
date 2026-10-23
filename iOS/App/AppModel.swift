@@ -77,7 +77,7 @@ final class AppModel {
     func scenePhaseChanged(_ phase: ScenePhase) async {
         switch phase {
         case .active:
-            await withBackgroundTask("foreground-poll") {
+            await withBackgroundTask("foreground-poll") { [self] in
                 await poller.setForeground(true)
                 await poller.setUserInterval(.seconds(displayStore.settings.refreshMinutes * 60))
                 appState.effectiveInterval = await poller.interval
@@ -95,7 +95,7 @@ final class AppModel {
 
     /// Manual refresh. The Poller floor, client backoff and shared cache still gate each provider.
     func refresh() async {
-        await withBackgroundTask("manual-poll") { await poller.refreshAll(force: true) }
+        await withBackgroundTask("manual-poll") { [self] in await poller.refreshAll(force: true) }
     }
 
     /// Called after `service.addClaude/addCodex` commits a new account.
@@ -174,7 +174,31 @@ final class AppModel {
             return
         }
         appState.apply(id, outcome)
+        persistStatus(id, outcome)
         if case .success = outcome { reloadWidgetsThrottled() }
+    }
+
+    /// The last registry status write; tests await it.
+    @ObservationIgnored private(set) var pendingStatusWrite: Task<Void, Never>?
+
+    /// Persists needsLogin so the widget can show its sign-in state without a live fetch; success clears it.
+    private func persistStatus(_ id: AccountID, _ outcome: FetchOutcome) {
+        let raw: String
+        switch outcome {
+        case .success: raw = "ok"
+        case .failure(.needsLogin): raw = Diagnostics.statusName(.needsLogin)
+        case .failure: return
+        }
+        let registry = env.registry, previous = pendingStatusWrite
+        pendingStatusWrite = Task {
+            await previous?.value
+            do {
+                try await registry.setStatus(id, raw)
+                if raw != "ok" { WidgetReloader.reloadAll() }
+            } catch {
+                Self.log.error("status persist failed error=\(String(describing: type(of: error)), privacy: .public)")
+            }
+        }
     }
 
     @ObservationIgnored private var lastPollReload: Date?
@@ -220,16 +244,9 @@ final class AppModel {
         appState.setSaveFailed(id, false)
     }
 
-    /// Keeps the app alive until the pass ends, so iOS never suspends it holding the App Group lock.
-    private func withBackgroundTask(_ name: String, _ body: () async -> Void) async {
-        let app = UIApplication.shared
-        var task = UIBackgroundTaskIdentifier.invalid
-        task = app.beginBackgroundTask(withName: name) {
-            app.endBackgroundTask(task)
-            task = .invalid
-        }
-        await body()
-        if task != .invalid { app.endBackgroundTask(task) }
+    /// Keeps the app alive until the pass ends; expiration cancels the pass before ending (S1).
+    private func withBackgroundTask(_ name: String, _ body: @escaping @MainActor () async -> Void) async {
+        await BackgroundAssertion.live.run(name, body)
     }
 }
 

@@ -42,7 +42,7 @@ public enum Diagnostics {
         return lines.joined(separator: "\n")
     }
 
-    static func statusName(_ s: AccountStatus) -> String {
+    public static func statusName(_ s: AccountStatus) -> String {
         switch s {
         case .fresh: "fresh"
         case .stale: "stale"

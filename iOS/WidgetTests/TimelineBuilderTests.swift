@@ -123,6 +123,28 @@ final class TimelineBuilderTests: XCTestCase {
         XCTAssertEqual(WidgetFreshness.freshness(fetchedAt: first.snapshot?.fetchedAt, status: first.status, at: first.date), .failed(.needsLogin))
     }
 
+    /// End to end through a real registry file: what the app persists on needsLogin is what the widget reads.
+    func testRegistryNeedsLoginShowsSignInState() async throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let registry = AccountRegistry(directory: dir)
+        _ = try await registry.load()
+        try await registry.upsert(entry)
+        try await registry.setStatus(entry.id, "needsLogin")
+        let loaded = try await AccountRegistry(directory: dir).load()
+        let cache = fiveMinOld
+        let t = await UsageTimelineProvider(
+            fetch: { _ in (cache, nil) },
+            cacheRead: { _ in cache },
+            loadEntries: { loaded },
+            loadSettings: { (.default, .glass) },
+            now: { F.now },
+            timeout: 20
+        ).makeTimeline(intent: SelectAccountMetersIntent(), family: .small)
+        let first = try XCTUnwrap(t.entries.first)
+        XCTAssertEqual(WidgetFreshness.freshness(fetchedAt: first.snapshot?.fetchedAt, status: first.status, at: first.date), .failed(.needsLogin))
+    }
+
     func testLiveStatusWinsOverPersisted() async {
         let t = await provider(registryStatus: "needsLogin") { _ in (F.claudeMax, .fresh) }
             .makeTimeline(intent: SelectAccountMetersIntent(), family: .small)

@@ -23,6 +23,15 @@ out=$(rg -n '/usr/bin/security' Sources App iOS 2>/dev/null)
 # Logging: account ids must never be logged in the clear.
 out=$(rg -n 'rawValue, privacy: \.public' Sources App 2>/dev/null)
 [ -n "$out" ] && report "account id logged with privacy: .public:" "$out"
+# Error text can embed file paths and Keychain attributes: log type(of:) and the code only (S2).
+out=$(rg -n 'String\(describing: error\), privacy: \.public' Sources App iOS 2>/dev/null)
+[ -n "$out" ] && report "raw error logged with privacy: .public (log type(of: error) + code):" "$out"
+# Sign-in web view: no WKUIDelegate, so new-window requests (target=_blank, window.open) are dropped
+# and every load, including server 3xx redirects, re-enters decidePolicyFor navigationAction (S4).
+out=$(rg -n -e 'uiDelegate\s*=' -e 'createWebViewWith' iOS/App/AddAccount 2>/dev/null)
+[ -n "$out" ] && report "WKUIDelegate / createWebViewWith in iOS/App/AddAccount (sign-in policy bypass):" "$out"
+# History db gets an explicit file-protection class after open, not only the inherited one (N9).
+rg -q 'SnapshotCache\.protect' Sources/UsageHistory/History/HistoryStore.swift || report "HistoryStore does not call SnapshotCache.protect (N9):" "Sources/UsageHistory/History/HistoryStore.swift"
 
 # Portability: UsageCore must build for iOS; its tests must not depend on macOS-only modules.
 out=$(rg -l '^import (AppKit|ServiceManagement)' Sources/UsageCore 2>/dev/null)
@@ -39,6 +48,36 @@ out=$(rg -n -g '*.swift' -e '\bprint\(' -e '\bNSLog\(' iOS 2>/dev/null)
 [ -n "$out" ] && report "print(/NSLog( in iOS/:" "$out"
 out=$(rg -n -i -g '*.entitlements' -e 'icloud' -e 'ubiquity' -e 'aps-environment' iOS 2>/dev/null)
 [ -n "$out" ] && report "iCloud/push entitlement in iOS/:" "$out"
+
+# Mac-only credential paths: the phone must never reach Claude Code's Keychain item or legacy migration.
+macgate() { # file, declaration regex: the declaration must sit after an '#if os(macOS)' line
+  gawk -v pat="$2" '/^#if os\(macOS\)/{g=1} $0 ~ pat {found=1; if(!g) bad=1} END{exit (found && !bad) ? 0 : 1}' "$1"
+}
+macgate "$READER" '^public struct ClaudeCodeKeychainReader' || report "ClaudeCodeKeychainReader not gated by #if os(macOS):" "$READER"
+macgate Sources/UsageCore/Storage/LegacyMigration.swift '^public enum LegacyMigration' || report "LegacyMigration not gated by #if os(macOS):" "Sources/UsageCore/Storage/LegacyMigration.swift"
+out=$(rg -l -e 'ClaudeCodeKeychainReader' -e 'LegacyMigration' iOS 2>/dev/null)
+[ -n "$out" ] && report "iOS/ references Mac-only credential code:" "$out"
+
+# GRDB stays in UsageHistory (Mac app + usagectl); UsageCore and iOS must never link it.
+out=$(rg -l '^import (GRDB|UsageHistory)' Sources/UsageCore iOS 2>/dev/null)
+[ -n "$out" ] && report "GRDB/UsageHistory import in UsageCore or iOS/:" "$out"
+out=$(rg -n 'UsageHistory|GRDB' iOS/project.yml 2>/dev/null)
+[ -n "$out" ] && report "iOS target depends on UsageHistory/GRDB:" "$out"
+
+# iOS sign-in surfaces: non-persistent web store, no JS bridge, ephemeral auth session, no dump(.
+IOSSRC=(iOS/App iOS/Widget iOS/Shared)
+out=$(rg -n -g '*.swift' -e 'WKWebsiteDataStore\.default\(' -e 'websiteDataStore\s*=\s*\.default\(' "${IOSSRC[@]}" 2>/dev/null)
+[ -n "$out" ] && report "persistent WKWebsiteDataStore in iOS/:" "$out"
+if rg -q -g '*.swift' 'WKWebViewConfiguration' "${IOSSRC[@]}" 2>/dev/null && ! rg -q -g '*.swift' 'nonPersistent\(\)' "${IOSSRC[@]}" 2>/dev/null; then
+  report "WKWebView in iOS/ without a nonPersistent() data store:" "iOS/"
+fi
+out=$(rg -n -g '*.swift' -e 'addScriptMessageHandler' -e 'WKUserScript' -e 'evaluateJavaScript' -e 'callAsyncJavaScript' "${IOSSRC[@]}" 2>/dev/null)
+[ -n "$out" ] && report "JavaScript bridge in iOS/:" "$out"
+for f in $(rg -l -g '*.swift' 'ASWebAuthenticationSession\(' "${IOSSRC[@]}" 2>/dev/null); do
+  rg -q 'prefersEphemeralWebBrowserSession = true' "$f" || report "ASWebAuthenticationSession without prefersEphemeralWebBrowserSession = true:" "$f"
+done
+out=$(rg -n -g '*.swift' '\bdump\(' "${IOSSRC[@]}" 2>/dev/null)
+[ -n "$out" ] && report "dump( in iOS/:" "$out"
 
 [ $fail -eq 0 ] && echo "source-guards: ok"
 exit $fail

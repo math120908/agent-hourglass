@@ -1,11 +1,7 @@
+import UsageCore
 import Foundation
 import GRDB
 import os
-
-/// Accepts successful snapshots for history. `HistoryStore` conforms; the Poller holds an optional one.
-public protocol HistoryRecording: Sendable {
-    func record(_ snapshot: UsageSnapshot) async throws
-}
 
 extension HistoryStore: HistoryDeleting, HistoryRecording {
     /// Spec §8 write rule: a row only when percent/used/resets_at changes (spend: used/limit),
