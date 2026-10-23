@@ -3,6 +3,7 @@
 #   testflight.sh                 preflight, archive, verify, export with destination=upload
 #   testflight.sh --dry-run       same, but export with destination=export (no upload); checks the .ipa
 #   testflight.sh --verify-archive <xcarchive> <build> <commit>   verify only (tests)
+#   testflight.sh --verify-ipa <ipa> <build> <commit>             verify an exported ipa (tests)
 # Env: ASC_ENV (default ~/.config/agent-hourglass/asc.env) defining ASC_KEY_ID and ASC_ISSUER_ID;
 # key at ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8. Both files must be mode 600.
 # Key ID, issuer ID and the key path are never echoed. xcodebuild output goes to <out>/xcodebuild.log (600).
@@ -20,11 +21,13 @@ KC_GROUP=$TEAM.cc.kuoc.agent-hourglass.shared
 die() { echo "testflight: $*" >&2; exit 1; }
 plist() { /usr/libexec/PlistBuddy -c "Print :$1" "$2" 2>/dev/null || true; }
 
-verify_archive() { # <xcarchive> <build> <commit>
-  local arc=$1 build=$2 commit=$3 app appex a w ent
-  app=$(echo "$arc"/Products/Applications/*.app); appex=$(echo "$app"/PlugIns/*.appex)
-  [ -d "$app" ] || die "verify: no app in archive"
-  [ -d "$appex" ] || die "verify: no widget appex in archive"
+# Bundle checks on <app> (and its widget appex). <gta>=1 also requires get-task-allow false: only the
+# exported .ipa is distribution-signed; automatic signing archives with the development identity.
+verify_bundles() { # <app> <build> <commit> <gta> <label>
+  local app=$1 build=$2 commit=$3 gta=$4 label=$5 appex a w ent
+  appex=$(echo "$app"/PlugIns/*.appex)
+  [ -d "$app" ] || die "verify: no app in $label"
+  [ -d "$appex" ] || die "verify: no widget appex in $label"
   a=$(plist CFBundleVersion "$app/Info.plist"); w=$(plist CFBundleVersion "$appex/Info.plist")
   [ "$a" = "$build" ] && [ "$w" = "$build" ] || die "verify: CFBundleVersion mismatch (app $a, widget $w, want $build)"
   a=$(plist CFBundleShortVersionString "$app/Info.plist"); w=$(plist CFBundleShortVersionString "$appex/Info.plist")
@@ -36,14 +39,28 @@ verify_archive() { # <xcarchive> <build> <commit>
     ent=$(codesign -d --entitlements - --xml "$b" 2>/dev/null | plutil -convert xml1 -o - - 2>/dev/null || true)
     [[ "$ent" == *"$GROUP"* ]] || die "verify: $(basename "$b") lacks $GROUP"
     [[ "$ent" == *"$KC_GROUP"* ]] || die "verify: $(basename "$b") lacks keychain group"
-    if echo "$ent" | rg -q -U '<key>get-task-allow</key>\s*<true/>'; then die "verify: $(basename "$b") has get-task-allow true"; fi
+    if [ "$gta" = 1 ] && ! echo "$ent" | rg -q -U '<key>get-task-allow</key>\s*<false/>'; then
+      die "verify: $(basename "$b") get-task-allow is not false"
+    fi
   done
-  echo "testflight: archive verified $a ($build) $commit"
+  echo "testflight: $label verified $a ($build) $commit"
 }
 
-if [ "${1:-}" = --verify-archive ]; then
-  [ $# -eq 4 ] || die "usage: --verify-archive <xcarchive> <build> <commit>"
-  verify_archive "$2" "$3" "$4"; exit 0
+verify_archive() { # <xcarchive> <build> <commit>
+  verify_bundles "$(echo "$1"/Products/Applications/*.app)" "$2" "$3" 0 archive
+}
+
+verify_ipa() { # <ipa> <build> <commit>
+  local tmp; tmp=$(mktemp -d)
+  ditto -x -k "$1" "$tmp" || { rm -rf "$tmp"; die "verify: cannot unpack ipa"; }
+  ( verify_bundles "$(echo "$tmp"/Payload/*.app)" "$2" "$3" 1 ipa ) || { rm -rf "$tmp"; exit 1; }
+  rm -rf "$tmp"
+}
+
+if [ "${1:-}" = --verify-archive ] || [ "${1:-}" = --verify-ipa ]; then
+  [ $# -eq 4 ] || die "usage: $1 <path> <build> <commit>"
+  if [ "$1" = --verify-archive ]; then verify_archive "$2" "$3" "$4"; else verify_ipa "$2" "$3" "$4"; fi
+  exit 0
 fi
 dry=0; [ "${1:-}" = --dry-run ] && dry=1
 
@@ -89,7 +106,8 @@ if [ $dry -eq 1 ]; then
 fi
 run xcodebuild -exportArchive -archivePath "$arc" -exportOptionsPlist "$opts" -exportPath "$out/export" "${auth[@]}"
 if [ $dry -eq 1 ]; then
-  ls "$out"/export/*.ipa >/dev/null 2>&1 || die "export produced no .ipa"
+  ipa=$(echo "$out"/export/*.ipa); [ -f "$ipa" ] || die "export produced no .ipa"
+  verify_ipa "$ipa" "$build" "$commit"
   echo "testflight: dry run ok $version ($build) $commit"
 else
   echo "testflight: uploaded $version ($build) $commit"
