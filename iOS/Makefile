@@ -7,7 +7,7 @@ XCB = xcodebuild -project AgentHourglassiOS.xcodeproj -scheme AgentHourglassiOS 
 APP = $(DD)/Build/Products/Debug-iphonesimulator/AgentHourglass.app
 export SIM_NAME SIM_OS
 
-.PHONY: generate build test run-sim render icon testflight
+.PHONY: generate build test run-sim render mac-ref icon testflight
 
 generate:
 	xcodegen generate --quiet
@@ -23,6 +23,14 @@ run-sim: build
 
 render: build
 	scripts/render.sh $(APP)
+
+MAC_APP = $(HOME)/Applications/AgentHourglass.app/Contents/MacOS/AgentHourglass
+
+mac-ref:
+	mkdir -p $(CURDIR)/$(DD)/mac-ref
+	$(MAC_APP) --render-snapshots $(CURDIR)/$(DD)/mac-ref
+	$(MAC_APP) --render-states $(CURDIR)/$(DD)/mac-ref
+	$(MAC_APP) --render-states $(CURDIR)/$(DD)/mac-ref --theme instrument
 
 icon:
 	scripts/make-icon.sh

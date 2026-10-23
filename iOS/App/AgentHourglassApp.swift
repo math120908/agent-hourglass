@@ -22,7 +22,7 @@ struct AgentHourglassApp: App {
 
     @MainActor private func refresh() async {
         #if DEBUG
-        if RenderHook.runIfRequested() { return }
+        if await RenderHook.runIfRequested() { return }
         let args = CommandLine.arguments
         if args.contains("--seed-demo") { try? await DemoSeed.seed(env) }
         if args.contains("--clear-demo") { try? await DemoSeed.clear(env) }
