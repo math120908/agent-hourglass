@@ -67,9 +67,12 @@ public struct CodexDeviceAuth: Sendable {
                       let verifier = obj["code_verifier"] as? String else {
                     throw ProviderError.schema(keys: obj.keys.sorted())
                 }
-                return try await exchange(code: code, verifier: verifier)
+                return try await exchange(code: code, verifier: verifier, deadline: deadline, interval: interval)
             } catch let ProviderError.http(status, _, _) where status == 403 || status == 404 {
                 // pending
+            } catch ProviderError.transport {
+                // Suspension in Safari drops the connection (-999 / -1005); retry on the next interval.
+                Self.log.info("device login poll: transport error, retrying")
             } catch ProviderError.rateLimited {
                 interval += Self.slowDownStep
                 Self.log.info("device login slow_down")
@@ -83,7 +86,8 @@ public struct CodexDeviceAuth: Sendable {
         }
     }
 
-    private func exchange(code: String, verifier: String) async throws -> Credential {
+    /// Transport errors (app suspended mid-request) retry until `deadline`; any HTTP answer is final.
+    private func exchange(code: String, verifier: String, deadline: Date, interval: Duration) async throws -> Credential {
         var c = URLComponents()
         c.queryItems = [
             URLQueryItem(name: "grant_type", value: "authorization_code"),
@@ -93,14 +97,26 @@ public struct CodexDeviceAuth: Sendable {
             URLQueryItem(name: "code_verifier", value: verifier),
         ]
         let form = (c.percentEncodedQuery ?? "").replacingOccurrences(of: "+", with: "%2B")
-        let data: Data
-        do {
-            data = try await send(path: "oauth/token", body: Data(form.utf8), contentType: "application/x-www-form-urlencoded")
-        } catch let ProviderError.http(status, _, _) {
-            Self.log.error("device login exchange failed: HTTP \(status, privacy: .public)")
-            throw DeviceFlowError.unexpected(status: status)
+        while true {
+            do {
+                let data = try await send(path: "oauth/token", body: Data(form.utf8), contentType: "application/x-www-form-urlencoded")
+                return try Self.credential(fromTokenResponse: data, now: now())
+            } catch ProviderError.transport {
+                Self.log.info("device login exchange: transport error, retrying")
+            } catch let ProviderError.http(status, _, _) {
+                Self.log.error("device login exchange failed: HTTP \(status, privacy: .public)")
+                throw DeviceFlowError.unexpected(status: status)
+            } catch let error as ProviderError {
+                Self.log.error("device login exchange failed: \(error.description, privacy: .public)")
+                throw error
+            }
+            try await sleep(interval)
+            try Task.checkCancellation()
+            guard now() < deadline else {
+                Self.log.info("device login expired")
+                throw DeviceFlowError.expired
+            }
         }
-        return try Self.credential(fromTokenResponse: data, now: now())
     }
 
     public static let refreshScope = "openid profile email"
@@ -233,7 +249,7 @@ public struct CodexDeviceAuth: Sendable {
         do {
             return try await send(path: path, body: try JSONSerialization.data(withJSONObject: json), contentType: "application/json")
         } catch let error as ProviderError {
-            if case .http = error {} else { Self.log.error("device login \(step) failed: \(error.description, privacy: .public)") }
+            if case .http = error {} else { Self.log.error("device login \(step, privacy: .public) failed: \(error.description, privacy: .public)") }
             throw error
         }
     }

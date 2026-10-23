@@ -13,9 +13,8 @@ enum CodexAddFlow {
             title: "Codex",
             start: { try await auth.start() },
             complete: { prompt in
-                let id = try await service.addCodex(credential: try await auth.poll(prompt))
-                await app.accountAdded(id)
-                return id
+                let cred = try await auth.poll(prompt)
+                return try await app.add { try await service.addCodex(credential: cred) }
             }
         )
     }
