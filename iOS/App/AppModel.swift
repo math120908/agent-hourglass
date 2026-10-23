@@ -15,6 +15,7 @@ final class AppModel {
     var focusedAccount: AccountID?
 
     private let env: UsageEnvironment
+    var http: HTTPClient { env.http }
     private let displayStore: DisplaySettingsStore
     private let now: @Sendable () -> Date
     private let poller: Poller
