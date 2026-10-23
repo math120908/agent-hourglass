@@ -18,10 +18,12 @@ final class SmallWidgetContentTests: XCTestCase {
         XCTAssertNotNil(c.ageText)
     }
 
-    func testStaleDerivedFromEntryDateDims() {
+    func testStaleDerivedFromEntryDateNotDimmed() {
         let c = SmallWidgetContent(entry(F.claudeMax, at: F.now.addingTimeInterval(31 * 60)), calendar: F.calendar, locale: F.locale)
         XCTAssertEqual(c.freshness, .stale)
-        XCTAssertTrue(c.isDimmed)
+        XCTAssertFalse(c.isDimmed)
+        XCTAssertEqual(AgeLabel.tone(c.freshness), .stale)
+        XCTAssertEqual(AgeLabel.glyph(.stale), "clock")
     }
 
     func testNeedsLoginKeepsNumbersDimmedWithAge() {
@@ -29,6 +31,13 @@ final class SmallWidgetContentTests: XCTestCase {
         XCTAssertEqual(c.rows.count, 2)
         XCTAssertTrue(c.isDimmed)
         XCTAssertNotNil(c.ageText)
+        XCTAssertEqual(AgeLabel.tone(c.freshness), .signIn)
+        XCTAssertEqual(AgeLabel.glyph(.signIn), "person.crop.circle.badge.exclamationmark")
+    }
+
+    func testEmptyCopy() {
+        XCTAssertEqual(WidgetFreshness.emptyMessage(hasAccount: false), "Choose account")
+        XCTAssertEqual(WidgetFreshness.emptyMessage(hasAccount: true), "No data yet")
     }
 
     func testNoSnapshotHasNoRowsNoAge() {

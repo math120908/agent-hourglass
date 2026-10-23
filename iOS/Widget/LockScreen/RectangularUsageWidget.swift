@@ -26,7 +26,7 @@ struct RectangularUsageContent: Equatable {
     /// The reset line fits only with a single row.
     var showReset: Bool { rows.count == 1 }
     /// A failed account keeps its last number, dimmed, next to its age.
-    var isDimmed: Bool { if case .failed = freshness { true } else { false } }
+    var isDimmed: Bool { WidgetFreshness.isDimmed(freshness) }
 
     static func make(_ entry: UsageEntry, calendar: Calendar = .current, locale: Locale = .current) -> RectangularUsageContent? {
         guard let account = entry.account, let snapshot = entry.snapshot else { return nil }

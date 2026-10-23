@@ -29,6 +29,8 @@ final class RectangularUsageWidgetTests: XCTestCase {
         let late = F.now.addingTimeInterval(WidgetFreshness.staleAfter + 60)
         let c = RectangularUsageContent.make(entry([], at: late), calendar: F.calendar, locale: F.locale)!
         XCTAssertEqual(c.freshness, .stale)
+        XCTAssertFalse(c.isDimmed)
+        XCTAssertEqual(AgeLabel.tone(c.freshness), .stale)
     }
 
     func testNeedsLoginDimsValueButKeepsAge() {

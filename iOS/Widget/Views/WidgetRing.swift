@@ -11,6 +11,12 @@ struct WidgetRing: View {
     var kind: ProviderKind
     var lineWidth: CGFloat = 4
 
+    /// Point on the ring for a fraction: 0 at 12 o'clock, clockwise. Fraction is clamped to 0...1.
+    nonisolated static func point(on fraction: Double, center: CGPoint, radius: CGFloat) -> CGPoint {
+        let angle = 2 * Double.pi * min(max(fraction, 0), 1) - Double.pi / 2
+        return CGPoint(x: center.x + radius * CGFloat(cos(angle)), y: center.y + radius * CGFloat(sin(angle)))
+    }
+
     var body: some View {
         ZStack {
             Circle().stroke(style.ringTrack(), lineWidth: lineWidth)
@@ -23,12 +29,14 @@ struct WidgetRing: View {
             }
             if let paceTick {
                 GeometryReader { geo in
+                    let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
                     let r = min(geo.size.width, geo.size.height) / 2
-                    Rectangle()
-                        .fill(style.paceTick())
-                        .frame(width: 1.5, height: lineWidth + 4)
-                        .position(x: geo.size.width / 2, y: geo.size.height / 2 - r)
-                        .rotationEffect(.degrees(360 * paceTick))
+                    let half = lineWidth / 2 + 2
+                    Path { p in
+                        p.move(to: Self.point(on: paceTick, center: center, radius: r - half))
+                        p.addLine(to: Self.point(on: paceTick, center: center, radius: r + half))
+                    }
+                    .stroke(style.paceTick(), lineWidth: 1.5)
                 }
             }
             Text(centerText)

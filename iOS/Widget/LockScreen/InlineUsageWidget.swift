@@ -2,7 +2,7 @@ import SwiftUI
 import UsageCore
 import WidgetKit
 
-/// Lock Screen inline: one line, `<provider> <percent> | <reset or age>`.
+/// Lock Screen inline: one line, `<provider> <percent> | <reset> | <age>`.
 struct InlineUsageWidget: Widget {
     static let kind = "InlineUsageWidget"
 
@@ -35,18 +35,17 @@ enum InlineText {
     static func text(_ entry: UsageEntry, calendar: Calendar = .current, locale: Locale = .current) -> String {
         let kind = entry.account?.kind ?? entry.snapshot?.accountID.kind
         let name = kind.map(shortName)
-        func join(_ parts: String...) -> String { ([name].compactMap { $0 } + parts).joined(separator: " | ") }
 
         guard let snapshot = entry.snapshot,
               let meter = WidgetMeterModel.resolveMeters(entry.meterKeys, in: snapshot, family: .inline).first
-        else { return join("No data") }
+        else { return WidgetFreshness.emptyMessage(hasAccount: entry.account != nil) }
 
         let row = WidgetMeterModel.row(meter, at: entry.date, settings: entry.settings, calendar: calendar, locale: locale)
         let head = [name, row.percentText].compactMap { $0 }.joined(separator: " ")
         let options = entry.settings.meterOptions(calendar: calendar, locale: locale)
         switch WidgetFreshness.freshness(fetchedAt: snapshot.fetchedAt, status: entry.status, at: entry.date) {
         case .fresh:
-            return "\(head) | \(row.resetText)"
+            return "\(head) | \(row.resetText) | " + MeterDisplay.ageShort(fetchedAt: snapshot.fetchedAt, now: entry.date, options: options)
         case .stale, .noData:
             return "\(head) | " + MeterDisplay.ageText(fetchedAt: snapshot.fetchedAt, now: entry.date, options: options)
         case .failed:

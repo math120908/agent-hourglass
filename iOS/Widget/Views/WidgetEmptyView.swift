@@ -8,16 +8,22 @@ struct WidgetEmptyView: View {
     var style: WidgetRenderStyle
     var reason: Reason = .noAccount
 
-    private var message: String { reason == .noAccount ? "Choose account" : "No data yet" }
+    private var message: String { WidgetFreshness.emptyMessage(hasAccount: reason == .noData) }
 
     var body: some View {
         switch family {
         case .inline:
             Text(message)
         case .circular:
-            Image(systemName: reason == .noAccount ? "person.crop.circle.badge.questionmark" : "hourglass")
-                .font(.title3)
-                .accessibilityLabel(message)
+            VStack(spacing: 1) {
+                Image(systemName: reason == .noAccount ? "person.crop.circle.badge.questionmark" : "hourglass")
+                    .font(.system(size: 14))
+                Text(message)
+                    .font(.system(size: 8, weight: .medium))
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.6)
+            }
+            .padding(.horizontal, 6)
         case .small, .rectangular:
             VStack(spacing: 4) {
                 Image(systemName: "hourglass").font(.title3)

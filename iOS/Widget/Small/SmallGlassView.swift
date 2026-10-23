@@ -17,7 +17,7 @@ struct SmallGlassView: View {
                     }
                 }
                 ForEach(c.rows, id: \.key) { row in
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 4) {
                         HStack {
                             Text(row.label).lineLimit(1)
                             Spacer(minLength: 2)

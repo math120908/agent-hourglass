@@ -18,6 +18,12 @@ enum WidgetFreshness {
         return at.timeIntervalSince(fetchedAt) > staleAfter ? .stale : .fresh
     }
 
+    /// Only a hard failure (sign-in needed) dims values; stale data keeps full contrast.
+    static func isDimmed(_ f: Freshness) -> Bool { if case .failed = f { true } else { false } }
+
+    /// Empty-state copy shared by every family.
+    static func emptyMessage(hasAccount: Bool) -> String { hasAccount ? "No data yet" : "Choose account" }
+
     static func ageText(fetchedAt: Date, at: Date, calendar: Calendar, settings: DisplaySettings) -> String {
         MeterDisplay.ageShort(fetchedAt: fetchedAt, now: at, options: settings.meterOptions(calendar: calendar))
     }

@@ -32,7 +32,7 @@ struct CircularUsageView: View {
 
     struct Content: Equatable, Sendable {
         var row: WidgetMeterRow
-        /// Short label when fresh; age text when stale or failed.
+        /// Short label and age, e.g. `5H | 2m`.
         var caption: String
         var isProblem: Bool
         var isDimmed: Bool
@@ -57,7 +57,7 @@ struct CircularUsageView: View {
         case .failed: isProblem = true; isFailed = true
         case .fresh, .noData: isProblem = false; isFailed = false
         }
-        return Content(row: row, caption: isProblem ? age : row.shortLabel, isProblem: isProblem, isDimmed: row.isDimmed || isFailed)
+        return Content(row: row, caption: "\(row.shortLabel) | \(age)", isProblem: isProblem, isDimmed: row.isDimmed || isFailed)
     }
 
     private var isGlass: Bool { style.theme == .glass }
@@ -101,7 +101,7 @@ struct CircularUsageView: View {
         }
         .opacity(style.dimmed(c.isDimmed))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(c.row.label) \(c.row.percentText), \(c.isProblem ? "updated " : "")\(c.caption)")
+        .accessibilityLabel("\(c.row.label) \(c.row.percentText), \(c.caption)")
     }
 }
 

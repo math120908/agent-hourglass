@@ -20,12 +20,7 @@ struct SmallWidgetContent {
         plan = snap?.plan
     }
 
-    var isDimmed: Bool {
-        switch freshness {
-        case .stale, .failed: true
-        case .fresh, .noData: false
-        }
-    }
+    var isDimmed: Bool { WidgetFreshness.isDimmed(freshness) }
 }
 
 struct SmallUsageWidget: Widget {
