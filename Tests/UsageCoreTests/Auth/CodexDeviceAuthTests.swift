@@ -166,6 +166,49 @@ struct CodexDeviceAuthTests {
         #expect(t.requests.count == 1)
     }
 
+    /// Throws the scripted transport errors in order (nil = defer to `inner`), like URLSession does
+    /// around app suspension (-999 cancelled, -1005 connection lost).
+    final class FlakyTransport: HTTPTransport, @unchecked Sendable {
+        private let lock = NSLock()
+        private var errors: [URLError?]
+        let inner: ScriptedTransport
+        init(_ errors: [URLError?], _ inner: ScriptedTransport) { self.errors = errors; self.inner = inner }
+        func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+            let e: URLError?? = lock.withLock { errors.isEmpty ? nil : errors.removeFirst() }
+            if let e = e ?? nil { throw e }
+            return try await inner.data(for: request)
+        }
+    }
+
+    @Test func pollSurvivesTransportErrorsAroundSuspension() async throws {
+        let inner = ScriptedTransport([Self.pending, Self.code, Self.tokens()])
+        let t = FlakyTransport([URLError(.cancelled), URLError(.networkConnectionLost), nil, URLError(.timedOut), nil, URLError(.notConnectedToInternet), nil], inner)
+        let clock = clock, sleeps = sleeps
+        let a = CodexDeviceAuth(http: HTTPClient(transport: t), sleep: { sleeps.value.append($0) }, now: { clock.value })
+        let c = try await a.poll(prompt())
+        #expect(c.remoteAccountID == "acct-synthetic")
+        #expect(inner.requests.count == 3)
+        // the exchange hit -1009 once and was sent again
+        #expect(inner.requests[2].url?.absoluteString == "https://auth.openai.com/oauth/token")
+        #expect(sleeps.value.allSatisfy { $0 == .seconds(5) })
+    }
+
+    @Test func transportErrorsStopAtExpiry() async throws {
+        let t = FlakyTransport(Array(repeating: URLError(.networkConnectionLost), count: 10), ScriptedTransport([]))
+        let clock = clock
+        let a = CodexDeviceAuth(http: HTTPClient(transport: t), sleep: { _ in clock.value = clock.value.addingTimeInterval(600) }, now: { clock.value })
+        await #expect(throws: DeviceFlowError.expired) { try await a.poll(prompt()) }
+    }
+
+    @Test func cancellationDuringTransportErrorStops() async throws {
+        let t = FlakyTransport(Array(repeating: URLError(.cancelled), count: 100), ScriptedTransport([]))
+        let a = CodexDeviceAuth(http: HTTPClient(transport: t), sleep: { _ in try await Task.sleep(for: .seconds(60)) }, now: { Self.t0 })
+        let task = Task { try await a.poll(prompt()) }
+        try await Task.sleep(for: .milliseconds(50))
+        task.cancel()
+        await #expect(throws: CancellationError.self) { try await task.value }
+    }
+
     @Test func noSecretsInErrors() async throws {
         let secrets = ["DAID-SENTINEL", "AUTHCODE-SENTINEL", "VERIFIER-SENTINEL", "REFRESH-SENTINEL", Self.accessToken, Self.idToken, "acct-synthetic"]
         let scripts: [[(Int, String, [String: String])]] = [
