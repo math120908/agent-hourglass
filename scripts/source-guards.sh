@@ -21,5 +21,11 @@ out=$(rg -n -e 'SecItemAdd' -e 'SecItemUpdate' -e 'SecItemDelete' -e 'SecKeychai
 out=$(rg -n '/usr/bin/security' Sources App 2>/dev/null)
 [ -n "$out" ] && report "/usr/bin/security is forbidden:" "$out"
 
+# Portability: UsageCore must build for iOS; its tests must not depend on macOS-only modules.
+out=$(rg -l '^import (AppKit|ServiceManagement)' Sources/UsageCore 2>/dev/null)
+[ -n "$out" ] && report "AppKit/ServiceManagement import in portable UsageCore:" "$out"
+out=$(rg -l '^(@testable )?import (AppKit|UsageCoreMac)' Tests/UsageCoreTests 2>/dev/null)
+[ -n "$out" ] && report "AppKit/UsageCoreMac import in UsageCoreTests:" "$out"
+
 [ $fail -eq 0 ] && echo "source-guards: ok"
 exit $fail

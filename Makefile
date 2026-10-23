@@ -2,15 +2,19 @@ ID ?= 11D5CDDF2B4CC1D70C994AAD3DEDFD29562C5F51
 NOTARY_PROFILE ?= agent-hourglass
 APP := build/Build/Products/Release/AgentHourglass.app
 
-.PHONY: test app sign install hooks icon release
+.PHONY: test check-ios app sign install hooks icon release
 
 icon:
 	scripts/make-icon.sh
 
 test:
 	swift test
+	$(MAKE) check-ios
 	scripts/secret-scan.sh
 	scripts/source-guards.sh
+
+check-ios:
+	xcodebuild -workspace . -scheme UsageCore -destination 'generic/platform=iOS Simulator' -derivedDataPath build/check-ios -quiet build
 
 app:
 	xcodegen generate --quiet
