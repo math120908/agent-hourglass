@@ -4,13 +4,13 @@ import UsageCore
 
 enum CardSnapshots {
     static let scenes: [SnapshotScene] = [
-        SnapshotScene(name: "card-glass-fresh", size: .fitting(width: 402)) { _ in
+        SnapshotScene(name: "card-glass-fresh", size: .fitting(width: 402), themes: [.glass]) { _ in
             AnyView(GlassCardStack(items: [GlassCardStack.item(Fixtures.snorlax, .fresh)], expanded: true))
         },
-        SnapshotScene(name: "card-glass-collapsed", size: .fitting(width: 402)) { _ in
+        SnapshotScene(name: "card-glass-collapsed", size: .fitting(width: 402), themes: [.glass]) { _ in
             AnyView(GlassCardStack(items: GlassCardStack.collapsedItems, expanded: false))
         },
-        SnapshotScene(name: "card-glass-states", size: .fitting(width: 402)) { _ in
+        SnapshotScene(name: "card-glass-states", size: .fitting(width: 402), themes: [.glass]) { _ in
             AnyView(GlassCardStack(items: GlassCardStack.stateItems, expanded: false))
         },
     ]
