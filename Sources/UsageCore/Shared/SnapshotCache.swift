@@ -38,7 +38,7 @@ public struct SnapshotCache: Sendable {
     }
 
     /// Widgets read while the phone is locked, so never `.complete`. No-op on macOS.
-    static func protect(_ url: URL) {
+    public static func protect(_ url: URL) {
         #if os(iOS)
         try? FileManager.default.setAttributes(
             [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],

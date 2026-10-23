@@ -30,6 +30,8 @@ out=$(rg -n 'String\(describing: error\), privacy: \.public' Sources App iOS 2>/
 # and every load, including server 3xx redirects, re-enters decidePolicyFor navigationAction (S4).
 out=$(rg -n -e 'uiDelegate\s*=' -e 'createWebViewWith' iOS/App/AddAccount 2>/dev/null)
 [ -n "$out" ] && report "WKUIDelegate / createWebViewWith in iOS/App/AddAccount (sign-in policy bypass):" "$out"
+# History db gets an explicit file-protection class after open, not only the inherited one (N9).
+rg -q 'SnapshotCache\.protect' Sources/UsageHistory/History/HistoryStore.swift || report "HistoryStore does not call SnapshotCache.protect (N9):" "Sources/UsageHistory/History/HistoryStore.swift"
 
 # Portability: UsageCore must build for iOS; its tests must not depend on macOS-only modules.
 out=$(rg -l '^import (AppKit|ServiceManagement)' Sources/UsageCore 2>/dev/null)
