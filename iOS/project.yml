@@ -92,6 +92,8 @@ targets:
       - path: Widget
         excludes: [AgentHourglassWidgets.swift, Info.plist, "*.entitlements"]
       - Shared
+      - App/Theme
+      - App/Resources/Assets.xcassets
       - WidgetTests
     settings:
       base:
