@@ -1,4 +1,5 @@
 import Foundation
+import Security
 import Testing
 @testable import UsageCore
 
@@ -61,5 +62,29 @@ final class CredentialStoreTests {
         #expect(try mem.allAccountIDs() == [id])
         mem.writeError = CredentialStoreError.unexpected(status: -1)
         #expect(throws: CredentialStoreError.self) { try mem.write(cred("tok-2"), for: id, label: "x") }
+    }
+}
+
+@Suite struct CredentialStoreQueryTests {
+    let id = AccountID(kind: .claude, remoteID: "x")
+
+    @Test func macQueryUnchanged() {
+        let s = CredentialStore(service: "s")
+        let base: Set<String> = [kSecClass as String, kSecAttrService as String]
+        #expect(Set(s.query(for: id).keys) == base.union([kSecAttrAccount as String]))
+        #expect(Set(s.query(for: nil).keys) == base)
+    }
+
+    @Test func accessGroupScopesEveryQuery() {
+        let group = "TEAM.cc.kuoc.agent-hourglass.shared"
+        let s = CredentialStore(service: "s", accessGroup: group)
+        #expect(s.query(for: nil)[kSecAttrAccessGroup as String] as? String == group)
+        #expect(s.query(for: id)[kSecAttrAccessGroup as String] as? String == group)
+    }
+
+    @Test func defaultsUnchanged() {
+        #expect(CredentialStore.service == "cc.kuoc.agent-hourglass")
+        #expect(CredentialStore().service == CredentialStore.service)
+        #expect(CredentialStore().accessGroup == nil)
     }
 }

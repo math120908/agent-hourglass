@@ -19,16 +19,21 @@ public struct CredentialStore: CredentialStoring {
     static let maxAccounts = 64
 
     public let service: String
+    public let accessGroup: String?
 
-    public init(service: String = CredentialStore.service) { self.service = service }
+    public init(service: String = CredentialStore.service, accessGroup: String? = nil) {
+        self.service = service
+        self.accessGroup = accessGroup
+    }
 
-    /// Single query builder: always generic-password class + this service.
-    private func query(for id: AccountID?) -> [String: Any] {
+    /// Single query builder: always generic-password class + this service (+ access group if set).
+    func query(for id: AccountID?) -> [String: Any] {
         var q: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
         ]
         if let id { q[kSecAttrAccount as String] = id.rawValue }
+        if let accessGroup { q[kSecAttrAccessGroup as String] = accessGroup }
         return q
     }
 
