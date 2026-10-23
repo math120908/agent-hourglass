@@ -97,7 +97,11 @@ tmpdir=${TMPDIR:-$(getconf DARWIN_USER_TEMP_DIR)}; tmpdir=${tmpdir%/}
 distlogs() { local d; for d in "$tmpdir"/*.xcdistributionlogs; do [ -e "$d" ] && echo "$d"; done; return 0; }
 pre_logs=$(distlogs)
 rm_distlogs() { local d; distlogs | while IFS= read -r d; do printf '%s\n' "$pre_logs" | rg -q -x -F -- "$d" || rm -rf "$d"; done; }
-trap rm_distlogs EXIT
+# Xcode's IPA step runs /usr/bin/rsync (openrsync), which starts its local server as `rsync` from PATH.
+# Homebrew rsync 3.x there rejects --extended-attributes and export fails with only "Copy failed".
+# Pin `rsync` to the system one for this run.
+rsbin=$(mktemp -d); ln -s /usr/bin/rsync "$rsbin/rsync"; PATH="$rsbin:$PATH"
+trap 'rm_distlogs; rm -rf "$rsbin"' EXIT
 run() { "$@" >>"$log" 2>&1 || { tail -n 30 "$log" | rg -v -F -e "$ASC_KEY_ID" -e "$ASC_ISSUER_ID" >&2; die "$2 failed (log: $log)"; }; }
 
 # 4. Archive.

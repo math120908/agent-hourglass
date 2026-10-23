@@ -4,6 +4,9 @@
 #               $TMPDIR (they hold the ASC key id and issuer id), on success and on failure, and
 #               leaves bundles that existed before the run alone.
 #   relpath:    --verify-archive resolves a relative path against the caller's cwd.
+#   rsync:      export runs with rsync resolving to /usr/bin/rsync. Xcode's IPA step runs /usr/bin/rsync
+#               (openrsync), which starts its local server as `rsync` from PATH; Homebrew rsync 3.x there
+#               rejects --extended-attributes and the export fails with "Copy failed".
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 script=$here/testflight.sh
@@ -58,6 +61,7 @@ case "$1" in
   archive) make_app "$(val -archivePath)/Products/Applications/AgentHourglass.app" "$build" abc1234 ;;
   -exportArchive)
     [ "${FAKE_EXPORT_FAIL:-0}" = 1 ] && { echo "error: exportArchive fake failure"; exit 70; }
+    r=$(command -v rsync); [ "$(readlink -f "$r")" = /usr/bin/rsync ] || { echo "error: exportArchive Copy failed (rsync $r)"; exit 70; }
     if [ "$(/usr/libexec/PlistBuddy -c 'Print :destination' "$(val -exportOptionsPlist)")" = export ]; then
       arc=$(val -archivePath); exp=$(val -exportPath); s=$(mktemp -d)
       mkdir -p "$s/Payload" "$exp"; cp -R "$arc"/Products/Applications/*.app "$s/Payload/"
@@ -65,6 +69,8 @@ case "$1" in
     fi ;;
 esac
 EOF
+# Fake Homebrew rsync shadowing /usr/bin/rsync, as /opt/homebrew/bin does on this Mac.
+printf '#!/bin/bash\nexit 1\n' > "$bin/rsync"
 chmod +x "$bin"/*
 
 # run_flow <name> <want exit> [script args...]: full flow in a scratch TMPDIR holding one older bundle.
