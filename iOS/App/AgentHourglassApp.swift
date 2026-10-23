@@ -1,35 +1,47 @@
 import SwiftUI
 import UsageCore
-import WidgetKit
 
 @main
 struct AgentHourglassApp: App {
     @State private var themeStore = ThemeStore.appGroup()
-    @State private var lines: [ShellStatusLine] = []
-    @State private var settings = DisplaySettings.default
+    @State private var model = AppModel(env: UsageEnvironment.live(), displayStore: DisplaySettingsStore(defaults: AppGroup.defaults))
+    // TODO(P4 Task 15): present SettingsView when showSettings is true.
+    @State private var showSettings = false
     @Environment(\.scenePhase) private var scenePhase
-    private let env = UsageEnvironment.live()
 
     var body: some Scene {
         WindowGroup {
-            AccountListView(lines: lines, theme: themeStore.theme, showRemaining: settings.showRemaining)
-                .task { await refresh() }
+            HomeView(model: model, addMenu: AnyView(EmptyView()), onSignIn: { _ in }, openSettings: { showSettings = true })
+                .environment(\.appTheme, themeStore.theme)
+                .environment(\.displaySettings, model.displayStore.settings)
+                .task { await start() }
+                .onOpenURL { model.handle(url: $0) }
                 .onChange(of: scenePhase) { _, phase in
-                    if phase == .active { Task { await refresh() } }
+                    if !fixturesMode { Task { await model.scenePhaseChanged(phase) } }
                 }
         }
     }
 
-    @MainActor private func refresh() async {
+    private var fixturesMode: Bool {
+        #if DEBUG
+        CommandLine.arguments.contains("--fixtures")
+        #else
+        false
+        #endif
+    }
+
+    @MainActor private func start() async {
         #if DEBUG
         if await RenderHook.runIfRequested() { return }
         let args = CommandLine.arguments
-        if args.contains("--seed-demo") { try? await DemoSeed.seed(env) }
-        if args.contains("--clear-demo") { try? await DemoSeed.clear(env) }
+        if args.contains("--seed-demo") { try? await DemoSeed.seed(UsageEnvironment.live()) }
+        if args.contains("--clear-demo") { try? await DemoSeed.clear(UsageEnvironment.live()) }
+        if fixturesMode {
+            model.loadFixtures()
+            return
+        }
         #endif
-        settings = DisplaySettings.load(from: AppGroup.defaults)
-        lines = await ShellStatus.load(env, now: .now)
-        ShellStatus.log(lines, process: "app")
-        WidgetCenter.shared.reloadAllTimelines()
+        await model.load()
+        if scenePhase == .active { await model.scenePhaseChanged(.active) }
     }
 }
