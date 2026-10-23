@@ -1,25 +1,6 @@
 import AppIntents
 import UsageCore
 
-/// Minimal stand-in for Task 2's `MeterKey`: `Meter.Kind` raw value, plus `:<model>` for
-/// weeklyModel and `:<seconds>` for window (same scheme as `HistoryWriter.meterKey`).
-/// Task 2 replaces this definition.
-struct MeterKey: Hashable, Sendable, RawRepresentable {
-    let rawValue: String
-    init?(rawValue: String) {
-        guard !rawValue.isEmpty else { return nil }
-        self.rawValue = rawValue
-    }
-
-    init(_ m: Meter) {
-        switch m.kind {
-        case .weeklyModel: rawValue = "\(m.kind.rawValue):\(m.label)"
-        case .window: rawValue = "\(m.kind.rawValue):\(m.windowSeconds ?? 0)"
-        default: rawValue = m.kind.rawValue
-        }
-    }
-}
-
 struct MeterEntity: AppEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "Meter"
     static let defaultQuery = MeterQuery()
@@ -45,22 +26,26 @@ struct MeterEntity: AppEntity {
 }
 
 enum MeterCatalog {
+    /// Visible meters of the snapshot, else the rectangular-family defaults.
     static func meters(for account: AccountEntry, snapshot: UsageSnapshot?) -> [MeterEntity] {
         let pairs: [(MeterKey, String)]
         if let snapshot {
-            pairs = snapshot.meters.map { (MeterKey($0), $0.label) }
+            pairs = WidgetMeterModel.visibleMeters(snapshot).map { (MeterKey($0), $0.label) }
         } else {
-            pairs = defaults(for: account.kind)
+            pairs = WidgetMeterModel.defaultKeys(for: account.kind, family: .rectangular).map { ($0, label(for: $0)) }
         }
         return pairs.map { MeterEntity(id: MeterEntity.makeID(account: account.id, key: $0.0), label: $0.1, key: $0.0) }
     }
 
-    /// Rectangular-family defaults with labels, used before any snapshot exists.
-    static func defaults(for kind: ProviderKind) -> [(MeterKey, String)] {
-        switch kind {
-        case .claude: [(MeterKey(rawValue: "session5h")!, "5-hour"), (MeterKey(rawValue: "weeklyAll")!, "Weekly")]
-        case .codex: [(MeterKey(rawValue: "window:18000")!, "5-hour"), (MeterKey(rawValue: "window:604800")!, "Weekly")]
-        case .copilot: [(MeterKey(rawValue: "copilotPremium")!, "Premium requests")]
+    /// Label for a default key before any snapshot exists.
+    static func label(for key: MeterKey) -> String {
+        let parts = key.rawValue.split(separator: ":", maxSplits: 1).map(String.init)
+        switch parts[0] {
+        case "session5h": return Meter.windowLabel(seconds: 18000)
+        case "weeklyAll": return Meter.windowLabel(seconds: 604_800)
+        case "copilotPremium": return "Premium requests"
+        case "window": return Meter.windowLabel(seconds: parts.count > 1 ? Int(parts[1]) ?? 0 : 0)
+        default: return parts.count > 1 ? parts[1] : parts[0]
         }
     }
 }
