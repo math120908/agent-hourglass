@@ -33,14 +33,16 @@ struct ClaudeSignInSheetLayoutTests {
             onDone: { _ in }
         )
         let host = UIHostingController(rootView: NavigationStack { sheet })
-        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
-        let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow()
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
         window.frame = CGRect(x: 0, y: 0, width: 393, height: 852)
         window.rootViewController = host
         window.isHidden = false
         defer { window.isHidden = true }
-        host.view.layoutIfNeeded()
-        try await Task.sleep(for: .milliseconds(300))
+        for _ in 0..<200 where webBox.frame.height <= 0 {
+            host.view.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(10))
+        }
         host.view.layoutIfNeeded()
 
         let bottom = window.bounds.height - host.view.safeAreaInsets.bottom

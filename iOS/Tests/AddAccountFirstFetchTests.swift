@@ -32,7 +32,9 @@ private let codexUsage = #"{"plan_type":"plus","rate_limit":{"allowed":true,"lim
 /// F1: the first usage fetch for a newly added account must land on its card, without a manual refresh.
 @MainActor
 struct AddAccountFirstFetchTests {
-    private func app(usage: String) throws -> AppModel {
+    private func app(usage: String) throws -> AppModel { try appAndEnv(usage: usage).0 }
+
+    private func appAndEnv(usage: String) throws -> (AppModel, UsageEnvironment) {
         let tmp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         let base = try UsageEnvironment.make(base: tmp, service: "cc.kuoc.agent-hourglass.ios-tests", accessGroup: AppGroup.keychainAccessGroup)
         let env = UsageEnvironment(
@@ -42,7 +44,15 @@ struct AddAccountFirstFetchTests {
             shared: base.shared,
             http: HTTPClient(transport: FixedTransport(then: usage))
         )
-        return AppModel(env: env, displayStore: DisplaySettingsStore(defaults: UserDefaults(suiteName: UUID().uuidString)!))
+        return (AppModel(env: env, displayStore: DisplaySettingsStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)), env)
+    }
+
+    private func claudeCred() -> Credential {
+        Credential(kind: .claude, access: Secret("a"), refresh: Secret("r"), expiresAt: Date().addingTimeInterval(3600), refreshExpiresAt: nil, scopes: ["user:profile"])
+    }
+
+    private func snapshot(_ id: AccountID) -> UsageSnapshot {
+        UsageSnapshot(accountID: id, fetchedAt: Date(), meters: [])
     }
 
     private func query(_ url: URL, _ name: String) -> String? {
@@ -82,6 +92,43 @@ struct AddAccountFirstFetchTests {
         #expect(m.state == .success(id))
         #expect(app.appState.snapshots[id] != nil)
         #expect(app.appState.statuses[id] == .fresh)
+        try? await app.remove(id)
+    }
+
+    /// A direct result for an id that became known mid-add is newer than the one held for it;
+    /// the held one must not be replayed over it when the outer add ends.
+    @Test func testHeldResultDoesNotOverwriteNewerDirectDelivery() async throws {
+        let app = try app(usage: claudeUsage)
+        await app.load()
+        let id = AccountID(kind: .claude, remoteID: "held-vs-direct")
+        _ = try await app.add {
+            _ = try await app.add {
+                let added = try await app.service.addClaude(credential: claudeCred(), remoteID: "held-vs-direct")
+                app.deliver(added, .failure(.needsLogin))
+                return added
+            }
+            app.deliver(id, .success(snapshot(id)))
+            return id
+        }
+        #expect(app.appState.statuses[id] == .fresh)
+        try? await app.remove(id)
+    }
+
+    /// A result for an id still unknown when the add ends (removed mid-add) is dropped on replay.
+    @Test func testUnknownResultHeldDuringAddIsDroppedAfterReplay() async throws {
+        let (app, env) = try appAndEnv(usage: claudeUsage)
+        await app.load()
+        let gone = AccountID(kind: .claude, remoteID: "removed-mid-add")
+        try env.shared.cache.write(snapshot(gone))
+        let id = try await app.add {
+            let added = try await app.service.addClaude(credential: claudeCred(), remoteID: "mid-add")
+            app.deliver(gone, .success(snapshot(gone)))
+            return added
+        }
+        #expect(app.appState.snapshots[gone] == nil)
+        #expect(app.appState.statuses[gone] == nil)
+        #expect(!app.appState.accounts.contains(gone))
+        #expect(env.shared.cache.read(gone) == nil)
         try? await app.remove(id)
     }
 }

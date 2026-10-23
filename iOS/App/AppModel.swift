@@ -196,6 +196,7 @@ final class AppModel {
             try? env.shared.cache.remove(id)
             return
         }
+        heldResults[id] = nil // older than this one; a later replay must not overwrite it
         appState.apply(id, outcome)
         persistStatus(id, outcome)
         if case .success = outcome { reloadWidgetsThrottled() }
