@@ -126,7 +126,15 @@ final class AppModel {
         entries.removeAll { $0.id == id }
         dropState(id)
         if focusedAccount == id { focusedAccount = nil }
-        try await service.remove(id)
+        do {
+            try await service.remove(id)
+        } catch {
+            // The registry is the truth: a failed delete must not leave the card hidden.
+            await reloadEntries()
+            let t = now()
+            for e in entries { seed(e, interval: appState.effectiveInterval, at: t) }
+            throw error
+        }
         try env.shared.cache.remove(id)
         await poller.remove(client: id)
         WidgetCenter.shared.reloadAllTimelines()

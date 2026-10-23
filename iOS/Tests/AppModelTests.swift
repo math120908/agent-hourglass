@@ -51,6 +51,21 @@ struct AppModelTests {
         #expect(!model.appState.accounts.contains(id))
     }
 
+    @Test func testFailedRemoveKeepsCard() async throws {
+        let (model, env) = try await make()
+        let id = AccountID(kind: .codex, remoteID: "stuck")
+        try await seed(env, id, name: "x", fetchedAt: Date())
+        await model.load()
+        // A read-only snapshots dir makes the cache delete inside service.remove throw.
+        let dir = env.directory.appending(path: "snapshots")
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: dir.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dir.path) }
+        await #expect(throws: (any Error).self) { try await model.remove(id) }
+        #expect(model.entries.map(\.id) == [id])
+        #expect(model.appState.accounts.contains(id))
+        #expect(model.appState.snapshots[id]?.accountID == id)
+    }
+
     @Test func testResultForRemovedAccountIgnored() async throws {
         let (model, env) = try await make()
         let id = AccountID(kind: .claude, remoteID: "gone")
