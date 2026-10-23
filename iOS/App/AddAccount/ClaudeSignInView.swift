@@ -388,7 +388,8 @@ private struct StepIndicator: View {
             switch step {
             case .todo:
                 if glass {
-                    Circle().fill(Color.primary.opacity(0.10))
+                    // Dark: a darker disc keeps the light number at 4.5:1; light: unchanged.
+                    Circle().fill(scheme == .dark ? Color.black.opacity(0.12) : Color.primary.opacity(0.10))
                     Text("\(number)").font(.subheadline.weight(.semibold)).foregroundStyle(SheetTone.secondary(scheme, glass: true))
                 } else {
                     Circle().strokeBorder(Color.primary.opacity(0.18), lineWidth: 2)
