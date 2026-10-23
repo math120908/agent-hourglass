@@ -29,6 +29,6 @@ struct AddAccountItems: View {
     }
 
     private func item(_ title: String, _ kind: ProviderKind) -> some View {
-        Label { Text(title) } icon: { ProviderIcon(kind: kind, size: 18) }
+        Label { Text(title) } icon: { ProviderIcon(kind: kind, size: 18).foregroundStyle(GlassStyle.accent(kind)) }
     }
 }

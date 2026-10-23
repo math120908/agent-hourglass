@@ -95,15 +95,6 @@ struct InstrumentMeterGrid: View {
     /// Light: the Glass hue. Dark: a lifted variant that keeps >= 4.5:1 on the material.
     private func textColor(_ s: Meter.Severity) -> Color {
         guard scheme == .dark else { return GlassStyle.color(s, kind) }
-        switch s {
-        case .normal:
-            switch kind {
-            case .claude: return Color(red: 1.0, green: 0.89, blue: 0.81)
-            case .copilot: return Color(red: 0.88, green: 0.82, blue: 1.0)
-            case .codex: return Color(red: 0.72, green: 0.96, blue: 0.93)
-            }
-        case .warning: return Color(red: 1.0, green: 0.82, blue: 0.45)
-        case .critical: return Color(red: 1.0, green: 0.83, blue: 0.81)
-        }
+        return GlassStyle.darkAccent(s, kind)
     }
 }

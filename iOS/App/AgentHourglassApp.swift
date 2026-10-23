@@ -26,7 +26,7 @@ struct AgentHourglassApp: App {
                 .sheet(isPresented: $showSettings) {
                     SettingsView(model: model, display: model.displayStore, themes: themeStore)
                 }
-                .environment(\.appTheme, themeStore.theme)
+                .appTheme(themeStore.theme)
                 .environment(\.displaySettings, model.displayStore.settings)
                 .task { await start() }
                 .onOpenURL { model.handle(url: $0) }

@@ -134,7 +134,6 @@ final class AppModel {
             for e in entries { seed(e, interval: appState.effectiveInterval, at: t) }
             throw error
         }
-        try env.shared.cache.remove(id)
         await poller.remove(client: id)
         WidgetCenter.shared.reloadAllTimelines()
     }

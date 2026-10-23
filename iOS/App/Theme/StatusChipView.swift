@@ -30,6 +30,6 @@ struct StatusChipView: View {
 
     private var fill: Color {
         if let tint { return tint.opacity(scheme == .dark ? 0.18 : 0.15) }
-        return scheme == .dark ? .clear : Color.primary.opacity(0.08)
+        return Color.primary.opacity(scheme == .dark ? 0.12 : 0.08)
     }
 }

@@ -9,7 +9,7 @@ enum AddMenuSnapshots {
                     .listStyle(.insetGrouped)
                     .scrollDisabled(true)
                     .frame(height: 160)
-                    .environment(\.appTheme, theme)
+                    .appTheme(theme)
             )
         },
     ]

@@ -28,8 +28,6 @@ struct ClaudePasteView: View {
             Section {
                 Button("Open sign-in page") { browser.open(model.authorizeURL) }
                     .disabled(model.state != .browsing)
-            } footer: {
-                Text("After signing in, copy the code shown on the page and paste it below.")
             }
             Section {
                 HStack {

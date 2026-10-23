@@ -18,7 +18,7 @@ enum ClaudeSnapshots {
                 NavigationStack {
                     ClaudePasteView(model: ClaudeSignInModel(state: .browsing), text: text, onDone: { _ in })
                 }
-                .environment(\.appTheme, theme)
+                .appTheme(theme)
             )
         }
     }
@@ -34,7 +34,7 @@ enum ClaudeSnapshots {
                         onDone: { _ in },
                     )
                 }
-                .environment(\.appTheme, theme)
+                .appTheme(theme)
             )
         }
     }

@@ -79,16 +79,7 @@ struct MeterView: View {
 
     private func glassTint(_ s: Meter.Severity, _ c: Color) -> Color {
         guard scheme == .dark else { return c }
-        switch s {
-        case .normal:
-            switch kind {
-            case .claude: return Color(red: 1.0, green: 0.72, blue: 0.56)
-            case .copilot: return Color(red: 0.88, green: 0.82, blue: 1.0)
-            case .codex: return Color(red: 0.72, green: 0.96, blue: 0.93)
-            }
-        case .warning: return Color(red: 1.0, green: 0.82, blue: 0.45)
-        case .critical: return Color(red: 1.0, green: 0.66, blue: 0.62)
-        }
+        return GlassStyle.darkAccent(s, kind)
     }
 
     // MARK: Instrument
@@ -120,16 +111,7 @@ struct MeterView: View {
 
     private func instrumentTint(_ s: Meter.Severity) -> Color {
         guard scheme == .dark else { return GlassStyle.color(s, kind) }
-        switch s {
-        case .normal:
-            switch kind {
-            case .claude: return Color(red: 1.0, green: 0.89, blue: 0.81)
-            case .copilot: return Color(red: 0.88, green: 0.82, blue: 1.0)
-            case .codex: return Color(red: 0.72, green: 0.96, blue: 0.93)
-            }
-        case .warning: return Color(red: 1.0, green: 0.82, blue: 0.45)
-        case .critical: return Color(red: 1.0, green: 0.83, blue: 0.81)
-        }
+        return GlassStyle.darkAccent(s, kind)
     }
 
     // MARK: Shared
