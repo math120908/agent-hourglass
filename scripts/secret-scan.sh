@@ -12,4 +12,20 @@ if [ -n "$hits" ]; then
   echo "$hits" >&2
   exit 1
 fi
+hits=$(rg -n --hidden \
+  -e 'sk-ant-' -e 'gho_' -e 'ghu_' \
+  -e '"access"\s*:\s*"[^"]{8,}' -e '"refresh"' \
+  iOS)
+if [ -n "$hits" ]; then
+  echo "secret-scan: possible secret in iOS/:" >&2
+  echo "$hits" >&2
+  exit 1
+fi
+# Signing material and App Store Connect keys must never be committed.
+hits=$(git ls-files | rg -e '\.p8$' -e '\.p12$' -e '\.mobileprovision$' -e '\.cer$' -e '(^|/)AuthKey_[^/]*$')
+if [ -n "$hits" ]; then
+  echo "secret-scan: signing material tracked by git:" >&2
+  echo "$hits" >&2
+  exit 1
+fi
 echo "secret-scan: ok"

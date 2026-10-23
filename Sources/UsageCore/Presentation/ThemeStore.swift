@@ -5,7 +5,7 @@ import Observation
 /// (`defaults write <bundle> theme instrument`) are picked up live.
 @MainActor @Observable
 public final class ThemeStore {
-    public static let key = "theme"
+    nonisolated public static let key = "theme"
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var observer: KeyObserver?
 

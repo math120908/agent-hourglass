@@ -69,3 +69,14 @@ Release checks: `docs/release-checklist.md`.
 ```bash
 log show --last 1h --info --predicate 'subsystem == "cc.kuoc.agent-hourglass" AND category == "Migration"'
 ```
+
+## iOS
+
+- `make -C iOS build`: generate the Xcode project (XcodeGen) and build for the simulator
+- `make -C iOS test`: run the iOS unit tests on the simulator
+- `make -C iOS run-sim`: build, boot the simulator headless, install and launch the app
+- `make -C iOS render`: launch with `--render latest` and copy the PNGs to `iOS/docs/screenshots/`
+- `make -C iOS icon`: regenerate the app icon from `App/Resources/AppIcon.svg`
+- `make -C iOS testflight`: placeholder, wired in P6 (exits 1)
+
+Simulator defaults: `SIM_NAME=iPhone 17`, `SIM_OS=26.0` (override on the make command line). Signing is automatic with team R7V5X99HYA; simulator builds need no signing.
