@@ -13,6 +13,9 @@ targets:
     sources: [App]
     dependencies:
       - package: UsageCore
+        product: UsageCore
+      - package: UsageCore
+        product: UsageCoreMac
     info:
       path: App/Info.plist
       properties:

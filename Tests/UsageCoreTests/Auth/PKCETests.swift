@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import UsageCore
+@testable import UsageCoreMac
 
 struct PKCETests {
     @Test func challengeMatchesRFC7636() {

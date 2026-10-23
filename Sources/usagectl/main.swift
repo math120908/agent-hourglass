@@ -1,5 +1,6 @@
 import Foundation
 import UsageCore
+import UsageCoreMac
 
 let service = "cc.kuoc.agent-hourglass.cli"
 let store = CredentialStore(service: service)

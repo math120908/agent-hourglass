@@ -1,3 +1,4 @@
+import UsageCore
 import Foundation
 
 /// Borrows tokens from an existing `gh` login. gh runs only from a fixed trusted path,

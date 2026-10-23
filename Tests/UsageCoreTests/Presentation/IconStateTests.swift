@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import Testing
 @testable import UsageCore
+@testable import UsageCoreMac
 
 @Suite struct IconStateTests {
     let now = Date(timeIntervalSince1970: 1_800_023_520)

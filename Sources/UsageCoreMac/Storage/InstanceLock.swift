@@ -1,3 +1,4 @@
+import UsageCore
 import Foundation
 
 /// Single-instance guard: an exclusive, non-blocking `flock` on `instance.lock`, held until deinit.

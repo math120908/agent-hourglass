@@ -1,3 +1,4 @@
+import UsageCore
 import Foundation
 
 /// Borrows the Codex CLI's ChatGPT login from `~/.codex/auth.json`. Strictly read-only:

@@ -1,3 +1,4 @@
+import UsageCore
 import AppKit
 
 /// Glass (mockup A) menu bar icon: outlined bar, pace line, "→5H" caption underneath.

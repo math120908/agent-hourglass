@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import UsageCore
+@testable import UsageCoreMac
 
 /// Writes a synthetic auth.json into a fresh temp dir. Never touches ~/.codex.
 func fakeCodexAuth(_ body: String, mode: Int16 = 0o600) throws -> CodexAuthSource {

@@ -1,3 +1,4 @@
+import UsageCore
 import Foundation
 import Observation
 import ServiceManagement

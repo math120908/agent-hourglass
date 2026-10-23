@@ -1,5 +1,6 @@
 import Testing
 @testable import UsageCore
+@testable import UsageCoreMac
 
 @MainActor
 final class FakeLoginService: LoginItemService {

@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import UsageCore
+import UsageCoreMac
 
 /// Debug: `AgentHourglass --render-states <dir>` writes one popover + one menu bar icon PNG per
 /// account state (spec §9) in light and dark, then exits. `--theme instrument` writes

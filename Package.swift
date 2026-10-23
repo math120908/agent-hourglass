@@ -1,11 +1,12 @@
-// swift-tools-version:6.0
+// swift-tools-version:6.2
 import PackageDescription
 
 let package = Package(
     name: "UsageCore",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v14), .iOS(.v26)],
     products: [
         .library(name: "UsageCore", targets: ["UsageCore"]),
+        .library(name: "UsageCoreMac", targets: ["UsageCoreMac"]),
         .executable(name: "usagectl", targets: ["usagectl"]),
     ],
     dependencies: [
@@ -13,8 +14,9 @@ let package = Package(
     ],
     targets: [
         .target(name: "UsageCore", dependencies: [.product(name: "GRDB", package: "GRDB.swift")]),
-        .executableTarget(name: "usagectl", dependencies: ["UsageCore"]),
-        .testTarget(name: "UsageCoreTests", dependencies: ["UsageCore"], resources: [.copy("Fixtures")]),
+        .target(name: "UsageCoreMac", dependencies: ["UsageCore"]),
+        .executableTarget(name: "usagectl", dependencies: ["UsageCore", "UsageCoreMac"]),
+        .testTarget(name: "UsageCoreTests", dependencies: ["UsageCore", "UsageCoreMac"], resources: [.copy("Fixtures")]),
         .testTarget(name: "UsagectlTests", dependencies: ["usagectl", "UsageCore"]),
     ]
 )

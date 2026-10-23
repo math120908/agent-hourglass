@@ -1,5 +1,6 @@
 import SwiftUI
 import UsageCore
+import UsageCoreMac
 
 /// General tab (spec §10.5). The theme picker writes `UserDefaults` key `theme`; ThemeStore applies it live.
 struct GeneralTab: View {

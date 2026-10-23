@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import Testing
 @testable import UsageCore
+@testable import UsageCoreMac
 
 @Suite struct IconLayoutTests {
     @Test func barFractionsClamp() {

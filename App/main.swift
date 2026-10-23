@@ -1,5 +1,6 @@
 import AppKit
 import UsageCore
+import UsageCoreMac
 
 MainActor.assumeIsolated {
     _ = NSApplication.shared

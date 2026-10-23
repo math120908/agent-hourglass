@@ -2,6 +2,7 @@ import AppKit
 import Observation
 import SwiftUI
 import UsageCore
+import UsageCoreMac
 
 @MainActor
 final class StatusItemController: NSObject, NSPopoverDelegate {

@@ -1,3 +1,4 @@
+import UsageCore
 import Foundation
 
 extension ClaudePKCEFlow {
@@ -6,7 +7,7 @@ extension ClaudePKCEFlow {
     public func run(
         loginHint: String?,
         open: (URL) -> Void,
-        expectedRemoteID: String? = nil
+        expectedRemoteID: String? = nil,
     ) async throws -> (Credential, remoteAccountID: String) {
         let pkce = PKCE.make()
         let listener = try await LoopbackListener.bind()

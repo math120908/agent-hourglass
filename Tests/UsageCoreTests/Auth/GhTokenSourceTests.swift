@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import UsageCore
+@testable import UsageCoreMac
 
 private let fakeToken = "gho_" + String(repeating: "x", count: 36)
 

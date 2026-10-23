@@ -1,6 +1,7 @@
 import AppKit
 import os
 import UsageCore
+import UsageCoreMac
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {

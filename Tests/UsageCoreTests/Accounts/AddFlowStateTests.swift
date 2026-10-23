@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import UsageCore
+@testable import UsageCoreMac
 
 struct AddFlowStateTests {
     @Test func concurrentAddRejected() {

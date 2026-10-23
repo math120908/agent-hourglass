@@ -1,3 +1,4 @@
+import UsageCore
 import AppKit
 
 /// Instrument (mockup B) menu bar icon: session and weekly mini bars stacked, then the session %.

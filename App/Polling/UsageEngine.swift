@@ -1,6 +1,7 @@
 import AppKit
 import os
 import UsageCore
+import UsageCoreMac
 
 /// Wires AccountRegistry → AccountService → Poller → AppState, plus sleep/wake and offline.
 @MainActor
