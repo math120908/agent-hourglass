@@ -1,10 +1,6 @@
 import Darwin
 import Foundation
 
-public enum AuthError: Error, Sendable, Equatable {
-    case portUnavailable, stateMismatch, timeout, cancelled, differentAccount
-}
-
 /// One-shot OAuth redirect listener bound to 127.0.0.1 and ::1 (IPV6_V6ONLY) on the same port.
 /// Uses BSD sockets rather than NWListener: NWListener could not bind ::1 alongside 127.0.0.1
 /// in the S1 spike, and BSD sockets let us set IPV6_V6ONLY explicitly.
