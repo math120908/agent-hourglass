@@ -77,7 +77,7 @@ final class AppModel {
     func scenePhaseChanged(_ phase: ScenePhase) async {
         switch phase {
         case .active:
-            await withBackgroundTask("foreground-poll") {
+            await withBackgroundTask("foreground-poll") { [self] in
                 await poller.setForeground(true)
                 await poller.setUserInterval(.seconds(displayStore.settings.refreshMinutes * 60))
                 appState.effectiveInterval = await poller.interval
@@ -95,7 +95,7 @@ final class AppModel {
 
     /// Manual refresh. The Poller floor, client backoff and shared cache still gate each provider.
     func refresh() async {
-        await withBackgroundTask("manual-poll") { await poller.refreshAll(force: true) }
+        await withBackgroundTask("manual-poll") { [self] in await poller.refreshAll(force: true) }
     }
 
     /// Called after `service.addClaude/addCodex` commits a new account.
@@ -244,16 +244,9 @@ final class AppModel {
         appState.setSaveFailed(id, false)
     }
 
-    /// Keeps the app alive until the pass ends, so iOS never suspends it holding the App Group lock.
-    private func withBackgroundTask(_ name: String, _ body: () async -> Void) async {
-        let app = UIApplication.shared
-        var task = UIBackgroundTaskIdentifier.invalid
-        task = app.beginBackgroundTask(withName: name) {
-            app.endBackgroundTask(task)
-            task = .invalid
-        }
-        await body()
-        if task != .invalid { app.endBackgroundTask(task) }
+    /// Keeps the app alive until the pass ends; expiration cancels the pass before ending (S1).
+    private func withBackgroundTask(_ name: String, _ body: @escaping @MainActor () async -> Void) async {
+        await BackgroundAssertion.live.run(name, body)
     }
 }
 
