@@ -20,6 +20,9 @@ out=$(rg -n -e 'SecItemAdd' -e 'SecItemUpdate' -e 'SecItemDelete' -e 'SecKeychai
 [ -n "$out" ] && report "write/ACL/subprocess/refresh path in $READER:" "$out"
 out=$(rg -n '/usr/bin/security' Sources App 2>/dev/null)
 [ -n "$out" ] && report "/usr/bin/security is forbidden:" "$out"
+# Logging: account ids must never be logged in the clear.
+out=$(rg -n 'rawValue, privacy: \.public' Sources App 2>/dev/null)
+[ -n "$out" ] && report "account id logged with privacy: .public:" "$out"
 
 # Portability: UsageCore must build for iOS; its tests must not depend on macOS-only modules.
 out=$(rg -l '^import (AppKit|ServiceManagement)' Sources/UsageCore 2>/dev/null)

@@ -23,6 +23,8 @@ public actor AccountClient {
     private let gh: (source: any CopilotTokenSource, login: String)?
     /// Claude Code (local) only: re-reads Claude Code's Keychain item on every fetch. Never refreshes or writes.
     private let claudeCode: ClaudeCodeLoginReading?
+    /// iOS app and widget: App Group cache and backoff. nil on the Mac (no files touched).
+    private let shared: SharedAccountState?
 
     public private(set) var status: AccountStatus = .noData
     public private(set) var nextEarliestFetch: Date = .distantPast
@@ -44,8 +46,10 @@ public actor AccountClient {
         label: String? = nil,
         tokenSource: (any CopilotTokenSource)? = nil,
         login: String? = nil,
-        claudeCode: ClaudeCodeLoginReading? = nil
+        claudeCode: ClaudeCodeLoginReading? = nil,
+        shared: SharedAccountState? = nil
     ) {
+        self.shared = shared
         self.claudeCode = claudeCode
         self.gh = tokenSource.flatMap { src in login.map { (src, $0) } }
         self.id = id
@@ -61,6 +65,7 @@ public actor AccountClient {
     public func fetch() async -> FetchOutcome {
         if status == .needsLogin { return .failure(.needsLogin) }
         if status == .claudeCodeDenied { return .failure(.claudeCodeDenied) }
+        if let shared, let gated = sharedGate(shared) { return gated }
         if let claudeCode { return await fetchClaudeCode(claudeCode) }
         if let gh { return await fetchCopilot(gh.source, login: gh.login) }
         if provider.kind == .codex { return await fetchBorrowed() }
@@ -150,6 +155,35 @@ public actor AccountClient {
         }
     }
 
+    /// Serves a fresh shared snapshot or honours the shared backoff without touching the network.
+    private func sharedGate(_ shared: SharedAccountState) -> FetchOutcome? {
+        let t = now()
+        let cached = shared.cache.read(id)
+        let interval = Backoff.seconds(provider.minimumInterval)
+        if let cached, cached.fetchedAt <= t, t.timeIntervalSince(cached.fetchedAt) < interval {
+            lastSnapshot = cached
+            status = .fresh
+            nextEarliestFetch = cached.fetchedAt.addingTimeInterval(interval)
+            return .success(cached)
+        }
+        if let next = shared.backoff.nextAllowedFetch(id, now: t), t < next {
+            lastSnapshot = cached ?? lastSnapshot
+            nextEarliestFetch = next
+            status = .rateLimited(retryAt: next)
+            return .failure(.rateLimited(retryAt: next))
+        }
+        return nil
+    }
+
+    private func writeSharedBackoff() {
+        guard let shared else { return }
+        do {
+            try shared.backoff.setNextAllowedFetch(nextEarliestFetch, for: id)
+        } catch {
+            Self.log.error("shared backoff write failed: \(String(describing: type(of: error)), privacy: .public)")
+        }
+    }
+
     static func copilotCredential(_ token: Secret) -> Credential {
         Credential(kind: .copilot, access: token, refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: [])
     }
@@ -162,6 +196,14 @@ public actor AccountClient {
         status = saveFailed ? .stale : .fresh
         let wait = max(Backoff.seconds(provider.minimumInterval), backoff.levelDelay ?? 0)
         nextEarliestFetch = now().addingTimeInterval(wait)
+        if let shared {
+            do {
+                try shared.cache.write(snap)
+            } catch {
+                Self.log.error("shared cache write failed: \(String(describing: type(of: error)), privacy: .public)")
+            }
+            writeSharedBackoff()
+        }
         return .success(snap)
     }
 
@@ -218,8 +260,9 @@ public actor AccountClient {
             s = .needsLogin
         case let .rateLimited(retryAfter):
             let at = backoff.next(retryAfter: retryAfter, now: now())
-            Self.log.info("429 #\(self.backoff.consecutive429) for \(self.id.kind == .codex ? "codex" : self.id.rawValue, privacy: .public) retryAfter=\(retryAfter.map { "\($0)" } ?? "none", privacy: .public) wait=\(Int(at.timeIntervalSince(self.now())), privacy: .public)s")
+            Self.log.info("429 #\(self.backoff.consecutive429) for \(self.id.kind?.rawValue ?? "unknown", privacy: .public) retryAfter=\(retryAfter.map { "\($0)" } ?? "none", privacy: .public) wait=\(Int(at.timeIntervalSince(self.now())), privacy: .public)s")
             nextEarliestFetch = at
+            writeSharedBackoff()
             s = .rateLimited(retryAt: at)
         case .transport:
             s = .offline
