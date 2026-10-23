@@ -75,6 +75,11 @@ public struct MeterDisplay: Sendable, Equatable {
         return dayOrClock(fetchedAt, now: now, options: options)
     }
 
+    /// Wall-clock time ("14:46" or "2:46 PM") honouring the 24-hour option, calendar and locale.
+    public static func clockText(_ date: Date, options: MeterDisplayOptions) -> String {
+        clock(date, options)
+    }
+
     public static func visibleMeters(_ snapshot: UsageSnapshot?) -> [Meter] {
         (snapshot?.meters ?? []).filter(CardModel.isVisible)
     }
