@@ -31,25 +31,26 @@ struct ClaudeSignInSheet<Web: View>: View {
     @ViewBuilder private var content: some View {
         switch model.state {
         case .browsing, .exchanging:
-            web
-                // A new authorize URL gets a fresh web view; a torn-down one is never reused.
-                .id(model.authorizeURL)
-                .ignoresSafeArea(edges: .bottom)
-                .overlay {
-                    if model.state == .exchanging {
-                        ZStack {
-                            Rectangle().fill(.ultraThinMaterial)
-                            ProgressView()
+            // Stacked, not inset: the web viewport ends at the top of the bar, so page-fixed
+            // bottom banners (claude.ai's cookie settings) stay reachable.
+            VStack(spacing: 0) {
+                web
+                    // A new authorize URL gets a fresh web view; a torn-down one is never reused.
+                    .id(model.authorizeURL)
+                    .overlay {
+                        if model.state == .exchanging {
+                            ZStack {
+                                Rectangle().fill(.ultraThinMaterial)
+                                ProgressView()
+                            }
                         }
                     }
-                }
-                .safeAreaInset(edge: .bottom) {
-                    Button("Paste code instead", action: onPasteInstead)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(.bar)
-                        .disabled(model.state == .exchanging)
-                }
+                Button("Paste code instead", action: onPasteInstead)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                    .background(.bar)
+                    .disabled(model.state == .exchanging)
+            }
         case .success(let id):
             message {
                 Label("Signed in", systemImage: "checkmark.circle.fill")
