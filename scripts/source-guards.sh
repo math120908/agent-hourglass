@@ -62,14 +62,28 @@ out=$(rg -n 'UsageHistory|GRDB' iOS/project.yml 2>/dev/null)
 
 # iOS sign-in surfaces: no embedded web view at all (Claude signs in through an ephemeral
 # ASWebAuthenticationSession plus paste), no programmatic pasteboard reads (only the system
-# PasteButton reads; writes and hasStrings are fine), no dump(.
+# PasteButton reads; writes and hasStrings are fine), no dump(. Full-line // comments are ignored.
 IOSSRC=(iOS/App iOS/Widget iOS/Shared)
-out=$(rg -n -g '*.swift' -e '^import WebKit' -e '\bWKWebView' -e '\bWKUserScript' "${IOSSRC[@]}" 2>/dev/null)
-[ -n "$out" ] && report "WebKit / WKWebView in iOS/ (sign in with ASWebAuthenticationSession):" "$out"
-out=$(rg -n -P -g '*.swift' 'UIPasteboard\.general\.(string|strings|url|urls|image|images|color|colors|items|itemProviders|value|data)\b(?!\s*=(?!=))' "${IOSSRC[@]}" 2>/dev/null)
-[ -n "$out" ] && report "programmatic pasteboard read in iOS/ (use PasteButton):" "$out"
+nocomment() { rg -v '^[^:]+:[0-9]+:\s*//'; }
+# Any attribute or import kind before the module; SwiftUI WebPage/WebView; SFSafariViewController
+# (persistent cookie store). ASWebAuthenticationSession lives in AuthenticationServices: allowed.
+out=$(rg -n -P -g '*.swift' -e '^\s*(@\w+\s+)*import\s+(\w+\s+)?(WebKit|SafariServices)\b' \
+  -e '\bWK(WebView|UserScript)\b' -e '\bWeb(Page|View)\b' -e '\bSFSafariViewController\b' "${IOSSRC[@]}" 2>/dev/null | nocomment)
+[ -n "$out" ] && report "WebKit / WebView / SafariServices in iOS/ (sign in with ASWebAuthenticationSession):" "$out"
+# Allowlist: every UIPasteboard use must be UIPasteboard.general.hasStrings or a write
+# UIPasteboard.general.string = ...; aliases, split member access and any other API fail.
+out=$(rg -n -g '*.swift' 'UIPasteboard' "${IOSSRC[@]}" 2>/dev/null | nocomment |
+  perl -ne '($c = $_) =~ s/^[^:]+:\d+://; $c =~ s/\bUIPasteboard\.general\.hasStrings\b//g; $c =~ s/\bUIPasteboard\.general\.string\s*=(?!=)//g; print if $c =~ /UIPasteboard/')
+[ -n "$out" ] && report "UIPasteboard use outside the allowlist in iOS/ (only .general.hasStrings and .general.string = ...; reads use PasteButton):" "$out"
+# Every ASWebAuthenticationSession file sets prefersEphemeralWebBrowserSession = true in code
+# (not in a comment), never assigns it anything else, and never mentions = false.
 for f in $(rg -l -g '*.swift' 'ASWebAuthenticationSession\(' "${IOSSRC[@]}" 2>/dev/null); do
-  rg -q 'prefersEphemeralWebBrowserSession = true' "$f" || report "ASWebAuthenticationSession without prefersEphemeralWebBrowserSession = true:" "$f"
+  code=$(sed -E 's#//.*$##' "$f")
+  echo "$code" | rg -q -P 'prefersEphemeralWebBrowserSession\s*=\s*true\b' ||
+    report "ASWebAuthenticationSession without prefersEphemeralWebBrowserSession = true (in code):" "$f"
+  bad=$( { rg -n -P 'prefersEphemeralWebBrowserSession\s*=\s*false\b' "$f"
+    echo "$code" | rg -n -P 'prefersEphemeralWebBrowserSession\s*=(?!=)(?!\s*true\b)'; } 2>/dev/null)
+  [ -n "$bad" ] && report "prefersEphemeralWebBrowserSession set to something other than true in $f:" "$bad"
 done
 out=$(rg -n -g '*.swift' '\bdump\(' "${IOSSRC[@]}" 2>/dev/null)
 [ -n "$out" ] && report "dump( in iOS/:" "$out"
