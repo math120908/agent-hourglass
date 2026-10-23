@@ -5,13 +5,27 @@ import UsageCore
 struct AgentHourglassApp: App {
     @State private var themeStore = ThemeStore.appGroup()
     @State private var model = AppModel(env: UsageEnvironment.live(), displayStore: DisplaySettingsStore(defaults: AppGroup.defaults))
-    // TODO(P4 Task 15): present SettingsView when showSettings is true.
     @State private var showSettings = false
+    @State private var addFlow: AddFlow?
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
-            HomeView(model: model, addMenu: AnyView(EmptyView()), onSignIn: { _ in }, openSettings: { showSettings = true })
+            HomeView(
+                model: model,
+                addMenu: AnyView(AddAccountMenu(app: model, present: $addFlow)),
+                onSignIn: { addFlow = AddFlow.signIn(for: $0) },
+                openSettings: { showSettings = true },
+            )
+                .sheet(item: $addFlow) { flow in
+                    AddFlowSheet(flow: flow, app: model) { id in
+                        addFlow = nil
+                        model.focusedAccount = id
+                    }
+                }
+                .sheet(isPresented: $showSettings) {
+                    SettingsView(model: model, display: model.displayStore, themes: themeStore)
+                }
                 .environment(\.appTheme, themeStore.theme)
                 .environment(\.displaySettings, model.displayStore.settings)
                 .task { await start() }
