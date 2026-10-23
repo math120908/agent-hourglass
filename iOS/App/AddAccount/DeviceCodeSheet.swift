@@ -43,7 +43,7 @@ struct DeviceCodeSheet: View {
         .tint(GlassStyle.accent(provider))
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { dismiss() }
+                Button("Cancel") { dismiss() }.tint(SheetTone.accentText(provider, scheme))
             }
         }
         .onDisappear { model.cancel() }

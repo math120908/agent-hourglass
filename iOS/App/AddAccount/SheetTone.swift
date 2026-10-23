@@ -36,9 +36,10 @@ enum SheetTone {
         }
     }
 
-    /// Secondary text that still clears 4.5:1 (system `.secondary` is ~3.4:1 on white).
+    /// Secondary text that still clears 4.5:1 (system `.secondary` is ~3.4:1 on white and ~2.4:1
+    /// on the Glass light gradient; 0.66 black gives ~4.9:1 on that gradient).
     static func secondary(_ scheme: ColorScheme, glass: Bool) -> AnyShapeStyle {
-        if scheme == .light { return AnyShapeStyle(Color.black.opacity(0.62)) }
+        if scheme == .light { return AnyShapeStyle(Color.black.opacity(0.66)) }
         return glass ? AnyShapeStyle(Color.white.opacity(0.90)) : AnyShapeStyle(.secondary)
     }
 }
@@ -63,11 +64,13 @@ extension View {
 extension View {
     /// Secondary capsule button. The stock `.bordered` label is the accent on an accent-tinted
     /// pill (2.3 to 3.8:1, ~1.4:1 on the grey Glass dark card), so the label takes `accentText`
-    /// and on Glass dark the pill is darkened instead of tinted.
+    /// and on Glass dark the pill is darkened instead of tinted. That dark pill is drawn as an
+    /// explicit background so it survives `.disabled` (the system drops its own fill there).
     @ViewBuilder func quietBordered(_ kind: ProviderKind, scheme: ColorScheme, glass: Bool) -> some View {
         let label = foregroundStyle(SheetTone.accentText(kind, scheme))
         if glass, scheme == .dark {
-            label.buttonStyle(.borderedProminent).tint(Color.black.opacity(0.28))
+            label.buttonStyle(.bordered).tint(.clear)
+                .background(Capsule().fill(Color.black.opacity(0.28)))
         } else {
             label.buttonStyle(.bordered)
         }

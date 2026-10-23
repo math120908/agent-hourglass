@@ -67,7 +67,9 @@ struct ClaudeSignInView: View {
         // Cancel stays in every state (as on the Codex sheet) so the layout never jumps.
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { dismiss() }
+                // Provider accent on every theme, in its readable variant (the stock accent is ~3:1 on
+                // the light toolbar pill).
+                Button("Cancel") { dismiss() }.tint(SheetTone.accentText(.claude, scheme))
             }
         }
         .onChange(of: scenePhase) { _, phase in
@@ -193,9 +195,7 @@ struct ClaudeSignInView: View {
                     pasteButton
                 }
                 if state == .browsing, form.showsInvalid, form.isInvalid {
-                    Text("That code isn't complete")
-                        .font(.caption)
-                        .foregroundStyle(SheetTone.criticalText(scheme, glass: isGlass))
+                    invalidCaption
                 }
             }
             .disabled(state == .exchanging)
@@ -243,6 +243,25 @@ struct ClaudeSignInView: View {
         .overlay(Capsule().strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
     }
 
+    /// On Glass dark a red text tone tops out near 4.3:1 on the grey card, so the text stays
+    /// near-white (4.8:1) and a red glyph carries the hue.
+    @ViewBuilder private var invalidCaption: some View {
+        let text = Text("That code isn't complete").foregroundStyle(SheetTone.criticalText(scheme, glass: isGlass))
+        Group {
+            if isGlass, scheme == .dark {
+                Label {
+                    text
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(SheetTone.criticalGlyph(scheme))
+                }
+                .labelStyle(.titleAndIcon)
+            } else {
+                text
+            }
+        }
+        .font(.caption)
+    }
+
     @ViewBuilder private var validationGlyph: some View {
         if form.parsable {
             Image(systemName: "checkmark.circle.fill")
@@ -270,9 +289,9 @@ struct ClaudeSignInView: View {
         // a 44 pt frame gives the touch target, a same-tint capsule behind it the 44 pt look.
         .frame(minWidth: 34, minHeight: 44)
         .padding(.horizontal, 5)
-        .background {
-            if state == .browsing { Capsule().fill(GlassStyle.claude) }
-        }
+        // Drawn whenever the button shows, so the 44 pt size holds while exchanging; faded there
+        // to sit with the system disabled capsule.
+        .background { Capsule().fill(GlassStyle.claude).opacity(state == .browsing ? 1 : 0.5) }
         .fixedSize(horizontal: true, vertical: false)
     }
 
@@ -307,12 +326,8 @@ struct ClaudeSignInView: View {
         }
     }
 
-    @ViewBuilder private func secondary(_ text: Text) -> some View {
-        if isGlass {
-            text.glassTone()
-        } else {
-            text.foregroundStyle(.secondary)
-        }
+    private func secondary(_ text: Text) -> some View {
+        text.foregroundStyle(SheetTone.secondary(scheme, glass: isGlass))
     }
 
     // MARK: Actions
