@@ -82,10 +82,25 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: AgentHourglassiOS
+  AgentHourglassWidgetTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Widget
+        excludes: [AgentHourglassWidgets.swift, Info.plist, "*.entitlements"]
+      - Shared
+      - WidgetTests
+    settings:
+      base:
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/AgentHourglass.app/AgentHourglass
+        BUNDLE_LOADER: $(TEST_HOST)
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: AgentHourglassiOS
 schemes:
   AgentHourglassiOS:
     build:
       targets:
         AgentHourglassiOS: all
     test:
-      targets: [AgentHourglassiOSTests]
+      targets: [AgentHourglassiOSTests, AgentHourglassWidgetTests]
