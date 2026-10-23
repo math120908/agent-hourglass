@@ -20,4 +20,13 @@ struct CredentialTests {
         #expect(!String(reflecting: c).contains("acct-secret-ish"))
         #expect(Mirror(reflecting: c).children.allSatisfy { $0.label != "remoteAccountID" })
     }
+
+    @Test func earliestRefreshAtRoundTripsAndLegacyDecodesNil() throws {
+        let legacy = #"{"kind":"codex","access":"a","scopes":[],"remoteAccountID":"x"}"#
+        #expect(try JSONDecoder().decode(Credential.self, from: Data(legacy.utf8)).earliestRefreshAt == nil)
+        let c = Credential(kind: .codex, access: Secret("a"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: [], earliestRefreshAt: Date(timeIntervalSince1970: 1_800_000_000))
+        #expect(try JSONDecoder().decode(Credential.self, from: JSONEncoder().encode(c)) == c)
+        #expect(Mirror(reflecting: c).children.allSatisfy { $0.label != "earliestRefreshAt" })
+        #expect(!"\(c)".contains("2027"))
+    }
 }

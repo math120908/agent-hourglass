@@ -118,7 +118,7 @@ struct CodexAccountServiceTests {
         try await svc.cleanupOrphans()
         #expect(try store.allAccountIDs() == [id])
         try await svc.remove(id)
-        #expect(try store.allAccountIDs() == [id])
+        #expect(try store.allAccountIDs().isEmpty)
         #expect(await registry.accounts().isEmpty)
         #expect(try String(contentsOfFile: auth.path, encoding: .utf8) == codexAuthBody)
     }
