@@ -9,41 +9,43 @@
     </filter>
     <filter id="wash" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
       <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="3" seed="3"/>
-      <feDisplacementMap in="SourceGraphic" scale="30"/>
-      <feGaussianBlur stdDeviation="4"/>
+      <feDisplacementMap in="SourceGraphic" scale="26"/>
+      <feGaussianBlur stdDeviation="3"/>
     </filter>
     <radialGradient id="paper" cx="50%" cy="40%" r="70%">
       <stop offset="0" stop-color="#FAF5EC"/><stop offset="1" stop-color="#EFE5D6"/>
     </radialGradient>
+    <clipPath id="glass"><path d="M-174 -275.2 L-154 -262 C-174 -110 -26 -52 -20 0 C-26 52 -174 110 -154 262 L-174 275.2 L174 275.2 L154 262 C174 110 26 52 20 0 C26 -52 174 -110 154 -262 L174 -275.2 Z"/></clipPath>
   </defs>
+
   <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#paper)" filter="url(#shadow)"/>
-  <g transform="translate(0 70)">
-  <!-- watercolor wash: filled arc band up to ~40% -->
-  <g filter="url(#wash)" opacity="0.55">
-    <path d="M232 640 A280 280 0 0 1 792 640 L712 640 A200 200 0 0 0 312 640 Z" fill="#E9B79E"/>
-    <path d="M232 640 A280 280 0 0 1 425 374 L450 450 A200 200 0 0 0 312 640 Z" fill="#D97757"/>
+  <g filter="url(#rough)"><g transform="translate(476 470) rotate(-16) scale(0.84)">
+    <g>
+    <g clip-path="url(#glass)">
+      <rect x="-400" y="-400" width="800" height="800" fill="#FFFFFF" opacity="0.6"/>
+      <g transform="rotate(16)">
+        <path d="M-400 -130 L-110 -130 Q-30 -130 0 -104 Q30 -130 110 -130 L400 -130 L400 6 L-400 6 Z" fill="#D97757"/>
+        <path d="M-400 196 C-200 196 -90 142 0 112 C90 142 200 196 400 196 L400 600 L-400 600 Z" fill="#D97757"/>
+        <path d="M-400 196 C-200 196 -90 142 0 112 C90 142 200 196 400 196" fill="none" stroke="#C4603F" stroke-width="10"/>
+        <path d="M-400 -130 L-110 -130 Q-30 -130 0 -104 Q30 -130 110 -130 L400 -130" fill="none" stroke="#C4603F" stroke-width="10"/>
+      </g>
+    </g>
+    <g transform="rotate(16)"><path d="M0 -4 L0 118" stroke="#C4603F" stroke-width="14" stroke-linecap="round" stroke-dasharray="none"/></g>
+    </g>
+    <g fill="none" stroke="#2B2522" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M-158 -262 C-178 -110 -32 -52 -26 0 C-32 52 -178 110 -158 262" stroke-width="32"/>
+      <path d="M158 -262 C178 -110 32 -52 26 0 C32 52 178 110 158 262" stroke-width="32"/>
+      <path d="M-98 -225 C-111 -189 -98 -157 -76 -131" stroke="#FFFFFF" stroke-width="16" opacity="0.8"/>
+      <path d="M-205 -292 C-102 -298 102 -287 205 -292" stroke-width="56"/>
+      <path d="M-205 292 C-102 297 102 286 205 292" stroke-width="56"/>
+    </g>
+  </g></g>
+  <g filter="url(#rough)">
+    <path d="M200 773 L770 773" stroke="#2B2522" stroke-width="24" stroke-linecap="round" stroke-dasharray="40 30" fill="none"/>
+    <circle cx="804" cy="773" r="34" fill="#2B2522"/>
   </g>
-  <g filter="url(#rough)" fill="none" stroke="#2B2522" stroke-linecap="round" stroke-linejoin="round">
-    <!-- outer arc, drawn twice for sketchy feel -->
-    <path d="M222 642 C214 470 352 352 512 350 C676 348 806 470 802 640" stroke-width="30"/>
-    <path d="M236 648 C232 488 360 366 516 362 C668 360 790 478 790 636" stroke-width="9" opacity="0.6"/>
-    <!-- base line -->
-    <path d="M206 646 C380 652 640 638 818 646" stroke-width="24"/>
-    <!-- ticks -->
-    <path d="M284 600 L322 596" stroke-width="22"/>
-    <path d="M318 476 L350 494" stroke-width="22"/>
-    <path d="M410 404 L428 438" stroke-width="22"/>
-    <path d="M512 380 L514 420" stroke-width="22"/>
-    <path d="M614 404 L596 438" stroke-width="22"/>
-    <path d="M706 476 L674 494" stroke-width="22"/>
-    <path d="M740 600 L702 596" stroke-width="22"/>
-    <!-- needle ~40% -->
-    <path d="M512 640 L430 426" stroke="#C4603F" stroke-width="34"/>
-  </g>
-  <!-- sparkle at pivot -->
-  <g filter="url(#rough)" stroke="#D97757" stroke-width="22" stroke-linecap="round">
-    <circle cx="512" cy="640" r="44" fill="#2B2522" stroke="none"/>
-    <path d="M512 586 L512 694 M458 640 L566 640 M474 602 L550 678 M550 602 L474 678"/>
-  </g>
+  <g filter="url(#rough)">
+    <g transform="translate(718 244) rotate(26)"><path d="M0 -92.0 C18.0 -60.0 40.0 -24.0 40.0 0 A40.0 40.0 0 0 1 -40.0 0 C-40.0 -24.0 -18.0 -60.0 0 -92.0 Z" fill="#5FA8D8" stroke="#2B2522" stroke-width="11" stroke-linejoin="round"/><path d="M-18.0 -4.0 C-18.0 -20.0 -12.0 -32.0 -6.0 -40.0" stroke="#FAF5EC" stroke-width="9" stroke-linecap="round" fill="none" opacity="0.85"/></g>
+    <g transform="translate(788 330) rotate(34)"><path d="M0 -57.5 C11.2 -37.5 25.0 -15.0 25.0 0 A25.0 25.0 0 0 1 -25.0 0 C-25.0 -15.0 -11.2 -37.5 0 -57.5 Z" fill="#5FA8D8" stroke="#2B2522" stroke-width="9" stroke-linejoin="round"/><path d="M-11.2 -2.5 C-11.2 -12.5 -7.5 -20.0 -3.8 -25.0" stroke="#FAF5EC" stroke-width="6" stroke-linecap="round" fill="none" opacity="0.85"/></g>
   </g>
 </svg>
