@@ -41,8 +41,8 @@
     </g>
   </g></g>
   <g filter="url(#rough)">
-    <path d="M200 773 L770 773" stroke="#2B2522" stroke-width="24" stroke-linecap="round" stroke-dasharray="40 30" fill="none"/>
-    <circle cx="804" cy="773" r="34" fill="#2B2522"/>
+    <path d="M200 600 L770 600" stroke="#2B2522" stroke-width="24" stroke-linecap="round" stroke-dasharray="40 30" fill="none"/>
+    <circle cx="804" cy="600" r="34" fill="#2B2522"/>
   </g>
   <g filter="url(#rough)">
     <g transform="translate(718 244) rotate(26)"><path d="M0 -92.0 C18.0 -60.0 40.0 -24.0 40.0 0 A40.0 40.0 0 0 1 -40.0 0 C-40.0 -24.0 -18.0 -60.0 0 -92.0 Z" fill="#5FA8D8" stroke="#2B2522" stroke-width="11" stroke-linejoin="round"/><path d="M-18.0 -4.0 C-18.0 -20.0 -12.0 -32.0 -6.0 -40.0" stroke="#FAF5EC" stroke-width="9" stroke-linecap="round" fill="none" opacity="0.85"/></g>
