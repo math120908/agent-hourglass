@@ -67,15 +67,17 @@ public struct ClaudePKCEFlow: Sendable {
               let access = j["access_token"] as? String
         else { throw ProviderError.http(status: resp.statusCode, host: ClaudeOAuth.tokenURL.host() ?? "", retryAfter: nil) }
         let now = Date()
+        let account = j["account"] as? [String: Any]
         let cred = Credential(
             kind: .claude,
             access: Secret(access),
             refresh: (j["refresh_token"] as? String).map(Secret.init),
             expiresAt: (j["expires_in"] as? Double).map { now.addingTimeInterval($0) },
             refreshExpiresAt: (j["refresh_token_expires_in"] as? Double).map { now.addingTimeInterval($0) },
-            scopes: ((j["scope"] as? String) ?? ClaudeOAuth.scope).split(separator: " ").map(String.init)
+            scopes: ((j["scope"] as? String) ?? ClaudeOAuth.scope).split(separator: " ").map(String.init),
+            accountEmail: account?["email_address"] as? String
         )
-        guard let id = (j["account"] as? [String: Any])?["uuid"] as? String else {
+        guard let id = account?["uuid"] as? String else {
             throw ProviderError.schema(keys: j.keys.sorted())
         }
         return (cred, id)

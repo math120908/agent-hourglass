@@ -12,6 +12,8 @@ public struct Credential: Sendable, Equatable, Codable, CustomStringConvertible,
     /// Server hint (Codex `earliest_refresh_at`): do not refresh before this unless expired.
     /// Kept out of description and mirror.
     public var earliestRefreshAt: Date?
+    /// Login email from the token response (Claude); the default account name. Kept out of description and mirror.
+    public var accountEmail: String?
 
     public init(
         kind: ProviderKind,
@@ -21,7 +23,8 @@ public struct Credential: Sendable, Equatable, Codable, CustomStringConvertible,
         refreshExpiresAt: Date?,
         scopes: [String],
         remoteAccountID: String? = nil,
-        earliestRefreshAt: Date? = nil
+        earliestRefreshAt: Date? = nil,
+        accountEmail: String? = nil
     ) {
         self.kind = kind
         self.access = access
@@ -31,6 +34,7 @@ public struct Credential: Sendable, Equatable, Codable, CustomStringConvertible,
         self.scopes = scopes
         self.remoteAccountID = remoteAccountID
         self.earliestRefreshAt = earliestRefreshAt
+        self.accountEmail = accountEmail
     }
 
     public var description: String {

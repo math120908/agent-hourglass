@@ -175,7 +175,7 @@ final class UsageEngine {
     /// Adds the read-only Claude Code (local) account. The first poll triggers the Keychain prompt.
     func addClaudeCodeLocal() async throws -> AccountID {
         guard let service, let registry else { throw AccountServiceError.unknownAccount }
-        let id = try await service.addClaudeCodeLocal()
+        let id = try await service.addClaudeCodeLocal(name: ClaudeCodeProfile.userName())
         publish(await registry.accounts())
         return id
     }

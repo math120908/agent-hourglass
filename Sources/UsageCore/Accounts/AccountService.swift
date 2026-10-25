@@ -144,18 +144,20 @@ public actor AccountService {
     }
 
     /// Adds the read-only Claude Code (local) account. Writes only the registry; the first poll reads the Keychain.
+    /// `name` is the user name Claude Code reports (Mac: `ClaudeCodeProfile`); nil keeps the old or default name.
     @discardableResult
-    public func addClaudeCodeLocal() async throws -> AccountID {
+    public func addClaudeCodeLocal(name: String? = nil) async throws -> AccountID {
         let id = AccountID.claudeCodeLocal
         let existing = await registry.accounts().first { $0.id == id }
         try await registry.upsert(AccountEntry(
             id: id,
             kind: .claude,
-            displayName: existing?.displayName ?? "Claude Code",
+            displayName: AccountEntry.resolvedName(existing: existing, auto: name, fallback: "Claude Code"),
             remoteLogin: "Claude Code (local, read-only)",
             order: existing?.order ?? 0,
             addedAt: existing?.addedAt ?? now(),
-            status: "ok"
+            status: "ok",
+            nameIsCustom: existing?.nameIsCustom ?? false
         ))
         if existing != nil { await poller.remove(client: id) }
         if let client = makeClient(id) { await poller.add(client: client) }
@@ -215,16 +217,19 @@ public actor AccountService {
     }
 
     private func commitClaude(_ cred: Credential, id: AccountID) async throws {
-        try await commit(cred, id: id, kind: .claude, defaultName: { "Claude #\($0)" }, remoteLogin: nil)
+        let email = cred.accountEmail.flatMap { $0.isEmpty ? nil : $0 }
+        try await commit(cred, id: id, kind: .claude, defaultName: { email ?? "Claude #\($0)" }, autoName: email, remoteLogin: nil)
     }
 
     /// Keychain → registry → poller. Number = position among accounts of `kind`; an existing entry keeps
-    /// displayName/order/addedAt; a non-nil `remoteLogin` overrides the stored one.
+    /// order/addedAt and a user-renamed displayName; a non-nil `autoName` replaces an un-renamed one;
+    /// a non-nil `remoteLogin` overrides the stored one.
     private func commit(
         _ cred: Credential,
         id: AccountID,
         kind: ProviderKind,
         defaultName: (Int) -> String,
+        autoName: String? = nil,
         remoteLogin: String?
     ) async throws {
         let accounts = await registry.accounts()
@@ -235,11 +240,12 @@ public actor AccountService {
         try await registry.upsert(AccountEntry(
             id: id,
             kind: kind,
-            displayName: existing?.displayName ?? defaultName(number),
+            displayName: AccountEntry.resolvedName(existing: existing, auto: autoName, fallback: defaultName(number)),
             remoteLogin: remoteLogin ?? existing?.remoteLogin,
             order: existing?.order ?? 0,
             addedAt: existing?.addedAt ?? now(),
-            status: "ok"
+            status: "ok",
+            nameIsCustom: existing?.nameIsCustom ?? false
         ))
         if existing != nil { await poller.remove(client: id) }
         if let client = makeClient(id) { await poller.add(client: client) }

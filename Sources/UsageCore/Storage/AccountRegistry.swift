@@ -8,8 +8,19 @@ public struct AccountEntry: Codable, Equatable, Sendable {
     public var order: Int
     public var addedAt: Date
     public var status: String
+    /// True once the user renamed the account; an auto-derived name never overwrites it.
+    public var nameIsCustom: Bool
 
-    public init(id: AccountID, kind: ProviderKind, displayName: String, remoteLogin: String?, order: Int, addedAt: Date, status: String) {
+    public init(
+        id: AccountID,
+        kind: ProviderKind,
+        displayName: String,
+        remoteLogin: String?,
+        order: Int,
+        addedAt: Date,
+        status: String,
+        nameIsCustom: Bool = false
+    ) {
         self.id = id
         self.kind = kind
         self.displayName = displayName
@@ -17,6 +28,26 @@ public struct AccountEntry: Codable, Equatable, Sendable {
         self.order = order
         self.addedAt = addedAt
         self.status = status
+        self.nameIsCustom = nameIsCustom
+    }
+
+    /// Registries written before `nameIsCustom` existed decode it as false.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(AccountID.self, forKey: .id)
+        kind = try c.decode(ProviderKind.self, forKey: .kind)
+        displayName = try c.decode(String.self, forKey: .displayName)
+        remoteLogin = try c.decodeIfPresent(String.self, forKey: .remoteLogin)
+        order = try c.decode(Int.self, forKey: .order)
+        addedAt = try c.decode(Date.self, forKey: .addedAt)
+        status = try c.decode(String.self, forKey: .status)
+        nameIsCustom = try c.decodeIfPresent(Bool.self, forKey: .nameIsCustom) ?? false
+    }
+
+    /// The name to store: a user rename always wins; otherwise `auto` (when known), else the old name, else `fallback`.
+    public static func resolvedName(existing: AccountEntry?, auto: String?, fallback: String) -> String {
+        if let existing, existing.nameIsCustom { return existing.displayName }
+        return auto ?? existing?.displayName ?? fallback
     }
 }
 
@@ -99,6 +130,7 @@ public actor AccountRegistry {
         guard let i = entries.firstIndex(where: { $0.id == id }) else { throw AccountRegistryError.unknownAccount }
         var next = entries
         next[i].displayName = trimmed
+        next[i].nameIsCustom = true
         try commit(next, menuBar: menuBarAccountID)
     }
 

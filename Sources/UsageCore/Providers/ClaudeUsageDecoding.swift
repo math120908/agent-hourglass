@@ -91,8 +91,9 @@ extension ClaudeProvider {
             refresh: (j["refresh_token"] as? String).map(Secret.init),
             expiresAt: number(j["expires_in"]).map { now.addingTimeInterval($0) },
             refreshExpiresAt: number(j["refresh_token_expires_in"]).map { now.addingTimeInterval($0) },
-            scopes: scopes
+            scopes: scopes,
+            accountEmail: account["email_address"] as? String
         )
-        return (cred, id, account["email_address"] as? String)
+        return (cred, id, cred.accountEmail)
     }
 }
