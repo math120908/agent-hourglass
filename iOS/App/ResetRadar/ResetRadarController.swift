@@ -33,6 +33,8 @@ final class ResetRadarController: NSObject, UNUserNotificationCenterDelegate {
             notifyCredits: defaults.bool(forKey: Self.notifyCreditsKey)
         )
         super.init()
+        // Set before launch completes so a cold-launch notification tap is delivered.
+        if feed != nil { UNUserNotificationCenter.current().delegate = self }
     }
 
     nonisolated static var userAgent: String {
@@ -68,7 +70,6 @@ final class ResetRadarController: NSObject, UNUserNotificationCenterDelegate {
 
     /// Must run before the app finishes launching.
     func registerBackgroundTask() {
-        UNUserNotificationCenter.current().delegate = self
         isRegistered = true
         BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.taskID, using: nil) { [weak self] task in
             nonisolated(unsafe) let task = task
@@ -108,22 +109,31 @@ final class ResetRadarController: NSObject, UNUserNotificationCenterDelegate {
         let toNotify = await feed.check(settings: settings)
         events = await feed.events
         guard settings.notify, !toNotify.isEmpty else { return }
-        await post(toNotify)
+        let posted = await post(toNotify)
+        await feed.markNotified(posted)
     }
 
-    private func post(_ events: [ResetEvent]) async {
+    /// Posts `events` and returns those whose request was accepted; [] when authorization is denied.
+    private func post(_ events: [ResetEvent]) async -> [ResetEvent] {
         let center = UNUserNotificationCenter.current()
         guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else {
             Self.log.info("notification authorization not granted")
-            return
+            return []
         }
+        var posted: [ResetEvent] = []
         for e in events {
             let content = UNMutableNotificationContent()
             content.title = e.kind == .credits ? "Codex credits event" : "Codex usage reset 🎉"
             content.body = Self.truncated(e.summary, 140)
             if let url = e.url { content.userInfo = ["url": url.absoluteString] }
-            try? await center.add(UNNotificationRequest(identifier: "reset-radar.\(e.dedupeKey)", content: content, trigger: nil))
+            do {
+                try await center.add(UNNotificationRequest(identifier: "reset-radar.\(e.dedupeKey)", content: content, trigger: nil))
+                posted.append(e)
+            } catch {
+                Self.log.error("notification post failed: \(error.localizedDescription, privacy: .public)")
+            }
         }
+        return posted
     }
 
     nonisolated static func truncated(_ s: String, _ n: Int) -> String {
