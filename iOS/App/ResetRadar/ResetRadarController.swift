@@ -21,11 +21,29 @@ final class ResetRadarController: NSObject, UNUserNotificationCenterDelegate {
     @ObservationIgnored private let defaults: UserDefaults
     /// Submitting an unregistered id throws an ObjC exception, so scheduling waits for registration.
     @ObservationIgnored private var isRegistered = false
+    @ObservationIgnored private let auth: NotificationAuth
 
-    init(events: [ResetEvent] = [], feed: ResetRadarFeed? = nil, defaults: UserDefaults = .standard) {
+    /// Notification authorization seam; tests inject a fake.
+    struct NotificationAuth: Sendable {
+        var status: @Sendable () async -> UNAuthorizationStatus
+        var request: @Sendable () async -> Void
+
+        static let live = NotificationAuth(
+            status: { await UNUserNotificationCenter.current().notificationSettings().authorizationStatus },
+            request: { _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) }
+        )
+    }
+
+    init(
+        events: [ResetEvent] = [],
+        feed: ResetRadarFeed? = nil,
+        defaults: UserDefaults = .standard,
+        auth: NotificationAuth = .live
+    ) {
         self.events = events
         self.feed = feed
         self.defaults = defaults
+        self.auth = auth
         Self.registerDefaults(defaults)
         settings = ResetRadarSettings(
             show: defaults.bool(forKey: Self.showKey),
@@ -61,7 +79,7 @@ final class ResetRadarController: NSObject, UNUserNotificationCenterDelegate {
             defaults.set(settings.notify, forKey: Self.notifyKey)
             defaults.set(settings.notifyCredits, forKey: Self.notifyCreditsKey)
             if settings.notify, !oldValue.notify {
-                Task { _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) }
+                Task { [auth] in await auth.request() }
             }
         }
     }
@@ -98,7 +116,9 @@ final class ResetRadarController: NSObject, UNUserNotificationCenterDelegate {
     }
 
     /// Foreground check (throttled to 60 s inside the feed), then re-arm the background task.
+    /// `notify` defaults on, so the first prompt is asked here; a background task cannot show it.
     func sceneBecameActive() async {
+        if settings.notify, await auth.status() == .notDetermined { await auth.request() }
         await refreshNow()
         scheduleBackgroundRefresh()
     }
@@ -113,10 +133,11 @@ final class ResetRadarController: NSObject, UNUserNotificationCenterDelegate {
         await feed.markNotified(posted)
     }
 
-    /// Posts `events` and returns those whose request was accepted; [] when authorization is denied.
+    /// Posts `events` and returns those whose request was accepted; [] when not authorized.
+    /// Never prompts: this may run inside the BGAppRefreshTask.
     private func post(_ events: [ResetEvent]) async -> [ResetEvent] {
         let center = UNUserNotificationCenter.current()
-        guard (try? await center.requestAuthorization(options: [.alert, .sound])) == true else {
+        guard [.authorized, .provisional].contains(await auth.status()) else {
             Self.log.info("notification authorization not granted")
             return []
         }

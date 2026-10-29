@@ -1,4 +1,5 @@
 import Foundation
+import UserNotifications
 import Testing
 import UsageCore
 @testable import AgentHourglass
@@ -45,4 +46,26 @@ import UsageCore
     let e = c.entries(calendar: cal)
     #expect(e.map(\.meta) == ["Oct 28 06:35 | confirmed", "Oct 26"])
     #expect(e[1].isCredits)
+}
+
+@MainActor @Test(arguments: [
+    (true, UNAuthorizationStatus.notDetermined, 1),
+    (true, UNAuthorizationStatus.denied, 0),
+    (true, UNAuthorizationStatus.authorized, 0),
+    (false, UNAuthorizationStatus.notDetermined, 0),
+])
+func resetRadarForegroundAsksPermissionOnlyWhenUndetermined(notify: Bool, status: UNAuthorizationStatus, asks: Int) async {
+    let requests = Counter()
+    let auth = ResetRadarController.NotificationAuth(status: { status }, request: { await requests.bump() })
+    let c = ResetRadarController(defaults: UserDefaults(suiteName: "test.\(UUID().uuidString)")!, auth: auth)
+    if !notify { c.settings.notify = false }
+    await requests.reset()
+    await c.sceneBecameActive()
+    #expect(await requests.value == asks)
+}
+
+private actor Counter {
+    var value = 0
+    func bump() { value += 1 }
+    func reset() { value = 0 }
 }
