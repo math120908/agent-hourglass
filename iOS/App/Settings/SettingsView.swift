@@ -2,23 +2,25 @@ import SwiftUI
 import UIKit
 import UsageCore
 
-/// Settings screen (spec §10.5): Accounts, Appearance, Refresh, About. No section footers.
+/// Settings screen (spec §10.5): Accounts, Appearance, Refresh, Codex reset radar, About.
 struct SettingsView: View {
     let model: AppModel
     @Bindable var display: DisplaySettingsStore
     @Bindable var themes: ThemeStore
+    let radar: ResetRadarController
     @Environment(\.appTheme) private var theme
     @State private var pendingRemove: AccountEntry?
     @State private var editMode: EditMode
 
-    init(model: AppModel, display: DisplaySettingsStore, themes: ThemeStore) {
-        self.init(model: model, display: display, themes: themes, editMode: .inactive)
+    init(model: AppModel, display: DisplaySettingsStore, themes: ThemeStore, radar: ResetRadarController) {
+        self.init(model: model, display: display, themes: themes, radar: radar, editMode: .inactive)
     }
 
-    init(model: AppModel, display: DisplaySettingsStore, themes: ThemeStore, editMode: EditMode) {
+    init(model: AppModel, display: DisplaySettingsStore, themes: ThemeStore, radar: ResetRadarController, editMode: EditMode) {
         self.model = model
         self.display = display
         self.themes = themes
+        self.radar = radar
         _editMode = State(initialValue: editMode)
     }
 
@@ -51,6 +53,15 @@ struct SettingsView: View {
                 .listRowBackground(rowBackground)
             }
             Section {
+                Toggle("Show reset radar", isOn: radarBinding(\.show)).listRowBackground(rowBackground)
+                Toggle("Reset notifications", isOn: radarBinding(\.notify)).listRowBackground(rowBackground)
+                Toggle("Credits events too", isOn: radarBinding(\.notifyCredits)).listRowBackground(rowBackground)
+            } header: {
+                Text("Codex reset radar")
+            } footer: {
+                Text("Data from codex-reset.com, checked about hourly in the background; iOS decides exact timing.")
+            }
+            Section {
                 NavigationLink("About") { AboutView(diagnostics: model.diagnosticsReport) }
                     .listRowBackground(rowBackground)
             }
@@ -68,6 +79,10 @@ struct SettingsView: View {
             get: { display.settings.refreshMinutes },
             set: { m in Task { await model.setRefreshMinutes(m) } }
         )
+    }
+
+    private func radarBinding(_ key: WritableKeyPath<ResetRadarSettings, Bool>) -> Binding<Bool> {
+        Binding(get: { radar.settings[keyPath: key] }, set: { radar.settings[keyPath: key] = $0 })
     }
 
     private var rowBackground: Color? {

@@ -16,6 +16,20 @@ enum HomeSnapshots {
             return home(state)
         },
         SnapshotScene(name: "home-empty", size: .device) { _ in home(AppState(), entries: []) },
+        SnapshotScene(name: "home-reset-radar", size: .device) { _ in
+            let defaults = UserDefaults(suiteName: "snapshot-radar-\(UUID().uuidString)")!
+            let radar = ResetRadarController(events: Fixtures.resetEvents, defaults: defaults)
+            let open = CardAccessory { kind, now, calendar, padding in
+                guard kind == .codex else { return AnyView(EmptyView()) }
+                return AnyView(VStack(spacing: 0) {
+                    GlassDivider()
+                    ResetRadarRow(controller: radar, now: now, calendar: calendar, horizontalPadding: padding, isOpen: true)
+                })
+            }
+            return AnyView(home(Fixtures.appState(), entries: [Fixtures.mewtwo, Fixtures.snorlax].compactMap { id in
+                Fixtures.entries.first { $0.id == id }
+            }).environment(\.cardAccessory, open))
+        },
     ]
 
     @MainActor private static func home(_ state: AppState, entries: [AccountEntry] = Fixtures.entries) -> AnyView {

@@ -42,6 +42,8 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         GitCommit: $(GIT_COMMIT)
         AHKeychainAccessGroup: $(TeamIdentifierPrefix)cc.kuoc.agent-hourglass.shared
+        BGTaskSchedulerPermittedIdentifiers: [cc.kuoc.agent-hourglass.reset-radar]
+        UIBackgroundModes: [fetch]
         CFBundleURLTypes:
           - CFBundleURLName: cc.kuoc.agent-hourglass.ios
             CFBundleURLSchemes: [agenthourglass]
