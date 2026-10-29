@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let themeStore = ThemeStore()
     private var statusItem: StatusItemController?
     private var engine: UsageEngine?
+    private let radar = ResetRadarController.live()
 
     init(lock: InstanceLock) {
         self.lock = lock
@@ -18,8 +19,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let engine = UsageEngine(appState: appState)
         self.engine = engine
-        statusItem = StatusItemController(appState: appState, themeStore: themeStore, engine: engine)
+        statusItem = StatusItemController(appState: appState, themeStore: themeStore, engine: engine, radar: radar)
         engine.start()
+        radar.start()
         if LoginItem(service: MainAppLoginService()).reconcile() {
             Logger(subsystem: "cc.kuoc.agent-hourglass", category: "Migration").info("launch at login re-registered")
         }

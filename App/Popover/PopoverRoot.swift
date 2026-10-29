@@ -6,17 +6,20 @@ struct PopoverRoot: View {
     var theme: Theme
     var content: () -> PopoverContent
     var actions = PopoverActions()
+    var radar: ResetRadarController?
     @State private var expanded: Set<AccountID>
 
     init(
         theme: Theme,
         initiallyExpanded: Set<AccountID> = [],
         actions: PopoverActions = PopoverActions(),
+        radar: ResetRadarController? = nil,
         content: @escaping () -> PopoverContent
     ) {
         self.theme = theme
         self.content = content
         self.actions = actions
+        self.radar = radar
         _expanded = State(initialValue: initiallyExpanded)
     }
 
@@ -27,6 +30,7 @@ struct PopoverRoot: View {
             case .instrument: InstrumentPopoverBody(content: content(), expanded: $expanded, actions: actions)
             }
         }
+        .environment(\.resetRadar, radar)
         .onReceive(NotificationCenter.default.publisher(for: .popoverWillOpen)) { _ in
             expanded = Set(content().accounts.map(\.id))
         }

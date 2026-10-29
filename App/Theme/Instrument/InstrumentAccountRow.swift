@@ -8,6 +8,8 @@ struct InstrumentAccountRow: View {
     @Binding var isExpanded: Bool
     var onSignIn: () -> Void = {}
     var onDiagnostics: () -> Void = {}
+    var now: Date = .now
+    var calendar: Calendar = .current
 
     @Environment(\.colorScheme) private var scheme
 
@@ -37,6 +39,7 @@ struct InstrumentAccountRow: View {
                     .opacity(dimOpacity)
                     .transition(.opacity)
             }
+            ResetRadarSlot(kind: account.kind, now: now, calendar: calendar, horizontalPadding: 14)
         }
     }
 

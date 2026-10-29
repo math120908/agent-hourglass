@@ -6,6 +6,9 @@ import UsageCoreMac
 struct GeneralTab: View {
     @Bindable var model: SettingsModel
     @AppStorage(ThemeStore.key) private var theme: Theme = .default
+    @AppStorage(ResetRadarController.showKey) private var radarShow = true
+    @AppStorage(ResetRadarController.notifyKey) private var radarNotify = true
+    @AppStorage(ResetRadarController.notifyCreditsKey) private var radarCredits = false
     @State private var loginItem = LoginItem(service: MainAppLoginService())
 
     var body: some View {
@@ -47,6 +50,14 @@ struct GeneralTab: View {
                 if let err = loginItem.lastError {
                     Text(err).font(.system(size: 11)).foregroundStyle(.red)
                 }
+            }
+            Section("Codex reset radar") {
+                Toggle("Show reset radar", isOn: $radarShow)
+                Toggle("Reset notifications", isOn: $radarNotify)
+                Toggle("Credits events too", isOn: $radarCredits)
+                    .disabled(!radarNotify)
+                Text("Checks codex-reset.com about once an hour.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
