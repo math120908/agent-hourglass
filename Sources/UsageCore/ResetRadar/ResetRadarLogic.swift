@@ -66,10 +66,17 @@ public enum ResetRadarLogic {
             day: day,
             kind: kind,
             summary: cleanSummary(o["summary"] as? String ?? ""),
-            url: (o["url"] as? String).flatMap(URL.init(string:)),
+            url: safeURL(o["url"]),
             at: date(o["announced_at"]) ?? date(o["observed_at"]),
             confirmed: o["confirmed"] as? Bool ?? false
         )
+    }
+
+    /// Feed URLs are untrusted: keep only http(s).
+    private static func safeURL(_ value: Any?) -> URL? {
+        guard let s = value as? String, let url = URL(string: s),
+              let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return nil }
+        return url
     }
 
     private static func date(_ value: Any?) -> Date? {

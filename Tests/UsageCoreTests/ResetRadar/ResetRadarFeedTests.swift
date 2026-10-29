@@ -70,7 +70,35 @@ struct ResetRadarFeedTests {
         let notify = await Self.feed(t, storage, RadarClock(Self.start)).check(settings: ResetRadarSettings())
         #expect(notify.map(\.dedupeKey).contains("reset|2026-10-28"))
         #expect(!notify.contains { $0.kind == .credits })
+        #expect(storage.seenKeys()?.contains("reset|2026-10-28") == false)
+    }
+
+    @Test func pendingNotPersistedUntilMarked() async throws {
+        let storage = MemoryResetRadarStorage(["reset|2026-10-26"])
+        let t = ScriptedTransport([(200, try Self.timeline(), [:]), (200, try Self.timeline(), [:])])
+        let clock = RadarClock(Self.start)
+        let feed = Self.feed(t, storage, clock)
+        let first = await feed.check(settings: ResetRadarSettings())
+        #expect(first.map(\.dedupeKey).contains("reset|2026-10-28"))
+        #expect(storage.seenKeys()?.contains("reset|2026-10-28") == false)
+        #expect(storage.seenKeys()?.contains { $0.hasPrefix("credits|") } == true)
+        clock.advance(3600)
+        let retry = await feed.check(settings: ResetRadarSettings())
+        #expect(retry.map(\.dedupeKey) == first.map(\.dedupeKey))
+    }
+
+    @Test func markNotifiedPersists() async throws {
+        let storage = MemoryResetRadarStorage(["reset|2026-10-26"])
+        let t = ScriptedTransport([(200, try Self.timeline(), [:]), (200, try Self.timeline(), [:])])
+        let clock = RadarClock(Self.start)
+        let feed = Self.feed(t, storage, clock)
+        let first = await feed.check(settings: ResetRadarSettings())
+        #expect(!first.isEmpty)
+        await feed.markNotified(first)
         #expect(storage.seenKeys()?.contains("reset|2026-10-28") == true)
+        #expect(storage.seenKeys()?.contains("reset|2026-10-26") == true)
+        clock.advance(3600)
+        #expect(await feed.check(settings: ResetRadarSettings()).isEmpty)
     }
 
     @Test func notifyOffStillAdvancesSeen() async throws {
@@ -106,6 +134,16 @@ struct ResetRadarFeedTests {
         _ = await feed.check(settings: ResetRadarSettings())
         #expect(t.requests.count == 2)
         #expect(await feed.events.count == 5)
+    }
+
+    @Test func rateLimitedWithoutRetryAfterBlocks60s() async throws {
+        let t = ScriptedTransport([(429, "", [:]), (200, try Self.timeline(), [:])])
+        let clock = RadarClock(Self.start)
+        let feed = Self.feed(t, MemoryResetRadarStorage(), clock)
+        _ = await feed.check(settings: ResetRadarSettings())
+        clock.advance(60)
+        _ = await feed.check(settings: ResetRadarSettings())
+        #expect(t.requests.count == 2)
     }
 
     @Test func userDefaultsStorageRoundTrip() throws {

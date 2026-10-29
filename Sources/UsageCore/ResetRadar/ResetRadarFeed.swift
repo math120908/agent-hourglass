@@ -60,6 +60,9 @@ public actor ResetRadarFeed {
     /// Fetches once (no-op returning [] if the last attempt was < 60 s ago or a 429 back-off is
     /// active), updates `events`, and returns the events to notify. Never throws: on failure the
     /// previous `events` are kept and nothing is notified.
+    ///
+    /// Persists every seen key except those of the returned events; the caller commits those via
+    /// `markNotified(_:)` once the notification is posted, so a failed post retries next check.
     public func check(settings: ResetRadarSettings) async -> [ResetEvent] {
         let start = now()
         if let lastAttempt, start.timeIntervalSince(lastAttempt) < Self.minimumGap { return [] }
@@ -75,7 +78,8 @@ public actor ResetRadarFeed {
             let (data, _) = try await http.send(request, bearer: nil)
             all = try ResetRadarLogic.decode(data)
         } catch ProviderError.rateLimited(let retryAfter) {
-            blockedUntil = retryAfter.map { start.addingTimeInterval(TimeInterval($0.components.seconds)) }
+            let wait = retryAfter.map { TimeInterval($0.components.seconds) } ?? 0
+            blockedUntil = start.addingTimeInterval(max(wait, Self.minimumGap))
             return []
         } catch {
             return []
@@ -83,7 +87,18 @@ public actor ResetRadarFeed {
 
         events = ResetRadarLogic.merged(all)
         let result = ResetRadarLogic.pending(all, seen: storage.seenKeys(), includeCredits: settings.notifyCredits)
-        storage.setSeenKeys(result.seen)
-        return settings.notify ? result.notify : []
+        guard settings.notify else {
+            storage.setSeenKeys(result.seen)
+            return []
+        }
+        storage.setSeenKeys(result.seen.subtracting(result.notify.map(\.dedupeKey)))
+        return result.notify
+    }
+
+    /// Records `events` (as returned by `check`) as seen. Call only after their notifications were
+    /// posted successfully.
+    public func markNotified(_ events: [ResetEvent]) {
+        guard !events.isEmpty else { return }
+        storage.setSeenKeys((storage.seenKeys() ?? []).union(events.map(\.dedupeKey)))
     }
 }

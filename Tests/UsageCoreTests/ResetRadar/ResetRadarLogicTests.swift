@@ -40,6 +40,20 @@ struct ResetRadarLogicTests {
         #expect(events[1].at == ISO8601DateFormatter().date(from: "2026-10-03T01:02:03Z"))
     }
 
+    @Test func decodeDropsNonHttpURLs() throws {
+        let body = #"""
+        {"events":[
+          {"id":"a","date":"2026-10-01","type":"reset","summary":"","url":"file:///etc/passwd","confirmed":true},
+          {"id":"b","date":"2026-10-02","type":"reset","summary":"","url":"javascript:alert(1)","confirmed":true},
+          {"id":"c","date":"2026-10-03","type":"reset","summary":"","url":"myapp://open","confirmed":true},
+          {"id":"d","date":"2026-10-04","type":"reset","summary":"","url":"https://x.com/a","confirmed":true},
+          {"id":"e","date":"2026-10-05","type":"reset","summary":"","url":"HTTP://x.com/b","confirmed":true}
+        ]}
+        """#
+        let urls = try ResetRadarLogic.decode(Data(body.utf8)).map(\.url)
+        #expect(urls == [nil, nil, nil, URL(string: "https://x.com/a"), URL(string: "HTTP://x.com/b")])
+    }
+
     @Test func summaryDecodesEntities() throws {
         let body = #"{"events":[{"id":"a","date":"2026-10-01","type":"reset","summary":"A &amp; B\n\nC","confirmed":true}]}"#
         let summary = try ResetRadarLogic.decode(Data(body.utf8)).first?.summary
