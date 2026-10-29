@@ -26,7 +26,7 @@ Screenshots use fixture data with placeholder account names (Snorlax, pikachu-de
 
 Requires macOS 14 or later.
 
-1. Download `AgentHourglass-<version>.zip` from [Releases](https://github.com/math120908/agent-hourglass/releases) (latest: v1.0.16).
+1. Download `AgentHourglass-<version>.zip` from [Releases](https://github.com/math120908/agent-hourglass/releases) (latest: v1.0.20).
 2. Unzip and move `AgentHourglass.app` to `~/Applications` or `/Applications`.
 3. Open it. The app is signed with Developer ID and notarized by Apple, so it opens without a Gatekeeper warning. It lives in the menu bar (no Dock icon).
 
