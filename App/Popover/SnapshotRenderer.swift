@@ -16,6 +16,13 @@ enum SnapshotRenderer {
                 write(root, appearance: appearance, to: dir.appendingPathComponent("popover-\(mode)-\(state).png"))
             }
         }
+        let radar = Fixtures.resetRadar()
+        let codexOnly = PopoverContent(accounts: content.accounts.filter { $0.kind == .codex }, isOffline: false, now: content.now, calendar: content.calendar)
+        for (mode, appearance) in [("", NSAppearance.Name.aqua), ("-dark", .darkAqua)] {
+            let root = PopoverRoot(theme: .glass, initiallyExpanded: Set(codexOnly.accounts.map(\.id)), radar: radar) { codexOnly }
+                .environment(\.resetRadarInitiallyOpen, true)
+            write(root, appearance: appearance, to: dir.appendingPathComponent("popover-reset-radar\(mode).png"))
+        }
         SettingsSnapshotRenderer.render(to: dir)
         renderCopilotAdd(to: dir)
         exit(0)

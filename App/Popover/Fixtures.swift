@@ -71,4 +71,23 @@ enum Fixtures {
             calendar: calendar
         )
     }
+
+    /// Mirrors the mockup timeline (section A): newest first, one credits event, one unconfirmed live entry.
+    static func resetEvents(now: Date = Fixtures.now) -> [ResetEvent] {
+        let url = URL(string: "https://codex-reset.com")
+        func ev(_ id: String, _ day: String, _ kind: ResetEvent.Kind, _ hoursAgo: Double, _ confirmed: Bool, _ summary: String) -> ResetEvent {
+            ResetEvent(id: id, day: day, kind: kind, summary: summary, url: url, at: now.addingTimeInterval(-hoursAgo * 3600), confirmed: confirmed)
+        }
+        return [
+            ev("e1", "2026-10-20", .reset, 1.5, false, "Rate limits reset for all Plus & Pro users (live, awaiting confirmation)."),
+            ev("e2", "2026-10-19", .reset, 26, true, "Tibo: we reset Codex usage limits for everyone after the outage."),
+            ev("e3", "2026-10-17", .reset, 74, true, "Usage limits reset across Codex plans."),
+            ev("e4", "2026-10-16", .credits, 98, true, "Bonus credits granted to Pro accounts this week."),
+            ev("e5", "2026-10-15", .reset, 122, true, "Weekly limits reset early for all users."),
+        ]
+    }
+
+    @MainActor static func resetRadar(now: Date = Fixtures.now) -> ResetRadarController {
+        ResetRadarController(events: resetEvents(now: now))
+    }
 }

@@ -28,7 +28,9 @@ struct GlassPopoverBody: View {
                             card: account.card(now: content.now, calendar: content.calendar),
                             isExpanded: binding(account.id),
                             onSignIn: { actions.signIn(account.id) },
-                            onDiagnostics: actions.diagnostics
+                            onDiagnostics: actions.diagnostics,
+                            now: content.now,
+                            calendar: content.calendar
                         )
                     }
                 }

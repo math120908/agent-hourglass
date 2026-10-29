@@ -7,6 +7,8 @@ struct GlassAccountCard: View {
     @Binding var isExpanded: Bool
     var onSignIn: () -> Void = {}
     var onDiagnostics: () -> Void = {}
+    var now: Date = .now
+    var calendar: Calendar = .current
 
     @Environment(\.colorScheme) private var scheme
 
@@ -61,6 +63,7 @@ struct GlassAccountCard: View {
                 }
                 .transition(.opacity)
             }
+            ResetRadarSlot(kind: account.kind, now: now, calendar: calendar)
         }
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)

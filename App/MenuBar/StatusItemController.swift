@@ -23,7 +23,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private var menuActions = PopoverActions()
     private var makeRoot: (Theme) -> PopoverRoot = { PopoverRoot(theme: $0) { Fixtures.content() } }
 
-    init(appState: AppState, themeStore: ThemeStore, engine: UsageEngine) {
+    init(appState: AppState, themeStore: ThemeStore, engine: UsageEngine, radar: ResetRadarController) {
         self.appState = appState
         self.themeStore = themeStore
         self.engine = engine
@@ -73,12 +73,14 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             },
             resize: { [weak self] height in self?.resize(to: height) }
         )
+        let radar = useFixture ? Fixtures.resetRadar() : radar
         makeRoot = { [appState] theme in
             let content = useFixture ? Fixtures.content(now: Date()) : PopoverContent.live(appState)
             return PopoverRoot(
                 theme: theme,
                 initiallyExpanded: Set(content.accounts.map(\.id)),
-                actions: actions
+                actions: actions,
+                radar: radar
             ) { useFixture ? Fixtures.content(now: Date()) : PopoverContent.live(appState) }
         }
         let host = NSHostingController(rootView: makeRoot(themeStore.theme))

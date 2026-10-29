@@ -72,6 +72,10 @@ Settings > Accounts > **Add Account** menu (the list refreshes as soon as an acc
 - **Claude Code (local, read-only)** (Add Account > Claude > Claude Code (local, read-only)) reuses the login Claude Code keeps in your Keychain. macOS asks once for access: click **Always Allow**. The app only reads that item on each poll, keeps the token in memory, and never writes, refreshes, or changes it. When the token is near expiry it shows "Run `claude` to refresh login"; using Claude Code refreshes it. Experimental.
 - **Codex** reads the Codex CLI login from `~/.codex/auth.json` (read-only; run `codex login` first). The app never refreshes or writes that file. Meters are labelled by window length (for example `30-day`).
 
+## Codex reset radar
+
+Codex cards show a **Reset radar** row: when Codex usage limits were last reset globally, and the 5 most recent reset or credits events (click one to open the post). The app checks [codex-reset.com](https://codex-reset.com) about once an hour and posts a notification when a new confirmed reset appears. Settings > General > **Codex reset radar** has three switches: show the radar, reset notifications, and notifications for credits events too (off by default). On first launch existing events are marked as seen, so no backlog of notifications. Seen events are stored in `UserDefaults` key `resetRadar.seenKeys`.
+
 ## Themes
 
 Two looks, switchable at any time in Settings > General > **Theme**:
@@ -124,11 +128,12 @@ If launch at login was on, turn it off in Settings first (or remove AgentHourgla
 - Usage endpoints are undocumented and may change; unknown fields show as a schema error and appear in diagnostics.
 - Polling backs off on HTTP 429 (at least the Retry-After value, minimum 60 s), so a card can show "Rate limited" for a while.
 - Copilot requires `gh`; removing the login from `gh` shows "Login not in gh".
-- No notifications.
+- Notifications cover Codex reset events only, not usage thresholds.
 
 ## Disclaimer and icon credits
 This is an unofficial personal tool. It is not affiliated with, endorsed by, or sponsored by Anthropic, GitHub, Microsoft, or OpenAI.
 Claude, GitHub Copilot, Codex, and OpenAI are trademarks of their respective owners. The provider logos are used only to show which service an account belongs to.
+Codex reset timeline data from [codex-reset.com](https://codex-reset.com).
 Provider icon SVGs come from [Simple Icons](https://simpleicons.org) (CC0-1.0); the trademarks themselves remain with their owners.
 
 ## License
