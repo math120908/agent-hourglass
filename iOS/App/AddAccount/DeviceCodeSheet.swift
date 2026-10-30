@@ -2,8 +2,8 @@ import SwiftUI
 import UIKit
 import UsageCore
 
-/// Codex sign-in as a 3-step checklist: copy the code, enter it on auth.openai.com, come back
-/// while the poll finishes. Same skeleton as `ClaudeSignInView`.
+/// Device-code sign-in as a 3-step checklist: copy the code, enter it on the model's host, come
+/// back while the poll finishes. Same skeleton as `ClaudeSignInView`.
 struct DeviceCodeSheet: View {
     let model: DeviceCodeFlowModel
     let onDone: (AccountID) -> Void
@@ -43,7 +43,7 @@ struct DeviceCodeSheet: View {
     }
 
     var body: some View {
-        SignInSheetLayout(kind: .codex, title: "Add \(model.title) account", lead: Self.lead) {
+        SignInSheetLayout(kind: model.kind, title: "Add \(model.title) account", lead: model.lead) {
             card
         } primary: {
             primary
@@ -71,8 +71,6 @@ struct DeviceCodeSheet: View {
         .onDisappear { model.cancel() }
     }
 
-    /// Broken by hand into two balanced lines; the natural wrap left "back here." alone.
-    private static let lead = "Enter this code on auth.openai.com,\nthen come back here."
     private static let finishing = "Finishing sign-in. This can take up to 15 seconds."
     private static let stillWaiting = "Still waiting. If the browser didn't say signed in, open it again."
 
@@ -80,11 +78,11 @@ struct DeviceCodeSheet: View {
 
     private var card: some View {
         VStack(spacing: 0) {
-            SignInStepRow(number: 1, label: "Copy the code", step: steps[0], kind: .codex) { copyControl }
+            SignInStepRow(number: 1, label: "Copy the code", step: steps[0], kind: model.kind) { copyControl }
             SignInDivider()
-            SignInStepRow(number: 2, label: "Sign in and enter the code", step: steps[1], kind: .codex) { openControl }
+            SignInStepRow(number: 2, label: "Sign in and enter the code", step: steps[1], kind: model.kind) { openControl }
             SignInDivider()
-            SignInStepRow(number: 3, label: "Come back here and wait", step: steps[2], kind: .codex) { waitControl }
+            SignInStepRow(number: 3, label: "Come back here and wait", step: steps[2], kind: model.kind) { waitControl }
             if isFinished {
                 SignInDivider()
                 outcome.padding(14)
@@ -131,16 +129,16 @@ struct DeviceCodeSheet: View {
         let copyLabel = Label("Copy", systemImage: "doc.on.doc")
         if prompt == nil {
             Button {} label: { copyLabel }
-                .buttonStyle(FadedProminentStyle(kind: .codex, tint: GlassStyle.codexFill, compact: true))
+                .buttonStyle(FadedProminentStyle(kind: model.kind, tint: GlassStyle.fill(model.kind), compact: true))
                 .disabled(true)
         } else if form.copyProminent(state) {
             Button(action: copy) { copyLabel }.buttonStyle(.borderedProminent)
         } else if form.copied {
             Button(action: copy) { Label("Copied", systemImage: "checkmark") }
-                .quietBordered(.codex, scheme: scheme, glass: isGlass)
+                .quietBordered(model.kind, scheme: scheme, glass: isGlass)
         } else {
             Button(action: copy) { copyLabel }
-                .quietBordered(.codex, scheme: scheme, glass: isGlass)
+                .quietBordered(model.kind, scheme: scheme, glass: isGlass)
         }
     }
 
@@ -152,9 +150,9 @@ struct DeviceCodeSheet: View {
             let ax = typeSize.isAccessibilitySize
             let label = Group {
                 if ax {
-                    Text("Open auth.openai.com").multilineTextAlignment(.center).frame(maxWidth: .infinity)
+                    Text("Open \(model.host)").multilineTextAlignment(.center).frame(maxWidth: .infinity)
                 } else {
-                    Label("Open auth.openai.com", systemImage: "arrow.up.forward.app")
+                    Label("Open \(model.host)", systemImage: "arrow.up.forward.app")
                 }
             }
             Group {
@@ -162,7 +160,7 @@ struct DeviceCodeSheet: View {
                     Button(action: open) { label }.buttonStyle(.borderedProminent)
                 } else {
                     Button(action: open) { label }
-                        .quietBordered(.codex, scheme: scheme, glass: isGlass)
+                        .quietBordered(model.kind, scheme: scheme, glass: isGlass)
                 }
             }
             .buttonBorderShape(.capsule)

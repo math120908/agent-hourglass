@@ -109,6 +109,8 @@ Each run asks for Touch ID: once when preflight checks the item, and again befor
 - `make -C iOS archive`: preflight, archive, verify, export an `.ipa` without uploading
 - `make -C iOS testflight`: same, then upload to App Store Connect (TestFlight internal only)
 
+Grok (experimental, see above): sign-in uses the same device-code sheet as Codex ("Open x.ai"). The widget refreshes Grok under the shared cross-process refresh lock (`FileRefreshLock`), since rotating refresh tokens are single use. Accounts live in `accounts-ext.json`.
+
 Versioning: `MARKETING_VERSION` 1.0.0 in `iOS/project.yml`; build number `YYMMDD.HMMSS` in UTC from `iOS/scripts/build-number.sh`, set on the archive command line. TestFlight builds expire after 90 days: upload at least that often.
 
 Release checks: [iOS/docs/testflight-checklist.md](iOS/docs/testflight-checklist.md). `make test` includes `make check-ios` (UsageCore builds for iOS) and the source guards and secret scan, which cover `iOS/`.

@@ -113,4 +113,27 @@ private final class Flag: @unchecked Sendable {
         #expect(wakes.value == 1)
         m.cancel()
     }
+
+    @Test func testDefaultsAreCodex() {
+        let m = DeviceCodeFlowModel(title: "T", start: { prompt() }, complete: { _ in id })
+        #expect(m.kind == .codex)
+        #expect(m.host == "auth.openai.com")
+        #expect(m.lead == "Enter this code on auth.openai.com,\nthen come back here.")
+    }
+
+    @Test func testCustomKindHostAndLead() {
+        let m = DeviceCodeFlowModel(title: "T", kind: .grok, host: "x.ai", state: .starting)
+        #expect(m.kind == .grok)
+        #expect(m.host == "x.ai")
+        #expect(m.lead == "Enter this code on x.ai,\nthen come back here.")
+        let custom = DeviceCodeFlowModel(
+            title: "T",
+            kind: .grok,
+            host: "x.ai",
+            lead: "Custom",
+            start: { prompt() },
+            complete: { _ in id },
+        )
+        #expect(custom.lead == "Custom")
+    }
 }
