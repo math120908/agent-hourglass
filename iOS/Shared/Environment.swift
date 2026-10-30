@@ -9,6 +9,9 @@ struct UsageEnvironment: Sendable {
     let store: CredentialStore
     let shared: SharedAccountState
     let http: HTTPClient
+    /// Whether this build carries the Google secret. Without it Google accounts are unsupported,
+    /// so one left over from a dev build is hidden instead of shown as a dead card.
+    var googleConfigured: Bool = BundleGoogleOAuthClient.isConfigured()
 
     static func make(base: URL, service: String, accessGroup: String) throws -> UsageEnvironment {
         let dir = try AppSupport.directory(base: base)
@@ -34,14 +37,16 @@ struct UsageEnvironment: Sendable {
     }
 
     /// Claude (or no kind), Codex and Google. iOS v1 has no Copilot: returns nil for a Copilot id.
-    /// Google refreshes with the bundle's dev-only secret; without one its refresh fails (SPIKE).
+    /// Google refreshes with the bundle's dev-only secret (SPIKE); returns nil when the build has none.
     func makeClient(_ id: AccountID) -> AccountClient? {
         let provider: UsageProvider
         switch id.kind ?? .claude {
         case .claude: provider = ClaudeProvider()
         case .codex: provider = CodexProvider(auth: nil)
         case .copilot: return nil
-        case .google: provider = GoogleProvider(client: BundleGoogleOAuthClient())
+        case .google:
+            guard googleConfigured else { return nil }
+            provider = GoogleProvider(client: BundleGoogleOAuthClient())
         }
         return AccountClient(
             id: id,

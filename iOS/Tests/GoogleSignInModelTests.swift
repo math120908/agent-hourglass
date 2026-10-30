@@ -110,7 +110,8 @@ struct GoogleSignInModelTests {
             registry: base.registry,
             store: base.store,
             shared: base.shared,
-            http: HTTPClient(transport: FixedTransport())
+            http: HTTPClient(transport: FixedTransport()),
+            googleConfigured: true
         )
         return (AppModel(env: env, displayStore: DisplaySettingsStore(defaults: UserDefaults(suiteName: UUID().uuidString)!)), env)
     }

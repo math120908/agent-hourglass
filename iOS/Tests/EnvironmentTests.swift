@@ -56,12 +56,28 @@ private func makeTestEnv() throws -> (UsageEnvironment, URL) {
 }
 
 @Test func makeClientKeepsTheIDForSupportedKinds() async throws {
-    let (env, _) = try makeTestEnv()
+    var (env, _) = try makeTestEnv()
+    env.googleConfigured = true
     for kind in [ProviderKind.claude, .codex, .google] {
         let id = AccountID(kind: kind, remoteID: "x")
         let client = try #require(env.makeClient(id))
-    #expect(await client.id == id)
+        #expect(await client.id == id)
     }
+}
+
+@Test func makeClientBuildsGoogleWhenConfigured() async throws {
+    var (env, _) = try makeTestEnv()
+    env.googleConfigured = true
+    let id = AccountID(kind: .google, remoteID: "g")
+    let client = try #require(env.makeClient(id))
+    #expect(await client.id == id)
+}
+
+@Test func makeClientRejectsGoogleWhenNotConfigured() throws {
+    var (env, _) = try makeTestEnv()
+    env.googleConfigured = false
+    #expect(env.makeClient(AccountID(kind: .google, remoteID: "g")) == nil)
+    #expect(env.makeClient(AccountID(kind: .claude, remoteID: "c")) != nil)
 }
 
 @Test func makeClientTreatsUnknownKindAsClaude() async throws {
