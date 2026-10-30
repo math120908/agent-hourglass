@@ -162,4 +162,18 @@ import Testing
         #expect(make(codex([window(604_800, 96), window(604_800, 84)]), .fresh, .codex).secondary == nil)
         #expect(make(codex([window(18000, 10), window(18000, 20), window(604_800, 50)]), .fresh, .codex).secondary == "Wk 50%")
     }
+    @Test func grokHeadlineIsWeeklyWindow() {
+        var build = window(604_800, 84)
+        build.label = "Build"
+        build.pool = "build"
+        var chat = window(604_800, 12)
+        chat.label = "Chat"
+        chat.pool = "chat"
+        let snap = UsageSnapshot(accountID: AccountID(kind: .grok, remoteID: "g"), fetchedAt: now, plan: nil,
+                                 meters: [window(604_800, 96), build, chat], spend: nil)
+        let m = make(snap, .fresh, .grok)
+        #expect(m.headline?.label == Meter.windowLabel(seconds: 604_800))
+        #expect(m.headline?.percentText == "96%")
+        #expect(m.secondary == nil)
+    }
 }

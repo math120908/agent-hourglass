@@ -70,6 +70,14 @@ import Testing
         #expect(!ProviderKind.copilot.usesWindowMeters)
     }
 
+    @Test func grokRawValueAndAccountID() {
+        let id = AccountID(kind: .grok, remoteID: "sub-1")
+        #expect(id.rawValue == "grok:sub-1")
+        #expect(id.kind == .grok)
+        #expect(ProviderKind.grok.usesWindowMeters)
+        #expect(!ProviderKind.grok.storesInMainRegistry)
+    }
+
     @Test func meterPoolRoundTrips() throws {
         let m = Meter(kind: .window, label: "5-hour", percentUsed: 30, windowLength: .seconds(18000), pool: "gemini")
         let back = try JSONDecoder().decode(Meter.self, from: JSONEncoder().encode(m))

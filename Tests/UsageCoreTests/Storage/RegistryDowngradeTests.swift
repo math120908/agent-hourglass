@@ -76,4 +76,18 @@ struct RegistryDowngradeTests {
         #expect(file.accounts.map(\.id.rawValue) == ["claude:a", "codex:x"])
         #expect(!FileManager.default.fileExists(atPath: reg.extURL.path))
     }
+
+    @Test func downgradeSafeWithGrokAccount() async throws {
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let reg = AccountRegistry(directory: dir)
+        _ = try await reg.load()
+        try await reg.upsert(entry(.claude, "a"))
+        try await reg.upsert(entry(.grok, "sub-1"))
+        try await reg.setMenuBarAccount(AccountID(kind: .grok, remoteID: "sub-1"))
+        let file = try v1020Decode(reg.url)
+        #expect(file.accounts.map(\.id.rawValue) == ["claude:a"])
+        let ext = try JSONSerialization.jsonObject(with: Data(contentsOf: reg.extURL)) as? [String: Any]
+        let extIDs = (ext?["accounts"] as? [[String: Any]])?.compactMap { $0["id"] as? String }
+        #expect(extIDs == ["grok:sub-1"])
+    }
 }

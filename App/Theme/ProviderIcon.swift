@@ -20,6 +20,7 @@ struct ProviderIcon: View {
         case .claude: "ProviderClaude"
         case .copilot: "ProviderCopilot"
         case .codex: "ProviderCodex"
+        case .grok: "ProviderGrok"
         }
     }
 
@@ -28,6 +29,7 @@ struct ProviderIcon: View {
         case .claude: "Claude"
         case .copilot: "GitHub Copilot"
         case .codex: "Codex"
+        case .grok: "Grok"
         }
     }
 }

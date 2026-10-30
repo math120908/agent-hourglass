@@ -60,6 +60,7 @@ enum InlineText {
         case .claude: "Claude"
         case .codex: "Codex"
         case .copilot: "Copilot"
+        case .grok: "Grok"
         }
     }
 }

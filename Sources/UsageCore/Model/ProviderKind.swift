@@ -1,4 +1,4 @@
-public enum ProviderKind: String, Codable, Sendable { case claude, copilot, codex }
+public enum ProviderKind: String, Codable, Sendable { case claude, copilot, codex, grok }
 
 extension ProviderKind {
     /// Kinds whose meters are server-sized `.window` rows (Codex-style). New kinds default to true.

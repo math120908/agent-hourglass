@@ -77,6 +77,8 @@ struct AccountsTab: View {
             "This deletes the account's usage history from this Mac. gh is not touched: your gh login is left as is."
         case .codex:
             "This deletes the account's usage history from this Mac. ~/.codex and your Codex CLI login are not touched."
+        case .grok:
+            "This deletes the account's saved sign-in and its usage history from this Mac. ~/.grok and your grok CLI login are not touched."
         }
     }
 }

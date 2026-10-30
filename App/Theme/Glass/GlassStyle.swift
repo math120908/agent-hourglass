@@ -7,6 +7,7 @@ enum GlassStyle {
     static let copilot = Color(red: 0.49, green: 0.38, blue: 0.78)
     /// Codex: neutral teal, clear of Claude orange and Copilot purple.
     static let codex = Color(red: 0.05, green: 0.52, blue: 0.50)
+    static let grok = Color(red: 0.42, green: 0.45, blue: 0.52)
     static let warning = Color(red: 0.86, green: 0.62, blue: 0.10)
     static let critical = Color(red: 0.86, green: 0.25, blue: 0.24)
 
@@ -20,6 +21,7 @@ enum GlassStyle {
         case .claude: claude
         case .copilot: copilot
         case .codex: codex
+        case .grok: grok
         }
     }
 
