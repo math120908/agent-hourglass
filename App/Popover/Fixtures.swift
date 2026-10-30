@@ -60,11 +60,26 @@ enum Fixtures {
                       resetsAt: now.addingTimeInterval(1_296_000), windowLength: .seconds(2_592_000)),
             ]
         )
+        // Mirrors Tests/UsageCoreTests/Fixtures/grok-billing-weekly.json (SuperGrok weekly pool, Build/Chat products, $4.20 prepaid).
+        let grokID = AccountID(kind: .grok, remoteID: "acct-synthetic")
+        let grokReset = now.addingTimeInterval(3 * 86_400)
+        let grok = UsageSnapshot(
+            accountID: grokID,
+            fetchedAt: fetched,
+            plan: "SuperGrok",
+            meters: [
+                Meter(kind: .window, label: "Weekly", percentUsed: 96, resetsAt: grokReset, windowLength: week),
+                Meter(kind: .window, label: "Build, weekly", percentUsed: 84, resetsAt: grokReset, windowLength: week, pool: "build"),
+                Meter(kind: .window, label: "Chat, weekly", percentUsed: 12, resetsAt: grokReset, windowLength: week, pool: "chat"),
+            ],
+            spend: Money(usedMinor: 420, limitMinor: nil, currency: "USD", exponent: 2)
+        )
         return PopoverContent(
             accounts: [
                 PopoverAccount(id: claudeID, name: "Snorlax", kind: .claude, snapshot: claude, status: .fresh),
                 PopoverAccount(id: copilotID, name: "pikachu-dev", kind: .copilot, snapshot: copilot, status: .fresh),
                 PopoverAccount(id: codexID, name: "Mewtwo", kind: .codex, snapshot: codex, status: .fresh),
+                PopoverAccount(id: grokID, name: "Zapdos", kind: .grok, snapshot: grok, status: .fresh),
             ],
             isOffline: false,
             now: now,
