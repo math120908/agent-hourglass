@@ -26,6 +26,7 @@ struct AddAccountItems: View {
     var body: some View {
         Button { present = .claude(loginHint: nil) } label: { item("Claude", .claude) }
         Button { present = .codex } label: { item("Codex", .codex) }
+        Button { present = .grok } label: { item("Grok", .grok) }
     }
 
     private func item(_ title: String, _ kind: ProviderKind) -> some View {
