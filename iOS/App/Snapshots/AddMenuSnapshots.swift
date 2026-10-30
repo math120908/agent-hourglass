@@ -8,7 +8,7 @@ enum AddMenuSnapshots {
                 List { AddAccountItems(present: .constant(nil)) }
                     .listStyle(.insetGrouped)
                     .scrollDisabled(true)
-                    .frame(height: 160)
+                    .frame(height: 204)
                     .appTheme(theme)
             )
         },
