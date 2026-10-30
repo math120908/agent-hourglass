@@ -57,7 +57,9 @@ public enum AccountRegistryError: Error, Equatable {
     case unsupportedVersion(Int)
 }
 
-/// Owns `accounts.json` (spec §4). Non-secret metadata only; every write goes through `AppSupport.secureWrite`.
+/// Owns `accounts.json` and `accounts-ext.json` (spec §4). Non-secret metadata only; every write goes through
+/// `AppSupport.secureWrite`. Shipped builds (≤ v1.0.20) quarantine `accounts.json` on any kind they cannot decode
+/// and then delete every Claude Keychain item, so kinds outside `storesInMainRegistry` live only in the ext file.
 public actor AccountRegistry {
     struct File: Codable {
         var version: Int
@@ -65,34 +67,50 @@ public actor AccountRegistry {
         var accounts: [AccountEntry]
     }
 
-    public static let fileName = "accounts.json"
-    public nonisolated let url: URL
-    private var entries: [AccountEntry] = []
-    public private(set) var menuBarAccountID: AccountID?
-
-    public init(directory: URL) {
-        url = directory.appendingPathComponent(Self.fileName)
+    private struct Header: Decodable {
+        var version: Int
+        var menuBarAccountID: AccountID?
     }
 
-    /// Reads the registry. A missing file is an empty list; an unreadable one is moved aside to
-    /// `accounts.json.bad-<ts>` (0600) and the registry starts empty.
+    /// One file's last loaded or written state; `raw` holds entries this build cannot decode, written back verbatim.
+    private struct Slice {
+        var entries: [AccountEntry] = []
+        var raw: [Data] = []
+    }
+
+    public static let fileName = "accounts.json"
+    public static let extFileName = "accounts-ext.json"
+    public nonisolated let url: URL
+    public nonisolated let extURL: URL
+    private let isMain: @Sendable (ProviderKind) -> Bool
+    private var entries: [AccountEntry] = []
+    private var main = Slice()
+    private var ext = Slice()
+    private var mainMenuBar: AccountID?
+    public private(set) var menuBarAccountID: AccountID?
+    /// False when the last `load()` quarantined a file or threw; orphan cleanup must not trust `accounts()` then.
+    public private(set) var loadedCleanly: Bool = true
+
+    public init(directory: URL, isMain: @escaping @Sendable (ProviderKind) -> Bool = { $0.storesInMainRegistry }) {
+        url = directory.appendingPathComponent(Self.fileName)
+        extURL = directory.appendingPathComponent(Self.extFileName)
+        self.isMain = isMain
+    }
+
+    /// Reads both files and merges them by `order` (main first on ties). A missing file is empty; an unparseable
+    /// one (or `version != 1`) is moved aside to `<name>.bad-<ts>` (0600) and only that file starts empty.
+    /// A single entry that fails to decode is hidden and kept verbatim.
     public func load() throws -> [AccountEntry] {
-        guard let data = try? Data(contentsOf: url) else {
-            entries = []
-            menuBarAccountID = nil
-            return []
-        }
-        do {
-            let file = try Self.decoder.decode(File.self, from: data)
-            guard file.version == 1 else { throw AccountRegistryError.unsupportedVersion(file.version) }
-            entries = file.accounts.sorted { $0.order < $1.order }
-            menuBarAccountID = file.menuBarAccountID.flatMap { id in entries.contains { $0.id == id } ? id : nil }
-                ?? entries.first?.id
-        } catch {
-            try quarantine()
-            entries = []
-            menuBarAccountID = nil
-        }
+        loadedCleanly = true
+        let (m, menuBar) = try read(url, name: Self.fileName)
+        let (e, _) = try read(extURL, name: Self.extFileName)
+        main = m
+        ext = e
+        mainMenuBar = menuBar
+        entries = (m.entries + e.entries).enumerated()
+            .sorted { ($0.element.order, $0.offset) < ($1.element.order, $1.offset) }
+            .map(\.element)
+        menuBarAccountID = menuBar.flatMap { id in entries.contains { $0.id == id } ? id : nil } ?? entries.first?.id
         return entries
     }
 
@@ -156,17 +174,62 @@ public actor AccountRegistry {
         try commit(entries, menuBar: id)
     }
 
+    /// Partitions by `isMain` and rewrites only the file whose slice changed; `menuBarAccountID` goes to the main file only.
     private func commit(_ next: [AccountEntry], menuBar: AccountID?) throws {
-        let data = try Self.encoder.encode(File(version: 1, menuBarAccountID: menuBar, accounts: next))
-        try AppSupport.secureWrite(data, to: url)
+        let nextMain = next.filter { isMain($0.kind) }
+        let nextExt = next.filter { !isMain($0.kind) }
+        if nextMain != main.entries || menuBar != mainMenuBar {
+            try write(nextMain, raw: main.raw, menuBar: menuBar, to: url)
+            main.entries = nextMain
+            mainMenuBar = menuBar
+        }
+        if nextExt != ext.entries {
+            try write(nextExt, raw: ext.raw, menuBar: nil, to: extURL)
+            ext.entries = nextExt
+        }
         entries = next
         menuBarAccountID = menuBar
     }
 
-    private func quarantine() throws {
+    private func write(_ accounts: [AccountEntry], raw: [Data], menuBar: AccountID?, to file: URL) throws {
+        var data = try Self.encoder.encode(File(version: 1, menuBarAccountID: menuBar, accounts: accounts))
+        if !raw.isEmpty {
+            var object = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+            let kept = try raw.map { try JSONSerialization.jsonObject(with: $0, options: .fragmentsAllowed) }
+            object["accounts"] = (object["accounts"] as! [Any]) + kept
+            data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+        }
+        try AppSupport.secureWrite(data, to: file)
+    }
+
+    /// Parses one file per entry. Returns an empty slice for a missing file and after quarantining a bad one.
+    private func read(_ file: URL, name: String) throws -> (Slice, AccountID?) {
+        guard let data = try? Data(contentsOf: file) else { return (Slice(), nil) }
+        guard let header = try? Self.decoder.decode(Header.self, from: data),
+              header.version == 1,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let accounts = object["accounts"] as? [Any]
+        else {
+            loadedCleanly = false
+            try quarantine(file, name: name)
+            return (Slice(), nil)
+        }
+        var slice = Slice()
+        for element in accounts {
+            guard let item = try? JSONSerialization.data(withJSONObject: element, options: .fragmentsAllowed) else { continue }
+            if let entry = try? Self.decoder.decode(AccountEntry.self, from: item) {
+                slice.entries.append(entry)
+            } else {
+                slice.raw.append(item)
+            }
+        }
+        return (slice, header.menuBarAccountID)
+    }
+
+    private func quarantine(_ file: URL, name: String) throws {
         let ts = Int(Date().timeIntervalSince1970 * 1000)
-        let bad = url.deletingLastPathComponent().appendingPathComponent("\(Self.fileName).bad-\(ts)")
-        guard Darwin.rename(url.path, bad.path) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        let bad = file.deletingLastPathComponent().appendingPathComponent("\(name).bad-\(ts)")
+        guard Darwin.rename(file.path, bad.path) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
         guard chmod(bad.path, 0o600) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
     }
 

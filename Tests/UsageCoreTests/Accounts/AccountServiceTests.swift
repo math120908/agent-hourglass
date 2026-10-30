@@ -164,6 +164,15 @@ struct AccountServiceTests {
         #expect(try store.allAccountIDs() == [codex])
     }
 
+    @Test func cleanupSkippedWhenRegistryQuarantined() async throws {
+        let (svc, store, registry) = try make([])
+        try Data("{\"version\":1,\"accou".utf8).write(to: registry.url)
+        _ = try await registry.load()
+        try store.inner.write(Credential(kind: .claude, access: Secret("y"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: cid("y"), label: "t")
+        try await svc.cleanupOrphans()
+        #expect(try store.allAccountIDs() == [cid("y")])
+    }
+
     @Test func labelHasNoDisplayName() async throws {
         let (svc, store, registry) = try make(["a", "a"])
         let id = try await svc.addClaude(loginHint: nil)
