@@ -68,6 +68,18 @@ struct GoogleQuotaDecodingTests {
         #expect(meters[1].percentUsed == 100)
     }
 
+    @Test func nonFiniteFractionIsUnknown() throws {
+        let body = """
+        {"groups":[{"displayName":"Gemini models","buckets":[
+          {"bucketId":"gemini-5h","window":"5h","remainingFraction":"NaN"},
+          {"bucketId":"gemini-weekly","window":"weekly","remaining":{"remainingFraction":"Infinity"}},
+          {"bucketId":"gemini-daily","window":"daily","remainingFraction":"-Infinity"}]}]}
+        """
+        let meters = try GoogleQuotaDecoding.summaryMeters(Data(body.utf8))
+        #expect(meters.count == 3)
+        #expect(meters.allSatisfy { $0.percentUsed == nil })
+    }
+
     @Test func summaryWithoutGroupsIsSchema() {
         #expect(throws: ProviderError.self) { try GoogleQuotaDecoding.summaryMeters(Data("{}".utf8)) }
     }

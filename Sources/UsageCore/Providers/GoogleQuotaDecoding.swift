@@ -78,7 +78,7 @@ enum GoogleQuotaDecoding {
             return Meter(
                 kind: .window,
                 label: "\(name), \(seconds.map { Meter.windowLabel(seconds: $0).lowercased() } ?? bucketName ?? id ?? "quota")",
-                percentUsed: fraction.map { min(100, max(0, (1 - $0) * 100)) },
+                percentUsed: fraction.flatMap { $0.isFinite ? min(100, max(0, (1 - $0) * 100)) : nil },
                 resetsAt: CodexDeviceAuth.date(bucket["resetTime"]),
                 windowLength: seconds.map { .seconds($0) },
                 pool: seconds == nil ? "\(pool).\(id ?? bucketName ?? "quota")" : pool
