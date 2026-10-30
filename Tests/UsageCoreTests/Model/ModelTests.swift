@@ -70,6 +70,14 @@ import Testing
         #expect(!ProviderKind.copilot.usesWindowMeters)
     }
 
+    @Test func usagePageURLs() {
+        #expect(ProviderKind.claude.usagePageURL?.absoluteString == "https://claude.ai/#settings/usage")
+        #expect(ProviderKind.codex.usagePageURL?.absoluteString == "https://chatgpt.com/settings/usage?tab=overview")
+        #expect(ProviderKind.google.usagePageURL?.absoluteString == "https://gemini.google.com/usage")
+        #expect(ProviderKind.copilot.usagePageURL?.absoluteString == "https://github.com/settings/billing")
+        #expect(ProviderKind.grok.usagePageURL?.absoluteString == "https://grok.com")
+    }
+
     @Test func googleRawValueAndAccountID() {
         let id = AccountID(kind: .google, remoteID: "sub-1")
         #expect(id.rawValue == "google:sub-1")

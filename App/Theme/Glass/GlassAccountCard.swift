@@ -6,6 +6,7 @@ struct GlassAccountCard: View {
     var card: CardModel
     @Binding var isExpanded: Bool
     var onSignIn: () -> Void = {}
+    var onOpenUsagePage: (URL) -> Void = { _ in }
     var onDiagnostics: () -> Void = {}
     var now: Date = .now
     var calendar: Calendar = .current
@@ -91,12 +92,15 @@ struct GlassAccountCard: View {
             HStack(spacing: 9) {
                 glyph
                 VStack(alignment: .leading, spacing: 1) {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 5) {
-                            nameText.fixedSize()
-                            if let plan = card.planTag { StatusChipView(text: plan) }
+                    HStack(spacing: 5) {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 5) {
+                                nameText.fixedSize()
+                                if let plan = card.planTag { StatusChipView(text: plan) }
+                            }
+                            nameText
                         }
-                        nameText
+                        UsagePageButton(kind: account.kind, open: onOpenUsagePage)
                     }
                     Text(subtitle)
                         .font(.system(size: 10.5))
