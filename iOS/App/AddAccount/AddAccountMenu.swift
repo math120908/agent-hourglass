@@ -29,6 +29,7 @@ struct AddAccountItems: View {
         Button { present = .claude(loginHint: nil) } label: { item("Claude", .claude) }
         Button { present = .codex } label: { item("Codex", .codex) }
         if google { Button { present = .google } label: { item("Google AI", .google) } }
+        Button { present = .grok } label: { item("Grok", .grok) }
     }
 
     private func item(_ title: String, _ kind: ProviderKind) -> some View {

@@ -3,9 +3,9 @@ import SwiftUI
 
 enum AddMenuSnapshots {
     static let scenes: [SnapshotScene] = [
-        menu("add-menu", google: false, height: 160),
+        menu("add-menu", google: false, height: 204),
         // A dev build with the Google client secret (SPIKE).
-        menu("add-menu-google", google: true, height: 210),
+        menu("add-menu-google", google: true, height: 254),
     ]
 
     private static func menu(_ name: String, google: Bool, height: CGFloat) -> SnapshotScene {

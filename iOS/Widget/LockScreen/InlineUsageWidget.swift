@@ -61,6 +61,7 @@ enum InlineText {
         case .codex: "Codex"
         case .copilot: "Copilot"
         case .google: "Google AI"
+        case .grok: "Grok"
         }
     }
 }

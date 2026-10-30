@@ -5,12 +5,14 @@ enum AddFlow: Identifiable, Equatable {
     case claude(loginHint: String?)
     case codex
     case google
+    case grok
 
     var id: String {
         switch self {
         case .claude(let hint): "claude:\(hint ?? "")"
         case .codex: "codex"
         case .google: "google"
+        case .grok: "grok"
         }
     }
 
@@ -19,6 +21,7 @@ enum AddFlow: Identifiable, Equatable {
         case .claude: .claude
         case .codex: .codex
         case .google: .google
+        case .grok: .grok
         }
     }
 
@@ -29,6 +32,7 @@ enum AddFlow: Identifiable, Equatable {
         case .codex: .codex
         case .copilot: nil
         case .google: googleConfigured ? .google : nil
+        case .grok: .grok
         }
     }
 }
@@ -43,8 +47,9 @@ struct AddFlowSheet: View {
         Group {
             switch flow {
             case .claude(let hint): ClaudeFlowView(model: ClaudeSignInModel(app: app, loginHint: hint), onDone: onDone)
-            case .codex: CodexFlowView(model: CodexAddFlow.model(app: app), onDone: onDone)
+            case .codex: DeviceCodeFlowView(model: CodexAddFlow.model(app: app), onDone: onDone)
             case .google: GoogleFlowView(model: GoogleSignInModel(app: app), onDone: onDone)
+            case .grok: DeviceCodeFlowView(model: GrokAddFlow.model(app: app), onDone: onDone)
             }
         }
         .tint(GlassStyle.fill(flow.kind))
@@ -74,7 +79,7 @@ private struct GoogleFlowView: View {
     }
 }
 
-private struct CodexFlowView: View {
+private struct DeviceCodeFlowView: View {
     @State var model: DeviceCodeFlowModel
     let onDone: (AccountID) -> Void
 

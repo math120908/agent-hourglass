@@ -91,17 +91,23 @@ public struct CodexDeviceAuth: Sendable {
             } catch ProviderError.unauthorized {
                 throw DeviceFlowError.unexpected(status: 401)
             }
-            try await pause(interval, since: polledAt, wake: wake)
+            try await Self.pause(interval, since: polledAt, wake: wake, sleep: sleep, monotonic: monotonic)
         }
     }
 
     /// Sleeps `interval` after the poll at `since`. A wake ends the wait early only when the
     /// whole interval has elapsed on the monotonic clock; otherwise the rest of it is slept.
-    private func pause(_ interval: Duration, since: ContinuousClock.Instant, wake: DevicePollWake?) async throws {
+    static func pause(
+        _ interval: Duration,
+        since: ContinuousClock.Instant,
+        wake: DevicePollWake?,
+        sleep: @escaping @Sendable (Duration) async throws -> Void,
+        monotonic: @Sendable () -> ContinuousClock.Instant
+    ) async throws {
         guard let wake else { return try await sleep(interval) }
         var remaining = interval
         while true {
-            let sleep = self.sleep, wait = remaining
+            let wait = remaining
             let woke = try await withThrowingTaskGroup(of: Bool.self) { group in
                 group.addTask { try await sleep(wait); return false }
                 group.addTask { await wake.wait(); return true }

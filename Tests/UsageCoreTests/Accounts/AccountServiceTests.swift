@@ -179,6 +179,15 @@ struct AccountServiceTests {
         #expect(try store.allAccountIDs() == [codex])
     }
 
+    @Test func cleanupOrphansDeletesGrok() async throws {
+        let (svc, store, _) = try make([])
+        let codex = AccountID(kind: .codex, remoteID: "y")
+        try store.inner.write(Credential(kind: .grok, access: Secret("x"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: AccountID(kind: .grok, remoteID: "x"), label: "t")
+        try store.inner.write(Credential(kind: .codex, access: Secret("y"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: codex, label: "t")
+        try await svc.cleanupOrphans()
+        #expect(try store.allAccountIDs() == [codex])
+    }
+
     @Test func cleanupSkippedWhenRegistryQuarantined() async throws {
         let (svc, store, registry) = try make([])
         try Data("{\"version\":1,\"accou".utf8).write(to: registry.url)
@@ -331,6 +340,56 @@ struct AccountServiceTests {
         await #expect(throws: AccountServiceError.missingAccountID) { try await svc.addGoogle(credential: googleCred("g", sub: "")) }
         await #expect(throws: AccountServiceError.missingAccountID) {
             try await svc.addGoogle(credential: Credential(kind: .codex, access: Secret("x"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: [], remoteAccountID: "sub-1"))
+        }
+        #expect(store.labels.isEmpty)
+        #expect(clients.all.isEmpty)
+        #expect(await registry.accounts().isEmpty)
+    }
+
+    func grokCred(_ tok: String, sub: String?, email: String? = "pat@example.com") -> Credential {
+        Credential(kind: .grok, access: Secret(tok), refresh: Secret("r-\(tok)"), expiresAt: nil, refreshExpiresAt: nil, scopes: [], remoteAccountID: sub, accountEmail: email)
+    }
+
+    @Test func addGrokWritesKeychainAndRegistry() async throws {
+        let (svc, store, registry) = try make([])
+        let id = try await svc.addGrok(credential: grokCred("g1", sub: "sub-1"))
+        #expect(id == AccountID(kind: .grok, remoteID: "sub-1"))
+        #expect(try store.read(id)?.access.reveal() == "g1")
+        #expect(store.labels == [AccountService.keychainLabel(kind: .grok, number: 1)])
+        #expect(await registry.accounts().first { $0.id == id }?.displayName == "pat@example.com")
+        #expect(clients.all == ["grok:sub-1"])
+        #expect(try String(contentsOf: registry.extURL, encoding: .utf8).contains("grok:sub-1"))
+        let main = try JSONSerialization.jsonObject(with: Data(contentsOf: registry.url)) as? [String: Any]
+        #expect((main?["accounts"] as? [Any])?.isEmpty == true)
+    }
+
+    @Test func addGrokWithoutEmailUsesDefaultName() async throws {
+        let (svc, _, registry) = try make([])
+        try await svc.addGrok(credential: grokCred("g1", sub: "sub-1", email: nil))
+        let id2 = try await svc.addGrok(credential: grokCred("g2", sub: "sub-2", email: ""))
+        #expect(await registry.accounts().map(\.displayName) == ["Grok", "Grok #2"])
+        #expect(await registry.accounts().last?.id == id2)
+    }
+
+    @Test func addGrokTwiceIsReauth() async throws {
+        let (svc, store, registry) = try make([])
+        let codex = AccountID(kind: .codex, remoteID: "c")
+        try await registry.upsert(AccountEntry(id: codex, kind: .codex, displayName: "Codex", remoteLogin: nil, order: 0, addedAt: Date(), status: "ok"))
+        let id = try await svc.addGrok(credential: grokCred("g1", sub: "sub-1"))
+        let before = await registry.accounts().map(\.id)
+        try await svc.addGrok(credential: grokCred("g2", sub: "sub-1"))
+        #expect(await registry.accounts().map(\.id) == before)
+        #expect(before == [codex, id])
+        #expect(try store.read(id)?.access.reveal() == "g2")
+        #expect(clients.all == ["grok:sub-1", "grok:sub-1"])
+    }
+
+    @Test func addGrokRejectsMissingID() async throws {
+        let (svc, store, registry) = try make([])
+        await #expect(throws: AccountServiceError.missingAccountID) { try await svc.addGrok(credential: grokCred("g", sub: nil)) }
+        await #expect(throws: AccountServiceError.missingAccountID) { try await svc.addGrok(credential: grokCred("g", sub: "")) }
+        await #expect(throws: AccountServiceError.missingAccountID) {
+            try await svc.addGrok(credential: Credential(kind: .codex, access: Secret("x"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: [], remoteAccountID: "sub-1"))
         }
         #expect(store.labels.isEmpty)
         #expect(clients.all.isEmpty)

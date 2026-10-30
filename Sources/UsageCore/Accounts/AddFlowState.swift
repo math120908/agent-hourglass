@@ -41,4 +41,20 @@ public enum AddFlowState: Equatable, Sendable {
         default: failure(error)
         }
     }
+
+    /// Device-code logins (Grok): the poll's RFC 8628 outcomes, then the `userinfo` call's `ProviderError`s.
+    public static func deviceFailure(_ error: any Error) -> AddFlowState {
+        switch error {
+        case DeviceFlowError.expired: .failed("The code expired. Retry for a new one")
+        case DeviceFlowError.denied: .failed("Sign-in was denied")
+        case let DeviceFlowError.unexpected(status), let ProviderError.http(status, _, _):
+            .failed("The sign-in server answered HTTP \(status). Retry")
+        case ProviderError.unauthorized, ProviderError.invalidGrant: .failed("The new sign-in was rejected. Retry")
+        case ProviderError.schema: .failed("Unexpected answer from the sign-in server")
+        case ProviderError.transport: .failed("Network error during sign-in. Check the connection and retry")
+        case ProviderError.rateLimited: .failed("Too many sign-in attempts. Wait a minute and retry")
+        case AccountServiceError.missingAccountID: .failed("The sign-in did not identify an account")
+        default: failure(error)
+        }
+    }
 }

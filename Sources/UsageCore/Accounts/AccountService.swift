@@ -157,6 +157,19 @@ public actor AccountService {
         return id
     }
 
+    /// Adds a Grok account from the device-code login. `remoteAccountID` (the OIDC `sub`) is the stable id;
+    /// an id already in the registry is a re-auth. The login email is the default name.
+    @discardableResult
+    public func addGrok(credential: Credential) async throws -> AccountID {
+        guard credential.kind == .grok, let remote = credential.remoteAccountID, !remote.isEmpty else {
+            throw AccountServiceError.missingAccountID
+        }
+        let id = AccountID(kind: .grok, remoteID: remote)
+        let email = credential.accountEmail.flatMap { $0.isEmpty ? nil : $0 }
+        try await commit(credential, id: id, kind: .grok, defaultName: { $0 == 1 ? "Grok" : "Grok #\($0)" }, autoName: email, remoteLogin: nil)
+        return id
+    }
+
     /// Adds the read-only Claude Code (local) account. Writes only the registry; the first poll reads the Keychain.
     /// `name` is the user name Claude Code reports (Mac: `ClaudeCodeProfile`); nil keeps the old or default name.
     @discardableResult
