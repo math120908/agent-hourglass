@@ -1,0 +1,4 @@
+{"config":{
+  "currentPeriod":{"type":"USAGE_PERIOD_TYPE_MONTHLY","start":"2026-10-01T00:00:00Z","end":"2026-10-31T00:00:00Z"},
+  "creditUsagePercent":"40",
+  "prepaidBalance":{"val":0}}}

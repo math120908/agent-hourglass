@@ -44,4 +44,30 @@ struct AddFlowStateTests {
         }
         #expect(AddFlowState.googleFailure(ProviderError.http(status: 503, host: "oauth2.googleapis.com", retryAfter: nil)) == .failed("Google answered HTTP 503. Retry"))
     }
+
+    @Test func deviceExpiredMessage() {
+        #expect(AddFlowState.deviceFailure(DeviceFlowError.expired) == .failed("The code expired. Retry for a new one"))
+    }
+
+    @Test func deviceDeniedMessage() {
+        #expect(AddFlowState.deviceFailure(DeviceFlowError.denied) == .failed("Sign-in was denied"))
+    }
+
+    /// The userinfo call after a granted code throws `ProviderError`; each case gets its own message.
+    @Test func deviceProviderErrorMessages() {
+        #expect(AddFlowState.deviceFailure(DeviceFlowError.unexpected(status: 500)) == .failed("The sign-in server answered HTTP 500. Retry"))
+        #expect(AddFlowState.deviceFailure(ProviderError.http(status: 502, host: "auth.x.ai", retryAfter: nil)) == .failed("The sign-in server answered HTTP 502. Retry"))
+        #expect(AddFlowState.deviceFailure(ProviderError.unauthorized) == .failed("The new sign-in was rejected. Retry"))
+        #expect(AddFlowState.deviceFailure(ProviderError.invalidGrant) == .failed("The new sign-in was rejected. Retry"))
+        #expect(AddFlowState.deviceFailure(ProviderError.schema(keys: ["x"])) == .failed("Unexpected answer from the sign-in server"))
+        #expect(AddFlowState.deviceFailure(ProviderError.transport(host: "auth.x.ai")) == .failed("Network error during sign-in. Check the connection and retry"))
+        #expect(AddFlowState.deviceFailure(ProviderError.rateLimited(retryAfter: nil)) == .failed("Too many sign-in attempts. Wait a minute and retry"))
+        #expect(AddFlowState.deviceFailure(AccountServiceError.missingAccountID) == .failed("The sign-in did not identify an account"))
+    }
+
+    @Test func deviceFailureFallsBackToFailure() {
+        #expect(AddFlowState.deviceFailure(AccountServiceError.signInInProgress) == .failed("Sign-in already in progress"))
+        #expect(AddFlowState.deviceFailure(CancellationError()) == .failed("Sign-in failed"))
+    }
 }
+

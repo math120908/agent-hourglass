@@ -21,6 +21,7 @@ struct ProviderIcon: View {
         case .copilot: "ProviderCopilot"
         case .codex: "ProviderCodex"
         case .google: "ProviderGoogle"
+        case .grok: "ProviderGrok"
         }
     }
 
@@ -30,6 +31,7 @@ struct ProviderIcon: View {
         case .copilot: "GitHub Copilot"
         case .codex: "Codex"
         case .google: "Google AI"
+        case .grok: "Grok"
         }
     }
 }

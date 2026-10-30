@@ -25,6 +25,7 @@ enum AddFlow: Identifiable, Equatable {
         case .codex: .codex
         case .copilot: nil
         case .google: nil
+        case .grok: nil
         }
     }
 }

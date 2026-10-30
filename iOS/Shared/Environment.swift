@@ -41,6 +41,7 @@ struct UsageEnvironment: Sendable {
         case .codex: provider = CodexProvider(auth: nil)
         case .copilot: return nil
         case .google: return nil
+        case .grok: return nil
         }
         return AccountClient(
             id: id,
