@@ -134,6 +134,18 @@ struct GoogleQuotaDecodingTests {
         #expect(GoogleQuotaDecoding.isUnconfirmedPlaceholder(models: allFull, confirmed: [:]) == true)
     }
 
+    @Test func zeroAndUnknownMixWithoutConfirmationIsUnavailable() throws {
+        let body = #"{"models":{"m-a":{"quotaInfo":{"remainingFraction":1.0}},"m-b":{"quotaInfo":{}},"m-c":{"quotaInfo":{"remainingFraction":"NaN"}}}}"#
+        let models = try GoogleQuotaDecoding.modelMeters(Data(body.utf8))
+        #expect(models.map(\.percentUsed) == [0, nil, nil])
+        #expect(GoogleQuotaDecoding.isUnconfirmedPlaceholder(models: models, confirmed: nil) == true)
+        #expect(GoogleQuotaDecoding.isUnconfirmedPlaceholder(models: models, confirmed: ["m-a": 1.0]) == false)
+    }
+
+    @Test func noModelsIsNotPlaceholder() {
+        #expect(GoogleQuotaDecoding.isUnconfirmedPlaceholder(models: [], confirmed: nil) == false)
+    }
+
     @Test func allFullConfirmedIsReal() throws {
         let allFull = try GoogleQuotaDecoding.modelMeters(fixture("google-models-all-full"))
         #expect(GoogleQuotaDecoding.isUnconfirmedPlaceholder(models: allFull, confirmed: ["gemini-3-pro": 1.0]) == false)

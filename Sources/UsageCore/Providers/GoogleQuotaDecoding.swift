@@ -86,10 +86,10 @@ enum GoogleQuotaDecoding {
         return fractions
     }
 
-    /// An all-0%-used `fetchAvailableModels` result is a placeholder unless `retrieveUserQuota` confirmed
-    /// it (decision 6, R9 §2).
+    /// A `fetchAvailableModels` result where no meter is above 0% used (each is 0% or unknown) is a
+    /// placeholder unless `retrieveUserQuota` confirmed it (decision 6, R9 §2).
     static func isUnconfirmedPlaceholder(models: [Meter], confirmed: [String: Double]?) -> Bool {
-        models.allSatisfy { $0.percentUsed == 0 } && (confirmed ?? [:]).isEmpty
+        !models.isEmpty && models.allSatisfy { ($0.percentUsed ?? 0) == 0 } && (confirmed ?? [:]).isEmpty
     }
 
     /// Window length derived from `window`, else `bucketId` (the payload carries no number).
