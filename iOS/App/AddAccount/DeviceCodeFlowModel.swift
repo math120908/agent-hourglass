@@ -15,6 +15,10 @@ import UsageCore
     }
 
     let title: String
+    let kind: ProviderKind
+    /// Verification host named on the sheet ("Open …" and the lead line).
+    let host: String
+    let lead: String
     private(set) var state: State = .starting
 
     @ObservationIgnored private let start: @Sendable () async throws -> DeviceCodePrompt
@@ -25,12 +29,19 @@ import UsageCore
 
     init(
         title: String,
+        kind: ProviderKind = .codex,
+        host: String = "auth.openai.com",
+        lead: String? = nil,
         start: @escaping @Sendable () async throws -> DeviceCodePrompt,
         complete: @escaping @Sendable (DeviceCodePrompt) async throws -> AccountID,
         now: @escaping @Sendable () -> Date = { Date() },
         wake: (@Sendable () -> Void)? = nil,
     ) {
         self.title = title
+        self.kind = kind
+        self.host = host
+        // Broken by hand into two balanced lines; the natural wrap left "back here." alone.
+        self.lead = lead ?? "Enter this code on \(host),\nthen come back here."
         self.start = start
         self.complete = complete
         self.now = now
@@ -38,8 +49,21 @@ import UsageCore
     }
 
     /// Fixed-state init for previews and snapshots.
-    convenience init(title: String, state: State) {
-        self.init(title: title, start: { throw CancellationError() }, complete: { _ in throw CancellationError() })
+    convenience init(
+        title: String,
+        kind: ProviderKind = .codex,
+        host: String = "auth.openai.com",
+        lead: String? = nil,
+        state: State,
+    ) {
+        self.init(
+            title: title,
+            kind: kind,
+            host: host,
+            lead: lead,
+            start: { throw CancellationError() },
+            complete: { _ in throw CancellationError() },
+        )
         self.state = state
     }
 
