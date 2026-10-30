@@ -101,37 +101,31 @@ public final class AntigravityClientDiscovery: GoogleOAuthClientSource, @uncheck
 
     /// `GOCSPX-[A-Za-z0-9_-]{28}` byte matches (CodexBar's exact length; a greedy range would
     /// swallow adjacent bytes and never yield the real secret), de-duplicated in first-seen order.
+    /// Compares the mapped bytes in place: the language_server binaries are 100 MB+, so no copy.
     static func candidates(in data: Data) -> [String] {
-        let prefix = Array("GOCSPX-".utf8)
-        let tail = 28
+        let prefix: [UInt8] = Array("GOCSPX-".utf8)
+        let length = prefix.count + 28
         func isTail(_ b: UInt8) -> Bool {
             (b >= 0x41 && b <= 0x5A) || (b >= 0x61 && b <= 0x7A) || (b >= 0x30 && b <= 0x39)
                 || b == 0x5F || b == 0x2D // '_' '-'
         }
-        let bytes = [UInt8](data)
-        let n = bytes.count
-        var out: [String] = []
-        var seen = Set<String>()
-        var i = 0
-        while i + prefix.count + tail <= n {
-            guard bytes[i] == prefix[0], Array(bytes[i ..< i + prefix.count]) == prefix else {
-                i += 1
-                continue
-            }
-            let start = i + prefix.count
-            let end = start + tail
-            var ok = true
-            var j = start
-            while j < end { if !isTail(bytes[j]) { ok = false; break }; j += 1 }
-            if ok {
-                let s = String(decoding: bytes[i ..< end], as: UTF8.self)
+        return data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> [String] in
+            var out: [String] = []
+            var seen = Set<String>()
+            var i = 0
+            while i + length <= raw.count {
+                var k = 0
+                while k < prefix.count, raw[i + k] == prefix[k] { k += 1 }
+                guard k == prefix.count else { i += 1; continue }
+                var j = i + prefix.count
+                while j < i + length, isTail(raw[j]) { j += 1 }
+                guard j == i + length else { i += 1; continue }
+                let s = String(decoding: UnsafeRawBufferPointer(rebasing: raw[i ..< i + length]), as: UTF8.self)
                 if seen.insert(s).inserted { out.append(s) }
-                i = end
-            } else {
-                i += 1
+                i += length
             }
+            return out
         }
-        return out
     }
 
     /// Scans `files` for candidate secrets. Returns distinct candidates in first-seen order, each
@@ -176,7 +170,15 @@ public final class AntigravityClientDiscovery: GoogleOAuthClientSource, @uncheck
             inFlight = t
             return t
         }
+        lock.withLock { _onEnter }?()
         return try await task.value
+    }
+
+    /// Test seam: runs once per `client()` call, after it has joined or started resolution.
+    private var _onEnter: (@Sendable () -> Void)?
+    var onEnter: (@Sendable () -> Void)? {
+        get { lock.withLock { _onEnter } }
+        set { lock.withLock { _onEnter = newValue } }
     }
 
     private func resolve() async throws -> GoogleOAuthClient {
@@ -185,7 +187,14 @@ public final class AntigravityClientDiscovery: GoogleOAuthClientSource, @uncheck
         if let c = (lock.withLock { cachedClient }) { return c }
 
         // Keychain cache: a secret Google already accepted. No network, no file read.
-        if let cred = try? cache.read(Self.cacheID) {
+        let cached: Credential?
+        do {
+            cached = try cache.read(Self.cacheID)
+        } catch {
+            Self.log.error("cache read failed")
+            cached = nil
+        }
+        if let cred = cached {
             let client = GoogleOAuthClient(
                 clientID: cred.remoteAccountID ?? GoogleOAuth.antigravityClientID,
                 secret: cred.access
@@ -211,19 +220,23 @@ public final class AntigravityClientDiscovery: GoogleOAuthClientSource, @uncheck
             for found in scanned.candidates.prefix(4) {
                 let candidate = GoogleOAuthClient(secret: Secret(found.secret))
                 if try await oauth.probe(candidate) {
-                    try? cache.write(
-                        Credential(
-                            kind: .google,
-                            access: Secret(found.secret),
-                            refresh: nil,
-                            expiresAt: nil,
-                            refreshExpiresAt: nil,
-                            scopes: [],
-                            remoteAccountID: candidate.clientID
-                        ),
-                        for: Self.cacheID,
-                        label: "Google OAuth client (Antigravity)"
-                    )
+                    do {
+                        try cache.write(
+                            Credential(
+                                kind: .google,
+                                access: Secret(found.secret),
+                                refresh: nil,
+                                expiresAt: nil,
+                                refreshExpiresAt: nil,
+                                scopes: [],
+                                remoteAccountID: candidate.clientID
+                            ),
+                            for: Self.cacheID,
+                            label: "Google OAuth client (Antigravity)"
+                        )
+                    } catch {
+                        Self.log.error("cache write failed")
+                    }
                     lock.withLock { cachedClient = candidate }
                     // file name only, never the secret.
                     Self.log.info("discovered from \(found.file, privacy: .public)")

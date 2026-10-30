@@ -22,8 +22,12 @@ struct AntigravityClientDiscoveryTests {
         private let lock = NSLock()
         private var recorded: [URLRequest] = []
         private let accept: Set<String>
+        private let gate: Gate?
 
-        init(accept: Set<String> = []) { self.accept = accept }
+        init(accept: Set<String> = [], gate: Gate? = nil) {
+            self.accept = accept
+            self.gate = gate
+        }
 
         var requests: [URLRequest] { lock.withLock { recorded } }
 
@@ -35,6 +39,7 @@ struct AntigravityClientDiscoveryTests {
         }
 
         func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+            if let gate { await gate.wait() }
             let secret: String? = {
                 guard let body = request.httpBody, let s = String(data: body, encoding: .utf8) else { return nil }
                 var c = URLComponents()
@@ -46,6 +51,39 @@ struct AntigravityClientDiscoveryTests {
             lock.withLock { recorded.append(request) }
             return (Data("{}".utf8), resp)
         }
+    }
+
+    /// Suspends every waiter until `open()`; a wait after `open()` returns at once.
+    final class Gate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var isOpen = false
+        private var waiters: [CheckedContinuation<Void, Never>] = []
+
+        func wait() async {
+            await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+                let now: Bool = lock.withLock {
+                    if isOpen { return true }
+                    waiters.append(c)
+                    return false
+                }
+                if now { c.resume() }
+            }
+        }
+
+        func open() {
+            let w: [CheckedContinuation<Void, Never>] = lock.withLock {
+                isOpen = true
+                defer { waiters = [] }
+                return waiters
+            }
+            w.forEach { $0.resume() }
+        }
+    }
+
+    final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var n = 0
+        func increment() -> Int { lock.withLock { n += 1; return n } }
     }
 
     // MARK: - Temp files
@@ -175,8 +213,11 @@ struct AntigravityClientDiscoveryTests {
             #expect(req.url?.absoluteString == GoogleOAuth.tokenURL.absoluteString)
             #expect(t.secret(i) != nil)
         }
-        // The right secret appears only in the token request body, nowhere in the URL.
-        #expect(t.requests.allSatisfy { !($0.url?.absoluteString.contains(right) ?? false) })
+        // The secret appears only in the token request body, never in the URL or a header.
+        for req in t.requests {
+            #expect(!(req.url?.absoluteString.contains(right) ?? false))
+            #expect(!(req.allHTTPHeaderFields ?? [:]).contains { $0.key.contains(right) || $0.value.contains(right) })
+        }
     }
 
     @Test func candidateCapIsFour() async {
@@ -196,9 +237,12 @@ struct AntigravityClientDiscoveryTests {
             for: AntigravityClientDiscovery.cacheID,
             label: "x"
         )
-        // A file path that would crash the scan if read, proving the cache short-circuits it.
-        let bogus = URL(fileURLWithPath: "/nonexistent/should-not-be-read")
-        let (d, t) = discovery(files: [bogus], cache: cache)
+        // A trusted file with an accepted candidate: had discovery run, it would be probed,
+        // so zero requests proves the cache hit returns before any scan.
+        let tmp = TempDir()
+        let other = Self.fakeSecret("q")
+        let f = tmp.write("bin", Self.blob([other]))
+        let (d, t) = discovery(files: [f], accept: [other], cache: cache)
         let client = try await d.client()
         #expect(client.secret.reveal() == secret)
         #expect(t.requests.isEmpty)
@@ -206,18 +250,32 @@ struct AntigravityClientDiscoveryTests {
 
     @Test func failedDiscoveryNotRetriedThisLaunch() async {
         let tmp = TempDir()
-        let f = tmp.write("bin", Self.blob([])) // no candidates
-        let (d, t) = discovery(files: [f])
+        let wrong = Self.fakeSecret("a"), right = Self.fakeSecret("b")
+        let first = tmp.write("bin1", Self.blob([wrong]))
+        let later = tmp.url.appendingPathComponent("bin2") // absent during the first call
+        let (d, t) = discovery(files: [first, later], accept: [right])
         await #expect(throws: GoogleOAuthError.clientUnavailable) { _ = try await d.client() }
+        #expect(t.requests.count == 1)
+        // An accepted secret appears afterwards: a rescan would now succeed.
+        tmp.write("bin2", Self.blob([right]))
         await #expect(throws: GoogleOAuthError.clientUnavailable) { _ = try await d.client() }
-        #expect(t.requests.isEmpty)
+        #expect(t.requests.count == 1)
     }
 
     @Test func concurrentCallsShareOneDiscovery() async throws {
         let tmp = TempDir()
         let wrong = Self.fakeSecret("a"), right = Self.fakeSecret("b")
         let f = tmp.write("bin", Self.blob([wrong, right]))
-        let (d, t) = discovery(files: [f], accept: [right])
+        // Probes stay blocked until both calls have entered `client()`.
+        let gate = Gate()
+        let t = ProbeTransport(accept: [right], gate: gate)
+        let d = AntigravityClientDiscovery(
+            oauth: GoogleOAuth(http: HTTPClient(transport: t)),
+            cache: InMemoryCredentialStore(),
+            files: [f]
+        )
+        let entries = Counter()
+        d.onEnter = { if entries.increment() == 2 { gate.open() } }
         async let a = d.client()
         async let b = d.client()
         let (c1, c2) = try await (a, b)
