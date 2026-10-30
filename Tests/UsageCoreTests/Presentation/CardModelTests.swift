@@ -109,6 +109,10 @@ import Testing
         #expect(make(claude([], plan: "pro")).planTag == "Pro")
         #expect(make(claude([], plan: "enterprise")).planTag == "Enterprise")
         #expect(make(claude([], plan: "free")).planTag == "Free")
+        #expect(make(claude([], plan: "PLUS")).planTag == "Plus")
+        #expect(make(claude([], plan: "Google AI Pro")).planTag == "Google AI Pro")
+        #expect(make(claude([], plan: "SuperGrok")).planTag == "SuperGrok")
+        #expect(make(claude([], plan: "Google_AI_Ultra")).planTag == "Google AI Ultra")
     }
     @Test func copilotCredits() {
         let s = UsageSnapshot(accountID: copilotID, fetchedAt: now, plan: "enterprise",

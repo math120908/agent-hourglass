@@ -46,6 +46,10 @@ enum Formatting {
 
     static func planTag(_ raw: String?) -> String? {
         guard let raw, !raw.isEmpty else { return nil }
+        // Already-styled names ("Google AI Pro", "SuperGrok") keep their casing.
+        if raw.contains(where: \.isUppercase) && raw.contains(where: \.isLowercase) {
+            return raw.replacingOccurrences(of: "_", with: " ")
+        }
         let words = raw.split(whereSeparator: { $0 == "_" || $0 == " " }).map(String.init)
         guard let first = words.first else { return nil }
         return ([first.prefix(1).uppercased() + first.dropFirst().lowercased()] + words.dropFirst().map { $0.lowercased() })
