@@ -63,11 +63,13 @@ Personal builds only: not in a release. Shows the SuperGrok weekly credit pool.
 - **Usage**: `GET https://cli-chat-proxy.grok.com/v1/billing?format=credits` (meters) and `/v1/settings` (plan, best effort), at most once per 5 min. A billing 403 shows "Quota unavailable". A missing `creditUsagePercent` gives an empty meter, never 0%.
 - **Storage**: Grok accounts live in `accounts-ext.json`, next to `accounts.json`. Shipped builds never open it, so a downgrade only hides Grok accounts until this build runs again.
 
-Response shapes (redacted: tokens, email, codes and ids become `<redacted>`, other strings `<str N>`) log at `debug` level, which is not persisted. Watch live:
+Response shapes log at `debug` level (category `ResponseShape`), which is not persisted. Values under token, secret, email, project, code, `sub` and similar keys become `<redacted>`; other strings become `<str N>` (length only). Numbers, bools and nulls pass through verbatim, numeric ids included. A billing 403 logs no body: only the status line `billing 403` (category `GrokProvider`, `error` level). Start the stream before adding the account:
 
 ```bash
-log stream --level debug --predicate 'subsystem == "cc.kuoc.agent-hourglass" AND category == "ResponseShape"'
+log stream --level debug --predicate 'subsystem == "cc.kuoc.agent-hourglass"'
 ```
+
+Add `AND category == "ResponseShape"` to see only the shapes.
 
 To read them later with `log show --last 1h --debug` (same predicate), persist debug first: `sudo log config --subsystem cc.kuoc.agent-hourglass --mode "level:debug,persist:debug"`.
 
