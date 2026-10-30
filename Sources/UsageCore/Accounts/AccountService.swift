@@ -6,6 +6,7 @@ public enum AccountServiceError: Error, Equatable {
     case differentAccount
     case unknownAccount
     case missingAccountID
+    case reauthUnsupported
 }
 
 /// Orchestrates AccountRegistry + CredentialStore + Poller (spec §4, §5).
@@ -172,10 +173,12 @@ public actor AccountService {
         await poller.refreshAll(force: false)
     }
 
-    /// Re-auths `id`. A login that resolves to another account is dropped without any write.
+    /// Re-auths a Claude `id`. A login that resolves to another account is dropped without any write.
+    /// Other kinds re-auth by adding the account again (`reauthUnsupported`).
     public func reauth(_ id: AccountID) async throws {
         guard let entry = await registry.accounts().first(where: { $0.id == id }) else { throw AccountServiceError.unknownAccount }
         if id.isClaudeCodeLocal { return try await readdClaudeCodeLocal() }
+        guard entry.kind == .claude else { throw AccountServiceError.reauthUnsupported }
         let remote = String(id.rawValue.dropFirst(entry.kind.rawValue.count + 1))
         let (cred, remoteID) = try await signIn(entry.remoteLogin, remote)
         guard AccountID(kind: entry.kind, remoteID: remoteID) == id else { throw AccountServiceError.differentAccount }
@@ -201,10 +204,12 @@ public actor AccountService {
         try await history.deleteAccount(id)
     }
 
-    /// Deletes Keychain items under our service that have no registry entry.
+    /// Deletes Keychain items under our service that have no registry entry, for every kind except Codex
+    /// and Copilot (left alone, as before); an id of unknown kind is kept.
     public func cleanupOrphans() async throws {
         let known = Set(await registry.accounts().map(\.id))
-        for id in try store.allAccountIDs() where id.kind == .claude && !known.contains(id) {
+        let owned = { (id: AccountID) in id.kind.map { $0 != .codex && $0 != .copilot } ?? false }
+        for id in try store.allAccountIDs() where owned(id) && !known.contains(id) {
             try store.delete(id)
         }
     }
