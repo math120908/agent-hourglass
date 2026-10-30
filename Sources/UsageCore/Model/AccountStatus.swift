@@ -18,4 +18,6 @@ public enum AccountStatus: Codable, Sendable, Equatable {
     case claudeCodeExpired
     /// Claude Code (local): Keychain access denied or unavailable. No further reads until re-added or relaunched.
     case claudeCodeDenied
+    /// Signed in, but the server returned no trustworthy quota (placeholder, 403, unconfirmed all-100%).
+    case quotaUnavailable
 }

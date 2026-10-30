@@ -29,6 +29,14 @@ final class CountingProvider: UsageProvider, @unchecked Sendable {
     func refresh(credential: Credential, http: HTTPClient) async throws -> Credential? { nil }
 }
 
+/// Signed in, but the server returned no trustworthy quota.
+struct QuotaUnavailableProvider: UsageProvider {
+    let kind: ProviderKind = .claude
+    let minimumInterval: Duration = .seconds(60)
+    func fetch(credential: Credential, http: HTTPClient) async throws -> UsageSnapshot { throw QuotaError.unavailable }
+    func refresh(credential: Credential, http: HTTPClient) async throws -> Credential? { nil }
+}
+
 final class Results: @unchecked Sendable {
     private let lock = NSLock()
     private var _r: [(AccountID, FetchOutcome)] = []
@@ -180,5 +188,15 @@ struct PollerStuckAccountTests {
         #expect(provider.fetches == ["ok"])
         blocking.gate.signal()
         await tick.value
+    }
+
+    @Test func quotaErrorReportsQuotaUnavailable() async throws {
+        let clock = TestClock()
+        let id = AccountID(kind: .claude, remoteID: "acct-quota")
+        let store = InMemoryCredentialStore()
+        try store.write(Credential(kind: .claude, access: Secret("tok"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: id, label: "t")
+        let client = AccountClient(id: id, provider: QuotaUnavailableProvider(), http: HTTPClient(), store: store, clock: ContinuousClock(), now: { clock.now })
+        #expect(await client.fetch() == .failure(.quotaUnavailable))
+        #expect(await client.status == .quotaUnavailable)
     }
 }
