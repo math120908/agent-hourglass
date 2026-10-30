@@ -17,5 +17,6 @@ final class StatusActionTests: XCTestCase {
         XCTAssertEqual(StatusAction.make(.rateLimited(retryAt: d)), .rateLimited(retryAt: d))
         XCTAssertEqual(StatusAction.make(.schemaError), .formatChanged)
         XCTAssertEqual(StatusAction.make(.offline), .offline)
+        XCTAssertEqual(StatusAction.make(.quotaUnavailable), .stale)
     }
 }

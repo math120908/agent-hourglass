@@ -8,6 +8,7 @@ struct AccountsTab: View {
     var addCopilot: () -> Void = {}
     var addCodex: () -> Void = {}
     var addClaudeCode: () -> Void = {}
+    var addGrok: () -> Void = {}
     @State private var pendingRemoval: AccountEntry?
 
     var body: some View {
@@ -44,6 +45,7 @@ struct AccountsTab: View {
                     } label: { Label { Text("Claude") } icon: { ProviderIcon(kind: .claude) } }
                     Button(action: addCopilot) { Label { Text("GitHub Copilot") } icon: { ProviderIcon(kind: .copilot) } }
                     Button(action: addCodex) { Label { Text("Codex") } icon: { ProviderIcon(kind: .codex) } }
+                    Button(action: addGrok) { Label { Text("Grok") } icon: { ProviderIcon(kind: .grok) } }
                 } label: {
                     Label("Add Account", systemImage: "plus")
                 }
@@ -77,6 +79,8 @@ struct AccountsTab: View {
             "This deletes the account's usage history from this Mac. gh is not touched: your gh login is left as is."
         case .codex:
             "This deletes the account's usage history from this Mac. ~/.codex and your Codex CLI login are not touched."
+        case .grok:
+            "This deletes the account's saved sign-in and its usage history from this Mac. ~/.grok and your grok CLI login are not touched."
         }
     }
 }

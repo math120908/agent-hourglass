@@ -1,0 +1,2 @@
+// fixture: App/GuardProbe.swift cli-creds
+let p = "~/.grok/auth.json"

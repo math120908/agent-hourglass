@@ -25,6 +25,7 @@ struct ProviderIcon: View {
         case .claude: "ProviderClaude"
         case .codex: "ProviderCodex"
         case .copilot: nil
+        case .grok: nil
         }
     }
 
@@ -33,6 +34,7 @@ struct ProviderIcon: View {
         case .claude: "Claude"
         case .codex: "Codex"
         case .copilot: "Unsupported provider"
+        case .grok: "Grok"
         }
     }
 }

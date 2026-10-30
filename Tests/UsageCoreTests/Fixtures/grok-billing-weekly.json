@@ -1,0 +1,7 @@
+{"config":{
+  "currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY","start":"2026-10-26T00:00:00.000Z","end":"2026-11-02T00:00:00.000Z"},
+  "creditUsagePercent":96.0,
+  "onDemandCap":{"val":0},"onDemandUsed":{"val":0},
+  "productUsage":[{"product":"GrokBuild","usagePercent":84.0},{"product":"Chat","usagePercent":12.0}],
+  "prepaidBalance":{"val":"420"},
+  "futureKey":true}}

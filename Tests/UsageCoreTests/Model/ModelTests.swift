@@ -63,4 +63,32 @@ import Testing
         let status = AccountStatus.rateLimited(retryAt: now)
         #expect(try JSONDecoder().decode(AccountStatus.self, from: JSONEncoder().encode(status)) == status)
     }
+
+    @Test func usesWindowMeters() {
+        #expect(ProviderKind.codex.usesWindowMeters)
+        #expect(!ProviderKind.claude.usesWindowMeters)
+        #expect(!ProviderKind.copilot.usesWindowMeters)
+    }
+
+    @Test func grokRawValueAndAccountID() {
+        let id = AccountID(kind: .grok, remoteID: "sub-1")
+        #expect(id.rawValue == "grok:sub-1")
+        #expect(id.kind == .grok)
+        #expect(ProviderKind.grok.usesWindowMeters)
+        #expect(!ProviderKind.grok.storesInMainRegistry)
+    }
+
+    @Test func meterPoolRoundTrips() throws {
+        let m = Meter(kind: .window, label: "5-hour", percentUsed: 30, windowLength: .seconds(18000), pool: "gemini")
+        let back = try JSONDecoder().decode(Meter.self, from: JSONEncoder().encode(m))
+        #expect(back == m)
+        #expect(back.pool == "gemini")
+    }
+
+    @Test func meterDecodesWithoutPool() throws {
+        let json = #"{"kind":"window","label":"5-hour","percentUsed":30,"isUnlimited":false,"severity":"normal"}"#
+        let m = try JSONDecoder().decode(Meter.self, from: Data(json.utf8))
+        #expect(m.kind == .window)
+        #expect(m.pool == nil)
+    }
 }

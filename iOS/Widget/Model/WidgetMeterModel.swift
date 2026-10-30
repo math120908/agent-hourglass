@@ -46,6 +46,7 @@ enum WidgetMeterModel {
         case .claude: raw = ["session5h", "weeklyAll"]
         case .codex: raw = ["window:18000", "window:604800"]
         case .copilot: raw = ["copilotPremium"]
+        case .grok: raw = ["window:604800"]
         }
         return Array(raw.compactMap(MeterKey.init(rawValue:)).prefix(family.maxRows))
     }

@@ -52,6 +52,27 @@ log show --last 1d --info --predicate 'subsystem == "cc.kuoc.agent-hourglass" AN
 
 A new `itemModified` value followed by `ok` with no prompt means the grant survived the rewrite. A prompt (or `userCanceled`) right after a new `itemModified` means Claude Code recreated the item and dropped the grant. Use `log stream` with the same predicate to watch live.
 
+## Grok provider (experimental)
+
+Personal builds only: not in a release. Shows the SuperGrok weekly credit pool.
+
+- **Client**: reuses the public Grok-CLI OAuth client (`GrokDeviceAuth.clientID`, issuer `https://auth.x.ai`) with exactly its scope `openid profile email offline_access grok-cli:access api:access`. No extra scopes such as `billing:read` are guessed.
+- **Sign-in**: RFC 8628 device code (show code, open the xAI page, poll). No loopback port, so it never clashes with a concurrent `grok login`. `access_denied` / `expired_token` stop at once; `slow_down` adds 5 s.
+- **Tokens**: the app keeps its own chain in Keychain service `cc.kuoc.agent-hourglass`. The refresh token rotates on every refresh (a response without one keeps the previous one); `invalid_grant` shows "needs sign-in", never a retry loop.
+- **Never reads `~/.grok`**: the Grok CLI's own login is left untouched, so neither side logs the other out. `source-guards.sh` rejects the path.
+- **Usage**: `GET https://cli-chat-proxy.grok.com/v1/billing?format=credits` (meters) and `/v1/settings` (plan, best effort), at most once per 5 min. A billing 403 shows "Quota unavailable". A missing `creditUsagePercent` gives an empty meter, never 0%.
+- **Storage**: Grok accounts live in `accounts-ext.json`, next to `accounts.json`. Shipped builds never open it, so a downgrade only hides Grok accounts until this build runs again.
+
+Response shapes log at `debug` level (category `ResponseShape`), which is not persisted. Values under token, secret, email, project, code, `sub` and similar keys become `<redacted>`; other strings become `<str N>` (length only). Numbers, bools and nulls pass through verbatim, numeric ids included. A billing 403 logs no body: only the status line `billing 403` (category `GrokProvider`, `error` level). Start the stream before adding the account:
+
+```bash
+log stream --level debug --predicate 'subsystem == "cc.kuoc.agent-hourglass"'
+```
+
+Add `AND category == "ResponseShape"` to see only the shapes.
+
+To read them later with `log show --last 1h --debug` (same predicate), persist debug first: `sudo log config --subsystem cc.kuoc.agent-hourglass --mode "level:debug,persist:debug"`.
+
 ## Dev-only tools
 
 Not part of a normal install. These exist for testing and must not be used with shipped builds:

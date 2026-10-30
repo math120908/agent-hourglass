@@ -1,0 +1,3 @@
+// fixture: Sources/UsageCore/Accounts/GuardProbe.swift cli-creds
+let home = NSHomeDirectory()
+let p = home + "/.gemini/oauth_creds.json"

@@ -12,6 +12,8 @@ report() { [ -z "$hits" ] || { echo "secret-scan: $1:" >&2; echo "$hits" >&2; ex
 # The gap allows CRLF, indentation (YAML, Swift """), JSON \n escapes and trailing spaces; legacy
 # encrypted PEM puts Proc-Type / DEK-Info lines before the body. Matched with rg -U -P.
 pem_re='-----BEGIN [A-Z ]*PRIVATE KEY-----[^A-Za-z0-9+/]{0,40}(?:(?:Proc-Type|DEK-Info):[^\n]*\s*)*[A-Za-z0-9+/]{40,}'
+# A Google OAuth client secret (Mac discovers it at runtime; iOS reads an untracked xcconfig).
+gocspx_re='GOCSPX-[A-Za-z0-9_-]{10,}'
 
 # Self-test: throwaway keys generated now (never committed), one file per form; each must match, and
 # the bare header compare must not.
@@ -47,6 +49,13 @@ selftest() {
   printf '%s\n' "[ \"\$(head -n 1 \"\$k\")\" = '-----BEGIN PRIVATE KEY-----' ] || exit 4" > "$d/bare-header.sh"
   scan -U -P -l -e "$pem_re" -- "$d/bare-header.sh"
   [ -z "$hits" ] || die "self-test: PEM rule flags a bare header compare"
+  # A throwaway client-secret-shaped string, random per run.
+  local rnd
+  rnd=$(/usr/bin/openssl rand -hex 14) && [ ${#rnd} -eq 28 ] \
+    || die "self-test: could not generate a throwaway client secret"
+  printf 'let s = "GOCSPX-%s"\n' "$rnd" > "$d/client-secret.swift"
+  scan -l -e "$gocspx_re" -- "$d/client-secret.swift"
+  [ -n "$hits" ] || die "self-test: Google client secret rule missed"
 }
 selftest
 
@@ -72,4 +81,6 @@ while IFS= read -r -d '' f; do [ -e "$f" ] && tracked+=("$f"); done < <(git ls-f
 [ ${#tracked[@]} -gt 0 ] || die "no tracked files"
 scan -U -P -n -l -e "$pem_re" -e 'ASC_ISSUER_ID=[0-9a-f-]{8,}' -- "${tracked[@]}"
 report "private key / App Store Connect material tracked by git"
+scan -n -e "$gocspx_re" -- "${tracked[@]}"
+report "Google OAuth client secret tracked by git"
 echo "secret-scan: ok"

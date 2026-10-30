@@ -8,7 +8,7 @@ public enum StatusAction: Sendable, Equatable {
     public static func make(_ status: AccountStatus) -> StatusAction {
         switch status {
         case .fresh, .noData: return .none
-        case .stale: return .stale
+        case .stale, .quotaUnavailable: return .stale
         case .needsLogin, .codexNotSignedIn, .ghMissing, .ghLoginRemoved,
              .claudeCodeNotSignedIn, .claudeCodeExpired, .claudeCodeDenied: return .signIn
         case .rateLimited(let at): return .rateLimited(retryAt: at)

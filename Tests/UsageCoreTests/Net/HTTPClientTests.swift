@@ -6,11 +6,13 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) static var requests: [URLRequest] = []
     nonisolated(unsafe) static var status = 200
     nonisolated(unsafe) static var headers: [String: String] = [:]
+    nonisolated(unsafe) static var body = Data()
 
-    static func reset(status: Int = 200, headers: [String: String] = [:]) {
+    static func reset(status: Int = 200, headers: [String: String] = [:], body: Data = Data()) {
         requests = []
         self.status = status
         self.headers = headers
+        self.body = body
     }
 
     override class func canInit(with request: URLRequest) -> Bool { true }
@@ -20,7 +22,7 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
         Self.requests.append(request)
         let resp = HTTPURLResponse(url: request.url!, statusCode: Self.status, httpVersion: "HTTP/1.1", headerFields: Self.headers)!
         client?.urlProtocol(self, didReceive: resp, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data())
+        client?.urlProtocol(self, didLoad: Self.body)
         client?.urlProtocolDidFinishLoading(self)
     }
 
@@ -80,5 +82,59 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
             #expect(!String(describing: error).contains("SECRET"))
             #expect(!error.localizedDescription.contains("SECRET"))
         }
+    }
+
+    @Test func sendOAuthReturns400Body() async throws {
+        let body = Data(#"{"error":"authorization_pending"}"#.utf8)
+        StubProtocol.reset(status: 400, body: body)
+        let req = URLRequest(url: URL(string: "https://auth.x.ai/oauth2/token")!)
+        let (data, resp) = try await client.sendOAuth(req)
+        #expect(resp.statusCode == 400)
+        #expect(data == body)
+    }
+
+    @Test func sendOAuthRejectsAuthorizationHeader() async {
+        StubProtocol.reset()
+        var req = URLRequest(url: URL(string: "https://auth.x.ai/oauth2/token")!)
+        req.setValue("Bearer tok-AAAA1234", forHTTPHeaderField: "Authorization")
+        await #expect(throws: ProviderError.hostNotAllowed("auth.x.ai")) {
+            _ = try await client.sendOAuth(req)
+        }
+        #expect(StubProtocol.requests.isEmpty)
+    }
+
+    @Test func sendOAuth429IsRateLimited() async {
+        StubProtocol.reset(status: 429, headers: ["Retry-After": "30"])
+        let req = URLRequest(url: URL(string: "https://auth.x.ai/oauth2/token")!)
+        await #expect(throws: ProviderError.rateLimited(retryAfter: .seconds(30))) {
+            _ = try await client.sendOAuth(req)
+        }
+    }
+
+    @Test func sendOAuthRejectsHTTP() async {
+        StubProtocol.reset()
+        let req = URLRequest(url: URL(string: "http://auth.x.ai/oauth2/token")!)
+        await #expect(throws: ProviderError.hostNotAllowed("auth.x.ai")) {
+            _ = try await client.sendOAuth(req)
+        }
+        #expect(StubProtocol.requests.isEmpty)
+    }
+
+    @Test func sendOAuthRejectsForeignHost() async {
+        StubProtocol.reset()
+        let req = URLRequest(url: URL(string: "https://example.com/oauth2/token")!)
+        await #expect(throws: ProviderError.hostNotAllowed("example.com")) {
+            _ = try await client.sendOAuth(req)
+        }
+        #expect(StubProtocol.requests.isEmpty)
+    }
+
+    @Test func sendOAuthReturns401Body() async throws {
+        let body = Data(#"{"error":"invalid_grant"}"#.utf8)
+        StubProtocol.reset(status: 401, body: body)
+        let req = URLRequest(url: URL(string: "https://auth.x.ai/oauth2/token")!)
+        let (data, resp) = try await client.sendOAuth(req)
+        #expect(resp.statusCode == 401)
+        #expect(data == body)
     }
 }
