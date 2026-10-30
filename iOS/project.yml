@@ -45,6 +45,8 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         GitCommit: $(GIT_COMMIT)
         AHKeychainAccessGroup: $(TeamIdentifierPrefix)cc.kuoc.agent-hourglass.shared
+        BGTaskSchedulerPermittedIdentifiers: [cc.kuoc.agent-hourglass.reset-radar]
+        UIBackgroundModes: [fetch]
         # SPIKE: dev-only Google client secret from the untracked Config/GoogleOAuth.local.xcconfig.
         AHGoogleClientSecret: $(GOOGLE_AG_CLIENT_SECRET)
         CFBundleURLTypes:

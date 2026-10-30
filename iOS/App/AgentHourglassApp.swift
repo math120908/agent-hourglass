@@ -7,7 +7,19 @@ struct AgentHourglassApp: App {
     @State private var model = AppModel(env: UsageEnvironment.live(), displayStore: DisplaySettingsStore(defaults: AppGroup.defaults))
     @State private var showSettings = false
     @State private var addFlow: AddFlow?
+    @State private var radar: ResetRadarController
     @Environment(\.scenePhase) private var scenePhase
+
+    init() {
+        let radar = ResetRadarController.live()
+        #if DEBUG
+        let headless = CommandLine.arguments.contains("--render")
+        #else
+        let headless = false
+        #endif
+        if !headless { radar.registerBackgroundTask() }
+        _radar = State(initialValue: radar)
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -24,14 +36,18 @@ struct AgentHourglassApp: App {
                     }
                 }
                 .sheet(isPresented: $showSettings) {
-                    SettingsView(model: model, display: model.displayStore, themes: themeStore)
+                    SettingsView(model: model, display: model.displayStore, themes: themeStore, radar: radar)
                 }
                 .appTheme(themeStore.theme)
                 .environment(\.displaySettings, model.displayStore.settings)
+                .environment(\.resetRadar, radar)
+                .environment(\.cardAccessory, .resetRadar)
                 .task { await start() }
                 .onOpenURL { model.handle(url: $0) }
                 .onChange(of: scenePhase) { _, phase in
-                    if !fixturesMode { Task { await model.scenePhaseChanged(phase) } }
+                    guard !fixturesMode else { return }
+                    Task { await model.scenePhaseChanged(phase) }
+                    if phase == .active { Task { await radar.sceneBecameActive() } }
                 }
         }
     }
@@ -56,6 +72,9 @@ struct AgentHourglassApp: App {
         }
         #endif
         await model.load()
-        if scenePhase == .active { await model.scenePhaseChanged(.active) }
+        if scenePhase == .active {
+            await model.scenePhaseChanged(.active)
+            await radar.sceneBecameActive()
+        }
     }
 }

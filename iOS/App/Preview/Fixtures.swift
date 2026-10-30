@@ -101,4 +101,26 @@ enum Fixtures {
         }
         return state
     }
+
+    /// Reset radar timeline (merged, newest first), shaped like codex-reset.com events.
+    static var resetEvents: [ResetEvent] {
+        func ev(_ id: String, _ day: String, _ kind: ResetEvent.Kind, _ summary: String, hoursAgo: Double?, confirmed: Bool = true) -> ResetEvent {
+            ResetEvent(
+                id: id,
+                day: day,
+                kind: kind,
+                summary: summary,
+                url: URL(string: "https://x.com/thsottiaux/status/\(id)"),
+                at: hoursAgo.map { now.addingTimeInterval(-$0 * 3600) },
+                confirmed: confirmed
+            )
+        }
+        return [
+            ev("5", "2026-10-19", .reset, "Lands by midnight PST.", hoursAgo: 31),
+            ev("4", "2026-10-17", .reset, "Day 21/ Much requested iCloud Mail & Calendar plugins. Just kidding, today is a reset.", hoursAgo: 75),
+            ev("3", "2026-10-16", .reset, "By midnight PST", hoursAgo: 100),
+            ev("2", "2026-10-15", .credits, "Credits top-up for Plus and Pro plans.", hoursAgo: 125),
+            ev("1", "2026-10-13", .reset, "Rolling out over the next few hours.", hoursAgo: 170, confirmed: false),
+        ]
+    }
 }

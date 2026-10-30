@@ -16,6 +16,7 @@ enum SettingsSnapshots {
                 model: .preview(),
                 display: DisplaySettingsStore(defaults: defaults),
                 themes: ThemeStore(defaults: defaults),
+                radar: ResetRadarController(defaults: defaults),
                 editMode: editMode
             )
         })

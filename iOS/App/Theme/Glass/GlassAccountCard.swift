@@ -88,6 +88,7 @@ struct GlassAccountCard: View {
                 }
                 .transition(.opacity)
             }
+            CardAccessorySlot(kind: kind, now: now, calendar: calendar, horizontalPadding: 12)
         }
         .opacity(c.isDimmed && action != .offline ? 0.82 : 1)
         .glassCardBackground()

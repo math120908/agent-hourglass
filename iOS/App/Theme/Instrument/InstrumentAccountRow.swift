@@ -64,6 +64,7 @@ struct InstrumentAccountRow: View {
                 .opacity(dimOpacity(c))
                 .transition(.opacity)
             }
+            CardAccessorySlot(kind: kind, now: now, calendar: calendar, horizontalPadding: 14)
         }
     }
 
