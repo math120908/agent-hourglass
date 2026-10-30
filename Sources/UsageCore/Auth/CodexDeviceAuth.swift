@@ -267,7 +267,7 @@ public struct CodexDeviceAuth: Sendable {
         return max(.seconds(secs), minInterval)
     }
 
-    private static func number(_ raw: Any?) -> Double? {
+    static func number(_ raw: Any?) -> Double? {
         switch raw {
         case let n as NSNumber: n.doubleValue
         case let s as String: Double(s.trimmingCharacters(in: .whitespaces))
