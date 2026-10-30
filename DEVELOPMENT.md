@@ -52,6 +52,25 @@ log show --last 1d --info --predicate 'subsystem == "cc.kuoc.agent-hourglass" AN
 
 A new `itemModified` value followed by `ok` with no prompt means the grant survived the rewrite. A prompt (or `userCanceled`) right after a new `itemModified` means Claude Code recreated the item and dropped the grant. Use `log stream` with the same predicate to watch live.
 
+## Grok provider (experimental)
+
+Personal builds only: not in a release. Shows the SuperGrok weekly credit pool.
+
+- **Client**: reuses the public Grok-CLI OAuth client (`GrokDeviceAuth.clientID`, issuer `https://auth.x.ai`) with exactly its scope `openid profile email offline_access grok-cli:access api:access`. No extra scopes such as `billing:read` are guessed.
+- **Sign-in**: RFC 8628 device code (show code, open the xAI page, poll). No loopback port, so it never clashes with a concurrent `grok login`. `access_denied` / `expired_token` stop at once; `slow_down` adds 5 s.
+- **Tokens**: the app keeps its own chain in Keychain service `cc.kuoc.agent-hourglass`. The refresh token rotates on every refresh (a response without one keeps the previous one); `invalid_grant` shows "needs sign-in", never a retry loop.
+- **Never reads `~/.grok`**: the Grok CLI's own login is left untouched, so neither side logs the other out. `source-guards.sh` rejects the path.
+- **Usage**: `GET https://cli-chat-proxy.grok.com/v1/billing?format=credits` (meters) and `/v1/settings` (plan, best effort), at most once per 5 min. A billing 403 shows "Quota unavailable". A missing `creditUsagePercent` gives an empty meter, never 0%.
+- **Storage**: Grok accounts live in `accounts-ext.json`, next to `accounts.json`. Shipped builds never open it, so a downgrade only hides Grok accounts until this build runs again.
+
+Response shapes (redacted: tokens, email, codes and ids become `<redacted>`, other strings `<str N>`) log at `debug` level, which is not persisted. Watch live:
+
+```bash
+log stream --level debug --predicate 'subsystem == "cc.kuoc.agent-hourglass" AND category == "ResponseShape"'
+```
+
+To read them later with `log show --last 1h --debug` (same predicate), persist debug first: `sudo log config --subsystem cc.kuoc.agent-hourglass --mode "level:debug,persist:debug"`.
+
 ## Dev-only tools
 
 Not part of a normal install. These exist for testing and must not be used with shipped builds:
