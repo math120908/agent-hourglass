@@ -206,13 +206,14 @@ public actor AccountService {
 
     /// Deletes Keychain items under our service that have no registry entry, for every kind except Codex
     /// and Copilot (left alone, as before); an id of unknown kind is kept.
-    /// Skipped entirely when the registry quarantined a file: its entries are unknown, not absent.
+    /// Entries the registry keeps hidden (undecodable) count as known. Skipped entirely when the registry
+    /// quarantined a file: its entries are unknown, not absent.
     public func cleanupOrphans() async throws {
         guard await registry.loadedCleanly else {
             Self.log.notice("orphan cleanup skipped: registry quarantined")
             return
         }
-        let known = Set(await registry.accounts().map(\.id))
+        let known = Set(await registry.accounts().map(\.id) + registry.hiddenIDs())
         let owned = { (id: AccountID) in id.kind.map { $0 != .codex && $0 != .copilot } ?? false }
         for id in try store.allAccountIDs() where owned(id) && !known.contains(id) {
             try store.delete(id)
