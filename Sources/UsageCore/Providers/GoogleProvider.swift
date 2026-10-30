@@ -29,9 +29,14 @@ public struct GoogleProvider: UsageProvider {
     public func fetch(credential: Credential, http: HTTPClient) async throws -> UsageSnapshot {
         guard let remote = credential.remoteAccountID, !remote.isEmpty else { throw ProviderError.invalidGrant }
         let bearer = credential.access
-        let info = try GoogleQuotaDecoding.codeAssist(
-            try await post(Self.prodBase, "loadCodeAssist", ["metadata": Self.metadata], bearer, http)
-        )
+        let codeAssist: Data
+        do {
+            codeAssist = try await post(Self.prodBase, "loadCodeAssist", ["metadata": Self.metadata], bearer, http)
+        } catch let ProviderError.http(status, _, _) where status == 403 {
+            Self.log.info("loadCodeAssist: 403")
+            throw QuotaError.unavailable
+        }
+        let info = try GoogleQuotaDecoding.codeAssist(codeAssist)
         guard let project = info.project else {
             if let reason = info.ineligibleReasons.first(where: Self.loginReasons.contains) {
                 Self.log.error("loadCodeAssist: ineligible \(reason, privacy: .public)")
@@ -70,11 +75,16 @@ public struct GoogleProvider: UsageProvider {
         }
         guard GoogleQuotaDecoding.isUnconfirmedPlaceholder(models: models, confirmed: nil) else { return models }
         let confirmed = try await confirmation(body, bearer, http)
-        guard !GoogleQuotaDecoding.isUnconfirmedPlaceholder(models: models, confirmed: confirmed) else {
+        guard let confirmed, !GoogleQuotaDecoding.isUnconfirmedPlaceholder(models: models, confirmed: confirmed) else {
             Self.log.info("fetchAvailableModels: unconfirmed placeholder")
             throw QuotaError.unavailable
         }
-        return models
+        // The placeholder's values are not trusted: each meter shows its confirmed fraction, else unknown.
+        return models.map { m in
+            var m = m
+            m.percentUsed = GoogleQuotaDecoding.percentUsed(remaining: m.pool.flatMap { confirmed[$0] })
+            return m
+        }
     }
 
     /// `retrieveUserQuota` fractions, or nil when the call fails. Unauthorized, rate-limited and

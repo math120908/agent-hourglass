@@ -120,7 +120,24 @@ struct GoogleProviderTests {
         let s = try await fetch(t)
         #expect(t.requests.count == 4)
         #expect(s.meters.map(\.pool) == ["claude-sonnet", "gemini-3-pro"])
-        #expect(s.meters.allSatisfy { $0.percentUsed == 0 })
+        // google-quota confirms gemini-3-pro at 1.0 only: claude-sonnet has no confirmed value.
+        #expect(s.meters.map(\.percentUsed) == [nil, 0])
+    }
+
+    @Test func confirmedFractionsOverridePlaceholderModels() async throws {
+        let quota = #"{"buckets":[{"modelId":"gemini-3-pro","remainingFraction":0.4},{"modelId":"claude-sonnet","remainingFraction":0.75}]}"#
+        let t = ScriptedTransport([try Self.ok("google-loadcodeassist-pro"), Self.notFound, try Self.ok("google-models-all-full"), (200, quota, [:])])
+        let s = try await fetch(t)
+        #expect(s.meters.map(\.pool) == ["claude-sonnet", "gemini-3-pro"])
+        guard s.meters.count == 2 else { return }
+        #expect(abs((s.meters[0].percentUsed ?? -1) - 25) < 1e-9)
+        #expect(abs((s.meters[1].percentUsed ?? -1) - 60) < 1e-9)
+    }
+
+    @Test func loadCodeAssist403IsUnavailable() async throws {
+        let t = ScriptedTransport([Self.forbidden])
+        await #expect(throws: QuotaError.unavailable) { try await fetch(t) }
+        #expect(t.requests.count == 1)
     }
 
     @Test func models403QuotaOkUsesQuota() async throws {
