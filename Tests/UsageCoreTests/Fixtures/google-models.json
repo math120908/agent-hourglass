@@ -1,0 +1,12 @@
+{
+  "models": {
+    "gemini-3-pro": {
+      "displayName": "Gemini 3 Pro",
+      "quotaInfo": { "remainingFraction": 0.7, "resetTime": "2026-10-30T06:00:00Z" }
+    },
+    "claude-sonnet": {
+      "displayName": "Claude Sonnet",
+      "quotaInfo": { "remainingFraction": "0.4", "resetTime": "2026-10-30T06:00:00Z" }
+    }
+  }
+}

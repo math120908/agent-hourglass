@@ -46,6 +46,52 @@ enum GoogleQuotaDecoding {
         return meters
     }
 
+    /// Fallback `fetchAvailableModels`: one `.window` meter per model, sorted by label (R9 §2 step 3).
+    /// Every model meter has no window length, so `pool = modelId` keeps their keys apart.
+    static func modelMeters(_ data: Data) throws -> [Meter] {
+        guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            throw ProviderError.schema(keys: [])
+        }
+        guard let models = root["models"] as? [String: Any], !models.isEmpty else {
+            throw ProviderError.schema(keys: root.keys.sorted())
+        }
+        return models.map { id, raw in
+            let model = raw as? [String: Any]
+            let quota = model?["quotaInfo"] as? [String: Any]
+            return Meter(
+                kind: .window,
+                label: nonEmpty(model?["displayName"]) ?? id,
+                percentUsed: percentUsed(remaining: CodexDeviceAuth.number(quota?["remainingFraction"])),
+                resetsAt: CodexDeviceAuth.date(quota?["resetTime"]),
+                pool: id
+            )
+        }
+        .sorted { ($0.label, $0.pool ?? "") < ($1.label, $1.pool ?? "") }
+    }
+
+    /// Fallback `retrieveUserQuota`: modelId → remainingFraction (R9 §2 step 4). Buckets without an id
+    /// or a finite fraction are skipped.
+    static func quotaFractions(_ data: Data) throws -> [String: Double] {
+        guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            throw ProviderError.schema(keys: [])
+        }
+        guard let buckets = root["buckets"] as? [[String: Any]] else { throw ProviderError.schema(keys: root.keys.sorted()) }
+        var fractions: [String: Double] = [:]
+        for bucket in buckets {
+            guard let id = nonEmpty(bucket["modelId"]),
+                  let fraction = CodexDeviceAuth.number(bucket["remainingFraction"]), fraction.isFinite
+            else { continue }
+            fractions[id] = fraction
+        }
+        return fractions
+    }
+
+    /// An all-0%-used `fetchAvailableModels` result is a placeholder unless `retrieveUserQuota` confirmed
+    /// it (decision 6, R9 §2).
+    static func isUnconfirmedPlaceholder(models: [Meter], confirmed: [String: Double]?) -> Bool {
+        models.allSatisfy { $0.percentUsed == 0 } && (confirmed ?? [:]).isEmpty
+    }
+
     /// Window length derived from `window`, else `bucketId` (the payload carries no number).
     static func windowSeconds(bucketID: String?, window: String?) -> Int? {
         func match(_ raw: String?) -> Int? {
@@ -78,12 +124,17 @@ enum GoogleQuotaDecoding {
             return Meter(
                 kind: .window,
                 label: "\(name), \(seconds.map { Meter.windowLabel(seconds: $0).lowercased() } ?? bucketName ?? id ?? "quota")",
-                percentUsed: fraction.flatMap { $0.isFinite ? min(100, max(0, (1 - $0) * 100)) : nil },
+                percentUsed: percentUsed(remaining: fraction),
                 resetsAt: CodexDeviceAuth.date(bucket["resetTime"]),
                 windowLength: seconds.map { .seconds($0) },
                 pool: seconds == nil ? "\(pool).\(id ?? bucketName ?? "quota")" : pool
             )
         }
+    }
+
+    /// Percent used from a remaining fraction, clamped to 0...100. Missing or non-finite → nil (unknown, never 0).
+    private static func percentUsed(remaining fraction: Double?) -> Double? {
+        fraction.flatMap { $0.isFinite ? min(100, max(0, (1 - $0) * 100)) : nil }
     }
 
     /// `remaining.remainingFraction`, or the ProtoJSON oneof form `{"case": "remainingFraction", "value": x}`.

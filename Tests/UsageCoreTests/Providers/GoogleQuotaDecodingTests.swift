@@ -1,4 +1,4 @@
-// Fixtures synthesized from R9 §2 (loadCodeAssist / retrieveUserQuotaSummary field lists) and CodexBar AntigravityQuotaSummaryParser.swift:129-160.
+// Fixtures synthesized from R9 §2 (loadCodeAssist / retrieveUserQuotaSummary / fetchAvailableModels / retrieveUserQuota field lists) and CodexBar AntigravityQuotaSummaryParser.swift:129-160.
 import Foundation
 import Testing
 @testable import UsageCore
@@ -94,5 +94,53 @@ struct GoogleQuotaDecodingTests {
         #expect(GoogleQuotaDecoding.windowSeconds(bucketID: nil, window: "weekly") == 604_800)
         #expect(GoogleQuotaDecoding.windowSeconds(bucketID: nil, window: "daily") == 86400)
         #expect(GoogleQuotaDecoding.windowSeconds(bucketID: "x", window: "x") == nil)
+    }
+
+    @Test func modelsToMeters() throws {
+        let meters = try GoogleQuotaDecoding.modelMeters(fixture("google-models"))
+        #expect(meters.map(\.label) == ["Claude Sonnet", "Gemini 3 Pro"])
+        #expect(Set(meters.map(\.pool)) == ["gemini-3-pro", "claude-sonnet"])
+        let expected: [Double] = [60, 30]
+        #expect(meters.count == expected.count)
+        for (m, p) in zip(meters, expected) { #expect(abs((m.percentUsed ?? -1) - p) < 0.001) }
+        #expect(meters.allSatisfy { $0.kind == .window && $0.windowLength == nil && $0.resetsAt != nil })
+    }
+
+    @Test func modelLabelFallsBackToIDAndNonFiniteIsUnknown() throws {
+        let body = #"{"models":{"m-a":{"quotaInfo":{"remainingFraction":"NaN"}},"m-b":{"displayName":" ","quotaInfo":{}}}}"#
+        let meters = try GoogleQuotaDecoding.modelMeters(Data(body.utf8))
+        #expect(meters.map(\.label) == ["m-a", "m-b"])
+        #expect(meters.allSatisfy { $0.percentUsed == nil })
+    }
+
+    @Test func modelsWithoutModelsIsSchema() {
+        #expect(throws: ProviderError.self) { try GoogleQuotaDecoding.modelMeters(Data("{}".utf8)) }
+        #expect(throws: ProviderError.self) { try GoogleQuotaDecoding.modelMeters(Data(#"{"models":{}}"#.utf8)) }
+    }
+
+    @Test func quotaFractionsParsed() throws {
+        #expect(try GoogleQuotaDecoding.quotaFractions(fixture("google-quota")) == ["gemini-3-pro": 1.0])
+    }
+
+    @Test func quotaFractionsSkipMissingAndNonFinite() throws {
+        let body = #"{"buckets":[{"modelId":"a","remainingFraction":"0.5"},{"modelId":"b"},{"modelId":"c","remainingFraction":"NaN"},{"remainingFraction":0.2}]}"#
+        #expect(try GoogleQuotaDecoding.quotaFractions(Data(body.utf8)) == ["a": 0.5])
+        #expect(throws: ProviderError.self) { try GoogleQuotaDecoding.quotaFractions(Data("{}".utf8)) }
+    }
+
+    @Test func placeholderModelsWithoutConfirmationIsUnavailable() throws {
+        let allFull = try GoogleQuotaDecoding.modelMeters(fixture("google-models-all-full"))
+        #expect(GoogleQuotaDecoding.isUnconfirmedPlaceholder(models: allFull, confirmed: nil) == true)
+        #expect(GoogleQuotaDecoding.isUnconfirmedPlaceholder(models: allFull, confirmed: [:]) == true)
+    }
+
+    @Test func allFullConfirmedIsReal() throws {
+        let allFull = try GoogleQuotaDecoding.modelMeters(fixture("google-models-all-full"))
+        #expect(GoogleQuotaDecoding.isUnconfirmedPlaceholder(models: allFull, confirmed: ["gemini-3-pro": 1.0]) == false)
+    }
+
+    @Test func partialModelsAreReal() throws {
+        let models = try GoogleQuotaDecoding.modelMeters(fixture("google-models"))
+        #expect(GoogleQuotaDecoding.isUnconfirmedPlaceholder(models: models, confirmed: nil) == false)
     }
 }
