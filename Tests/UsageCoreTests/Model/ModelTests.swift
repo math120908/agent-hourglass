@@ -63,4 +63,10 @@ import Testing
         let status = AccountStatus.rateLimited(retryAt: now)
         #expect(try JSONDecoder().decode(AccountStatus.self, from: JSONEncoder().encode(status)) == status)
     }
+
+    @Test func usesWindowMeters() {
+        #expect(ProviderKind.codex.usesWindowMeters)
+        #expect(!ProviderKind.claude.usesWindowMeters)
+        #expect(!ProviderKind.copilot.usesWindowMeters)
+    }
 }

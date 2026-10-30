@@ -86,7 +86,7 @@ struct HistoryChart: View {
         case .weekly: Self.weekly
         case .model: Self.model
         case .copilot: GlassStyle.copilot
-        case .window: GlassStyle.codex
+        case .window: GlassStyle.accent(kind)
         }
     }
 
@@ -121,8 +121,8 @@ struct HistoryChart: View {
 
     private func rows(at t: Date) -> [(String, Double?, Color)] {
         if kind == .copilot { return [("Premium", value(.copilot, at: t), GlassStyle.copilot)] }
-        if kind == .codex {
-            return Set(visible.filter { $0.style == .window }.map(\.name)).sorted().map { ($0, value(.window, name: $0, at: t), GlassStyle.codex) }
+        if kind.usesWindowMeters {
+            return Set(visible.filter { $0.style == .window }.map(\.name)).sorted().map { ($0, value(.window, name: $0, at: t), GlassStyle.accent(kind)) }
         }
         var out: [(String, Double?, Color)] = [("Session", value(.session, at: t), GlassStyle.claude), ("Weekly", value(.weekly, at: t), Self.weekly)]
         for n in Set(visible.filter { $0.style == .model }.map(\.name)).sorted() {

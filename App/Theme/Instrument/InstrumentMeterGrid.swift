@@ -134,7 +134,7 @@ struct InstrumentMeterGrid: View {
 
     private func label(_ row: MeterRow) -> String {
         if kind == .claude && row.paceTick == nil && row.paceText == nil && row.label == "Session" { return "Session (5h)" }
-        if kind == .codex { return row.label }
+        if kind.usesWindowMeters { return row.label }
         return row.paceText != nil || row.paceTick != nil ? "\(row.label), weekly" : row.label
     }
 

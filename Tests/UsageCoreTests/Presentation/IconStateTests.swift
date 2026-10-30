@@ -64,4 +64,19 @@ import Testing
         #expect(make([a: claude(42.2)]) == make([a: claude(41.8)]))
         #expect(make([a: claude(42)]) != make([a: claude(43)]))
     }
+
+    @Test func secondSkipsSameLengthWindow() {
+        let c = AccountID(kind: .codex, remoteID: "c")
+        func window(_ seconds: Int, _ p: Double) -> Meter {
+            Meter(kind: .window, label: Meter.windowLabel(seconds: seconds), percentUsed: p,
+                  resetsAt: now.addingTimeInterval(3600), windowLength: .seconds(seconds))
+        }
+        func snap(_ meters: [Meter]) -> [AccountID: UsageSnapshot] {
+            [c: UsageSnapshot(accountID: c, fetchedAt: now, plan: nil, meters: meters, spend: nil)]
+        }
+        let same = IconState.make(appState: snap([window(604_800, 96), window(604_800, 84)]), statuses: [:], menuBarAccount: nil, order: [c], now: now)
+        #expect(same.weekly == nil)
+        let mixed = IconState.make(appState: snap([window(18000, 10), window(18000, 20), window(604_800, 50)]), statuses: [:], menuBarAccount: nil, order: [c], now: now)
+        #expect(mixed.weekly == 50)
+    }
 }

@@ -44,7 +44,7 @@ public struct IconState: Equatable, Sendable {
         }
         let percent = meter?.percentUsed.map { Int(min(100, max(0, $0)).rounded()) }
         let pace = meter?.paceFraction(now: now).map { Int(($0 * 100).rounded()) }
-        let second = id.kind == .codex ? snapshots[id]?.meters.filter { $0.kind == .window }.dropFirst().first : nil
+        let second = id.kind?.usesWindowMeters == true ? snapshots[id].flatMap { CardModel.secondWindow($0.meters) } : nil
         let weekly = (second ?? snapshots[id]?.meters.first { $0.kind == .weeklyAll })?.percentUsed
             .map { Int(min(100, max(0, $0)).rounded()) }
         let level: Level
