@@ -29,7 +29,7 @@ import UsageCore
     /// Fixed-state init for previews and snapshots; never signs in.
     init(state: State) {
         app = nil
-        signIn = GoogleSignIn(oauth: GoogleOAuth(http: HTTPClient()), client: BundleGoogleOAuthClient())
+        signIn = GoogleSignIn(oauth: GoogleOAuth(http: HTTPClient()), client: NoClientSource())
         browser = PasteBrowser()
         self.state = state
     }
@@ -82,4 +82,10 @@ import UsageCore
         guard case let .failed(message) = AddFlowState.googleFailure(error) else { return .failed("Sign-in failed") }
         return .failed(message)
     }
+}
+
+/// Snapshot models never sign in: no client, so a stray `start` fails before any port or sheet.
+private struct NoClientSource: GoogleOAuthClientSource {
+    func client() async throws -> GoogleOAuthClient { throw GoogleOAuthError.clientUnavailable }
+    func invalidate() async {}
 }
