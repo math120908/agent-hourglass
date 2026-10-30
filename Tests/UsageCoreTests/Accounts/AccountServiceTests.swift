@@ -59,6 +59,7 @@ final class SvcFakeLogin: @unchecked Sendable {
 struct AccountServiceTests {
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent("acctsvc-\(UUID().uuidString)")
     let log = SvcEventLog()
+    let logins = SvcEventLog()
 
     func make(_ ids: [String], gate: AsyncStream<Void>? = nil) throws -> (AccountService, SvcLoggingStore, AccountRegistry) {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -72,7 +73,8 @@ struct AccountServiceTests {
             store: store,
             poller: poller,
             history: SvcFakeHistory(log: log),
-            claudeLogin: { _, _ in
+            claudeLogin: { [logins] _, _ in
+                logins.add("login")
                 if let gate { for await _ in gate { break } }
                 let id = login.next()
                 return (Credential(kind: .claude, access: Secret("tok-\(id)"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), id)
@@ -143,6 +145,23 @@ struct AccountServiceTests {
         try store.inner.write(Credential(kind: .claude, access: Secret("x"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: cid("orphan"), label: "t")
         try await svc.cleanupOrphans()
         #expect(try store.allAccountIDs() == [cid("a")])
+    }
+
+    @Test func reauthRefusesNonClaude() async throws {
+        let (svc, _, registry) = try make(["x"])
+        let id = AccountID(kind: .codex, remoteID: "x")
+        try await registry.upsert(AccountEntry(id: id, kind: .codex, displayName: "Codex", remoteLogin: nil, order: 0, addedAt: Date(), status: "ok"))
+        await #expect(throws: AccountServiceError.reauthUnsupported) { try await svc.reauth(id) }
+        #expect(logins.all.isEmpty)
+    }
+
+    @Test func cleanupOrphansKeepsCodex() async throws {
+        let (svc, store, _) = try make([])
+        let codex = AccountID(kind: .codex, remoteID: "x")
+        try store.inner.write(Credential(kind: .codex, access: Secret("x"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: codex, label: "t")
+        try store.inner.write(Credential(kind: .claude, access: Secret("y"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: cid("y"), label: "t")
+        try await svc.cleanupOrphans()
+        #expect(try store.allAccountIDs() == [codex])
     }
 
     @Test func labelHasNoDisplayName() async throws {

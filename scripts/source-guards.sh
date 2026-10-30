@@ -20,6 +20,9 @@ out=$(rg -n -e 'SecItemAdd' -e 'SecItemUpdate' -e 'SecItemDelete' -e 'SecKeychai
 [ -n "$out" ] && report "write/ACL/subprocess/refresh path in $READER:" "$out"
 out=$(rg -n '/usr/bin/security' Sources App iOS 2>/dev/null)
 [ -n "$out" ] && report "/usr/bin/security is forbidden:" "$out"
+# Google / Grok use owned credentials only: the CLI stores are never read or written (no path to them).
+out=$(rg -n -e '\.gemini/' -e '\.grok/' -e 'oauth_creds\.json' -e 'antigravity-cli' Sources App iOS 2>/dev/null)
+[ -n "$out" ] && report "[cli-creds] CLI credential store path (never read or write ~/.gemini / ~/.grok):" "$out"
 # Logging: account ids must never be logged in the clear.
 out=$(rg -n 'rawValue, privacy: \.public' Sources App 2>/dev/null)
 [ -n "$out" ] && report "account id logged with privacy: .public:" "$out"
