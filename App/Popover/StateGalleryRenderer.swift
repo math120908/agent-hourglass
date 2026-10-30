@@ -72,6 +72,7 @@ enum StateGalleryRenderer {
             Case(name: "extradisabled", account: claude),
             Case(name: "codex-fresh", account: codex),
             Case(name: "codex-notsignedin", account: with(codex, .codexNotSignedIn) { $0.snapshot = nil }),
+            Case(name: "quota-unavailable", account: with(codex, .quotaUnavailable)),
             Case(name: "codex-warning", account: with(codex, .fresh) { $0.snapshot?.meters[0].percentUsed = 81 }),
             Case(name: "copilot-notincluded", account: with(copilot, .fresh) {
                 $0.snapshot?.meters[0].limit = 0

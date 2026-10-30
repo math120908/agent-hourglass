@@ -81,6 +81,7 @@ import Testing
         #expect(make(s, .offline).statusChip == nil)
         #expect(make(s, .offline).isDimmed)
         #expect(make(s, .needsLogin).statusChip == "Sign in again")
+        #expect(make(s, .quotaUnavailable).statusChip == "Quota unavailable")
         #expect(make(s, .fresh).statusChip == nil)
         #expect(!make(s, .fresh).isDimmed)
     }

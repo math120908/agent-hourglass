@@ -326,6 +326,10 @@ public actor AccountClient {
             status = .codexNotSignedIn
             return .codexNotSignedIn
         }
+        if error is QuotaError {
+            status = .quotaUnavailable
+            return .quotaUnavailable
+        }
         switch error as? ProviderError {
         case .invalidGrant, .unauthorized:
             s = .needsLogin
