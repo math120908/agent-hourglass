@@ -70,6 +70,14 @@ import Testing
         #expect(!ProviderKind.copilot.usesWindowMeters)
     }
 
+    @Test func googleRawValueAndAccountID() {
+        let id = AccountID(kind: .google, remoteID: "sub-1")
+        #expect(id.rawValue == "google:sub-1")
+        #expect(id.kind == .google)
+        #expect(ProviderKind.google.usesWindowMeters)
+        #expect(!ProviderKind.google.storesInMainRegistry)
+    }
+
     @Test func grokRawValueAndAccountID() {
         let id = AccountID(kind: .grok, remoteID: "sub-1")
         #expect(id.rawValue == "grok:sub-1")

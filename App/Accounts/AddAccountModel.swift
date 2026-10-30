@@ -64,6 +64,8 @@ final class AddAccountModel {
 
     private(set) var isClaudeCode = false
 
+    private(set) var isGoogle = false
+
     private(set) var isGrok = false
     /// The Grok device code being waited on; shown in the sheet and copied by "Copy code".
     private(set) var devicePrompt: DeviceCodePrompt?
@@ -87,7 +89,7 @@ final class AddAccountModel {
     }
 
     func retry() {
-        if isClaudeCode { addClaudeCodeLocal() } else if isGrok { addGrok() } else if isCodex { addCodex() } else if let copilotLogin { addCopilot(copilotLogin) } else { start() }
+        if isClaudeCode { addClaudeCodeLocal() } else if isGoogle { addGoogle() } else if isGrok { addGrok() } else if isCodex { addCodex() } else if let copilotLogin { addCopilot(copilotLogin) } else { start() }
     }
 
     /// Adds the Codex CLI's ChatGPT login from ~/.codex/auth.json (read-only, no browser).
@@ -107,6 +109,34 @@ final class AddAccountModel {
             } catch {
                 state = AddFlowState.failure(error)
             }
+        }
+    }
+
+    /// Google AI login: loopback PKCE in the browser as the Antigravity client found on this Mac.
+    func addGoogle() {
+        guard state.begin() else {
+            state = .failed("Sign-in already in progress")
+            return
+        }
+        resetFlow()
+        isGoogle = true
+        step = .flow
+        task = Task { [engine] in
+            do {
+                state = .success(try await engine.addGoogle())
+            } catch is CancellationError {
+                state = .idle
+                step = .provider
+            } catch {
+                // A cancelled URLSession call surfaces as ProviderError.transport, not CancellationError.
+                if Task.isCancelled {
+                    state = .idle
+                    step = .provider
+                } else {
+                    state = AddFlowState.googleFailure(error)
+                }
+            }
+            Self.currentURL = nil
         }
     }
 
@@ -167,6 +197,7 @@ final class AddAccountModel {
         copilotLogin = nil
         isCodex = false
         isClaudeCode = false
+        isGoogle = false
         isGrok = false
         devicePrompt = nil
     }

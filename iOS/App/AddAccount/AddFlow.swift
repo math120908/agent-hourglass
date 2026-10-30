@@ -27,6 +27,7 @@ enum AddFlow: Identifiable, Equatable {
         case .claude: .claude(loginHint: entry.remoteLogin)
         case .codex: .codex
         case .copilot: nil
+        case .google: nil
         case .grok: .grok
         }
     }

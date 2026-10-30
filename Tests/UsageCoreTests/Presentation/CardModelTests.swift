@@ -166,6 +166,14 @@ import Testing
         #expect(make(codex([window(604_800, 96), window(604_800, 84)]), .fresh, .codex).secondary == nil)
         #expect(make(codex([window(18000, 10), window(18000, 20), window(604_800, 50)]), .fresh, .codex).secondary == "Wk 50%")
     }
+    @Test func googleHeadlineIsFirstWindow() {
+        let snap = UsageSnapshot(accountID: AccountID(kind: .google, remoteID: "g"), fetchedAt: now, plan: nil,
+                                 meters: [window(18000, 12), window(604_800, 50)], spend: nil)
+        let m = make(snap, .fresh, .google)
+        #expect(m.headline?.label == Meter.windowLabel(seconds: 18000))
+        #expect(m.secondary == "Wk 50%")
+    }
+
     @Test func grokHeadlineIsWeeklyWindow() {
         var build = window(604_800, 84)
         build.label = "Build"

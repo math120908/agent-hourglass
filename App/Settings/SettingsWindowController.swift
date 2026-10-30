@@ -23,6 +23,7 @@ struct SettingsRoot: View {
     var addCopilot: () -> Void = {}
     var addCodex: () -> Void = {}
     var addClaudeCode: () -> Void = {}
+    var addGoogle: () -> Void = {}
     var addGrok: () -> Void = {}
 
     var body: some View {
@@ -38,7 +39,7 @@ struct SettingsRoot: View {
             Group {
                 switch tab {
                 case .general: GeneralTab(model: model)
-                case .accounts: AccountsTab(model: model, addClaude: addClaude, addCopilot: addCopilot, addCodex: addCodex, addClaudeCode: addClaudeCode, addGrok: addGrok)
+                case .accounts: AccountsTab(model: model, addClaude: addClaude, addCopilot: addCopilot, addCodex: addCodex, addClaudeCode: addClaudeCode, addGoogle: addGoogle, addGrok: addGrok)
                 case .history: HistoryTab(settings: HistorySettings.shared)
                 case .about: AboutTab(model: model)
                 }
@@ -57,6 +58,7 @@ final class SettingsWindowController {
     private let addCopilot: () -> Void
     private let addCodex: () -> Void
     private let addClaudeCode: () -> Void
+    private let addGoogle: () -> Void
     private let addGrok: () -> Void
     private var window: NSWindow?
 
@@ -66,9 +68,11 @@ final class SettingsWindowController {
         addCopilot: @escaping () -> Void = {},
         addCodex: @escaping () -> Void = {},
         addClaudeCode: @escaping () -> Void = {},
+        addGoogle: @escaping () -> Void = {},
         addGrok: @escaping () -> Void = {}
     ) {
         self.addClaudeCode = addClaudeCode
+        self.addGoogle = addGoogle
         self.addGrok = addGrok
         self.model = model
         self.addClaude = addClaude
@@ -78,7 +82,7 @@ final class SettingsWindowController {
 
     func show(tab: SettingsTab = .general) {
         model.reload()
-        let root = SettingsRoot(model: model, tab: tab, addClaude: addClaude, addCopilot: addCopilot, addCodex: addCodex, addClaudeCode: addClaudeCode, addGrok: addGrok)
+        let root = SettingsRoot(model: model, tab: tab, addClaude: addClaude, addCopilot: addCopilot, addCodex: addCodex, addClaudeCode: addClaudeCode, addGoogle: addGoogle, addGrok: addGrok)
         if let window {
             (window.contentViewController as? NSHostingController<SettingsRoot>)?.rootView = root
         } else {

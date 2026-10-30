@@ -169,6 +169,16 @@ struct AccountServiceTests {
         #expect(try store.allAccountIDs() == [codex])
     }
 
+    @Test func cleanupOrphansDeletesGoogle() async throws {
+        let (svc, store, _) = try make([])
+        let google = AccountID(kind: .google, remoteID: "x")
+        let codex = AccountID(kind: .codex, remoteID: "y")
+        try store.inner.write(Credential(kind: .google, access: Secret("x"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: google, label: "t")
+        try store.inner.write(Credential(kind: .codex, access: Secret("y"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: codex, label: "t")
+        try await svc.cleanupOrphans()
+        #expect(try store.allAccountIDs() == [codex])
+    }
+
     @Test func cleanupOrphansDeletesGrok() async throws {
         let (svc, store, _) = try make([])
         let codex = AccountID(kind: .codex, remoteID: "y")
@@ -284,6 +294,56 @@ struct AccountServiceTests {
         await #expect(throws: AccountServiceError.signInInProgress) { try await svc.addClaude(loginHint: nil) }
         cont.yield()
         #expect(try await first.value == cid("a"))
+    }
+
+    func googleCred(_ tok: String, sub: String?, email: String? = "pat@example.com") -> Credential {
+        Credential(kind: .google, access: Secret(tok), refresh: Secret("r-\(tok)"), expiresAt: nil, refreshExpiresAt: nil, scopes: [], remoteAccountID: sub, accountEmail: email)
+    }
+
+    @Test func addGoogleWritesKeychainAndRegistry() async throws {
+        let (svc, store, registry) = try make([])
+        let id = try await svc.addGoogle(credential: googleCred("g1", sub: "sub-1"))
+        #expect(id == AccountID(kind: .google, remoteID: "sub-1"))
+        #expect(try store.read(id)?.access.reveal() == "g1")
+        #expect(store.labels == [AccountService.keychainLabel(kind: .google, number: 1)])
+        #expect(await registry.accounts().first { $0.id == id }?.displayName == "pat@example.com")
+        #expect(clients.all == ["google:sub-1"])
+        #expect(try String(contentsOf: registry.extURL, encoding: .utf8).contains("google:sub-1"))
+        let main = try JSONSerialization.jsonObject(with: Data(contentsOf: registry.url)) as? [String: Any]
+        #expect((main?["accounts"] as? [Any])?.isEmpty == true)
+    }
+
+    @Test func addGoogleWithoutEmailUsesDefaultName() async throws {
+        let (svc, _, registry) = try make([])
+        try await svc.addGoogle(credential: googleCred("g1", sub: "sub-1", email: nil))
+        let id2 = try await svc.addGoogle(credential: googleCred("g2", sub: "sub-2", email: ""))
+        #expect(await registry.accounts().map(\.displayName) == ["Google AI", "Google AI #2"])
+        #expect(await registry.accounts().last?.id == id2)
+    }
+
+    @Test func addGoogleTwiceIsReauth() async throws {
+        let (svc, store, registry) = try make([])
+        let codex = AccountID(kind: .codex, remoteID: "c")
+        try await registry.upsert(AccountEntry(id: codex, kind: .codex, displayName: "Codex", remoteLogin: nil, order: 0, addedAt: Date(), status: "ok"))
+        let id = try await svc.addGoogle(credential: googleCred("g1", sub: "sub-1"))
+        let before = await registry.accounts().map(\.id)
+        try await svc.addGoogle(credential: googleCred("g2", sub: "sub-1"))
+        #expect(await registry.accounts().map(\.id) == before)
+        #expect(before == [codex, id])
+        #expect(try store.read(id)?.access.reveal() == "g2")
+        #expect(clients.all == ["google:sub-1", "google:sub-1"])
+    }
+
+    @Test func addGoogleRejectsMissingID() async throws {
+        let (svc, store, registry) = try make([])
+        await #expect(throws: AccountServiceError.missingAccountID) { try await svc.addGoogle(credential: googleCred("g", sub: nil)) }
+        await #expect(throws: AccountServiceError.missingAccountID) { try await svc.addGoogle(credential: googleCred("g", sub: "")) }
+        await #expect(throws: AccountServiceError.missingAccountID) {
+            try await svc.addGoogle(credential: Credential(kind: .codex, access: Secret("x"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: [], remoteAccountID: "sub-1"))
+        }
+        #expect(store.labels.isEmpty)
+        #expect(clients.all.isEmpty)
+        #expect(await registry.accounts().isEmpty)
     }
 
     func grokCred(_ tok: String, sub: String?, email: String? = "pat@example.com") -> Credential {

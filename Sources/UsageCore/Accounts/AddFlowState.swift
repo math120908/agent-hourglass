@@ -25,6 +25,23 @@ public enum AddFlowState: Equatable, Sendable {
         }
     }
 
+    /// Google loopback logins: client discovery, then the token and `userinfo` calls' `ProviderError`s.
+    public static func googleFailure(_ error: any Error) -> AddFlowState {
+        switch error {
+        case GoogleOAuthError.clientUnavailable: .failed("Install Antigravity or the agy CLI first")
+        case GoogleOAuthError.clientRejected: .failed("Google rejected the Antigravity client. Retry")
+        case ProviderError.invalidGrant: .failed("Google did not accept the sign-in code. Retry")
+        case ProviderError.unauthorized: .failed("The new sign-in was rejected. Retry")
+        case let ProviderError.http(status, _, _): .failed("Google answered HTTP \(status). Retry")
+        case ProviderError.rateLimited: .failed("Too many sign-in attempts. Wait a minute and retry")
+        case ProviderError.schema: .failed("Unexpected answer from Google")
+        case ProviderError.transport: .failed("Network error during sign-in. Check the connection and retry")
+        case ProviderError.hostNotAllowed, ProviderError.redirectRefused: .failed("Google redirected the sign-in somewhere unexpected")
+        case AccountServiceError.missingAccountID: .failed("The sign-in did not identify an account")
+        default: failure(error)
+        }
+    }
+
     /// Device-code logins (Grok): the poll's RFC 8628 outcomes, then the `userinfo` call's `ProviderError`s.
     public static func deviceFailure(_ error: any Error) -> AddFlowState {
         switch error {

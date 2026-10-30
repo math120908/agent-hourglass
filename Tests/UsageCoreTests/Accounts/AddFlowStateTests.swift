@@ -20,6 +20,31 @@ struct AddFlowStateTests {
         #expect(AddFlowState.failure(AuthError.differentAccount) == .failed("Signed in as a different account"))
     }
 
+    @Test func googleClientUnavailableMessage() {
+        #expect(AddFlowState.googleFailure(GoogleOAuthError.clientUnavailable) == .failed("Install Antigravity or the agy CLI first"))
+        #expect(AddFlowState.googleFailure(AuthError.timeout) == AddFlowState.failure(AuthError.timeout))
+        #expect(AddFlowState.googleFailure(GoogleOAuthError.clientRejected) == .failed("Google rejected the Antigravity client. Retry"))
+    }
+
+    @Test func googleProviderErrorsHaveSpecificMessages() {
+        let errors: [any Error] = [
+            GoogleOAuthError.clientRejected,
+            ProviderError.invalidGrant,
+            ProviderError.unauthorized,
+            ProviderError.http(status: 500, host: "oauth2.googleapis.com", retryAfter: nil),
+            ProviderError.rateLimited(retryAfter: nil),
+            ProviderError.schema(keys: ["sub"]),
+            ProviderError.transport(host: "oauth2.googleapis.com"),
+            ProviderError.hostNotAllowed("example.com"),
+            ProviderError.redirectRefused(host: "oauth2.googleapis.com"),
+            AccountServiceError.missingAccountID,
+        ]
+        for error in errors {
+            #expect(AddFlowState.googleFailure(error) != .failed("Sign-in failed"), "\(error)")
+        }
+        #expect(AddFlowState.googleFailure(ProviderError.http(status: 503, host: "oauth2.googleapis.com", retryAfter: nil)) == .failed("Google answered HTTP 503. Retry"))
+    }
+
     @Test func deviceExpiredMessage() {
         #expect(AddFlowState.deviceFailure(DeviceFlowError.expired) == .failed("The code expired. Retry for a new one"))
     }
