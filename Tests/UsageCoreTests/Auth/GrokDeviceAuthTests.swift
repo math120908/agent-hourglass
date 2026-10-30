@@ -12,6 +12,7 @@ struct GrokDeviceAuthTests {
     static let tokens = (200, #"{"access_token":"ACCESS-SENTINEL","refresh_token":"REFRESH-SENTINEL","expires_in":3600,"token_type":"Bearer"}"#, [String: String]())
     static func oauthError(_ code: String) -> (Int, String, [String: String]) { (400, "{\"error\":\"\(code)\"}", [:]) }
     static let pending = oauthError("authorization_pending")
+    static let userinfo = (200, #"{"sub":"acct-synthetic","email":"grok@example.com","name":"Synthetic"}"#, [String: String]())
 
     func auth(_ t: ScriptedTransport, advance: TimeInterval = 0) -> GrokDeviceAuth {
         let clock = clock, sleeps = sleeps
@@ -60,10 +61,10 @@ struct GrokDeviceAuthTests {
     }
 
     @Test func pendingThenSuccess() async throws {
-        let t = ScriptedTransport([Self.pending, Self.pending, Self.tokens])
+        let t = ScriptedTransport([Self.pending, Self.pending, Self.tokens, Self.userinfo])
         let c = try await auth(t).poll(prompt())
         #expect(sleeps.value == [.seconds(5), .seconds(5)])
-        try #require(t.requests.count == 3)
+        try #require(t.requests.count == 4)
         #expect(t.requests[0].url?.absoluteString == "https://auth.x.ai/oauth2/token")
         #expect(t.bodyForm(0) == [
             "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
@@ -76,7 +77,7 @@ struct GrokDeviceAuthTests {
     }
 
     @Test func slowDownWidensInterval() async throws {
-        let t = ScriptedTransport([Self.pending, Self.oauthError("slow_down"), Self.tokens])
+        let t = ScriptedTransport([Self.pending, Self.oauthError("slow_down"), Self.tokens, Self.userinfo])
         _ = try await auth(t).poll(prompt())
         #expect(sleeps.value == [.seconds(5), .seconds(10)])
     }
@@ -107,5 +108,94 @@ struct GrokDeviceAuthTests {
         let t2 = ScriptedTransport([(401, #"{"error":"invalid_client"}"#, [:])])
         await #expect(throws: DeviceFlowError.unexpected(status: 401)) { try await auth(t2).poll(prompt()) }
         #expect(sleeps.value.isEmpty)
+    }
+
+    @Test func tokenWithIDTokenSetsIdentity() async throws {
+        let id = CodexDeviceAuthTests.jwt(#"{"sub":"acct-synthetic","email":"grok@example.com"}"#)
+        let access = CodexDeviceAuthTests.jwt(#"{"exp":1800003600}"#)
+        let body = "{\"access_token\":\"\(access)\",\"refresh_token\":\"REFRESH-SENTINEL\",\"id_token\":\"\(id)\"}"
+        let t = ScriptedTransport([(200, body, [:])])
+        let c = try await auth(t).poll(prompt())
+        #expect(t.requests.count == 1)
+        #expect(c.kind == .grok)
+        #expect(c.remoteAccountID == "acct-synthetic")
+        #expect(c.accountEmail == "grok@example.com")
+        #expect(c.expiresAt == Date(timeIntervalSince1970: 1_800_003_600))
+    }
+
+    @Test func tokenWithoutIDTokenCallsUserinfo() async throws {
+        let t = ScriptedTransport([Self.tokens, Self.userinfo])
+        let c = try await auth(t).poll(prompt())
+        try #require(t.requests.count == 2)
+        let r = t.requests[1]
+        #expect(r.url?.absoluteString == "https://auth.x.ai/oauth2/userinfo")
+        #expect(r.httpMethod == "GET")
+        #expect(r.value(forHTTPHeaderField: "Authorization") == "Bearer ACCESS-SENTINEL")
+        #expect(c.remoteAccountID == "acct-synthetic")
+        #expect(c.accountEmail == "grok@example.com")
+        #expect(c.expiresAt == Self.t0.addingTimeInterval(3600))
+    }
+
+    @Test func userinfoWithoutSubIsSchema() async throws {
+        let t = ScriptedTransport([Self.tokens, (200, #"{"email":"grok@example.com"}"#, [:])])
+        await #expect(throws: ProviderError.schema(keys: ["sub"])) { try await auth(t).poll(prompt()) }
+    }
+
+    /// The device code is spent once tokens arrive: a userinfo failure ends the login, never re-polls.
+    @Test func userinfoFailureStopsPolling() async throws {
+        let t = ScriptedTransport([Self.tokens, (500, "", [:])])
+        await #expect(throws: ProviderError.http(status: 500, host: "auth.x.ai", retryAfter: nil)) { try await auth(t).poll(prompt()) }
+        #expect(t.requests.count == 2)
+        #expect(sleeps.value.isEmpty)
+    }
+
+    static func cred(refresh: String? = "OLD-REFRESH-SENTINEL") -> Credential {
+        Credential(kind: .grok, access: Secret("OLD-ACCESS"), refresh: refresh.map(Secret.init), expiresAt: t0, refreshExpiresAt: nil, scopes: [], remoteAccountID: "acct-synthetic", accountEmail: "grok@example.com")
+    }
+
+    @Test func refreshRotates() async throws {
+        let t = ScriptedTransport([(200, #"{"access_token":"NEW-ACCESS","refresh_token":"NEW-REFRESH","expires_in":3600}"#, [:])])
+        let c = try await auth(t).refresh(Self.cred())
+        try #require(t.requests.count == 1)
+        let r = t.requests[0]
+        #expect(r.url?.absoluteString == "https://auth.x.ai/oauth2/token")
+        #expect(r.httpMethod == "POST")
+        #expect(r.value(forHTTPHeaderField: "Content-Type") == "application/x-www-form-urlencoded")
+        #expect(r.value(forHTTPHeaderField: "Authorization") == nil)
+        #expect(t.bodyForm(0) == [
+            "grant_type": "refresh_token",
+            "refresh_token": "OLD-REFRESH-SENTINEL",
+            "client_id": "b1a00492-073a-47ea-816f-4c329264a828",
+        ])
+        #expect(c.access == Secret("NEW-ACCESS"))
+        #expect(c.refresh == Secret("NEW-REFRESH"))
+        #expect(c.expiresAt == Self.t0.addingTimeInterval(3600))
+        #expect(c.remoteAccountID == "acct-synthetic")
+        #expect(c.accountEmail == "grok@example.com")
+    }
+
+    @Test func refreshKeepsPreviousWhenNotRotated() async throws {
+        let t = ScriptedTransport([(200, #"{"access_token":"NEW-ACCESS","expires_in":3600}"#, [:])])
+        let c = try await auth(t).refresh(Self.cred())
+        #expect(c.access == Secret("NEW-ACCESS"))
+        #expect(c.refresh == Secret("OLD-REFRESH-SENTINEL"))
+        #expect(c.remoteAccountID == "acct-synthetic")
+        #expect(c.accountEmail == "grok@example.com")
+    }
+
+    @Test func refreshInvalidGrantIsNeedsLogin() async throws {
+        for r in [Self.oauthError("invalid_grant"), (401, #"{"error":"invalid_client"}"#, [:])] {
+            let t = ScriptedTransport([r])
+            await #expect(throws: ProviderError.invalidGrant) { try await auth(t).refresh(Self.cred()) }
+            #expect(t.requests.count == 1)
+        }
+    }
+
+    @Test func refreshWithoutTokenNoRequest() async throws {
+        for c in [Self.cred(refresh: nil), Self.cred(refresh: "")] {
+            let t = ScriptedTransport([])
+            await #expect(throws: ProviderError.invalidGrant) { try await auth(t).refresh(c) }
+            #expect(t.requests.isEmpty)
+        }
     }
 }

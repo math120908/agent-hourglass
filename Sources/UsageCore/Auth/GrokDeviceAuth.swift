@@ -1,7 +1,8 @@
 import Foundation
 import os
 
-/// Grok (xAI) RFC 8628 device-code login against `auth.x.ai`: start, then poll the token endpoint.
+/// Grok (xAI) RFC 8628 device-code login against `auth.x.ai`: start, poll the token endpoint,
+/// then refresh the rotating token chain.
 public struct GrokDeviceAuth: Sendable {
     public static let clientID = "b1a00492-073a-47ea-816f-4c329264a828"
     public static let issuer = URL(string: "https://auth.x.ai")!
@@ -76,13 +77,14 @@ public struct GrokDeviceAuth: Sendable {
                 throw DeviceFlowError.expired
             }
             let polledAt = monotonic()
+            var tokens: Credential?
             do {
                 let (data, status) = try await post(Self.tokenURL, form: form, step: "poll")
                 // A restart cancelled this login while the POST was in flight: drop its answer.
                 try Task.checkCancellation()
                 switch status {
                 case 200..<300:
-                    return try Self.credential(fromTokenResponse: data, now: now())
+                    tokens = try Self.credential(fromTokenResponse: data, now: now())
                 case 400:
                     switch CodexDeviceAuth.errorCode(data) {
                     case "authorization_pending":
@@ -114,11 +116,61 @@ public struct GrokDeviceAuth: Sendable {
                 Self.log.error("device login poll failed: HTTP \(status, privacy: .public)")
                 throw DeviceFlowError.unexpected(status: status)
             }
+            // Outside the retrying catch: the device code is spent, so a userinfo failure ends the login.
+            if let tokens { return try await identity(for: tokens) }
             try await CodexDeviceAuth.pause(interval, since: polledAt, wake: wake, sleep: sleep, monotonic: monotonic)
         }
     }
 
-    /// Minimal token parse; K5 adds identity (`sub`, `email`) and refresh fallback.
+    /// Fills `sub` and `email` from `userinfo` when the token response carried no id_token.
+    func identity(for c: Credential) async throws -> Credential {
+        guard c.remoteAccountID == nil else { return c }
+        var req = URLRequest(url: Self.userinfoURL)
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        let data: Data
+        do {
+            (data, _) = try await http.send(req, bearer: c.access)
+        } catch let error as ProviderError {
+            Self.log.error("userinfo failed: \(error.description, privacy: .public)")
+            throw error
+        }
+        let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        guard let sub = Self.nonEmpty(obj?["sub"]) else {
+            Self.log.error("userinfo: no sub")
+            throw ProviderError.schema(keys: ["sub"])
+        }
+        var out = c
+        out.remoteAccountID = sub
+        out.accountEmail = Self.nonEmpty(obj?["email"]) ?? c.accountEmail
+        return out
+    }
+
+    /// Rotates the refresh token (R10 §3: a spent one gets 400 `invalid_grant`). Single use: never retried.
+    public func refresh(_ c: Credential) async throws -> Credential {
+        guard let rt = c.refresh?.reveal(), !rt.isEmpty else {
+            Self.log.error("refresh: invalidGrant (no refresh token)")
+            throw ProviderError.invalidGrant
+        }
+        var req = Self.formRequest(Self.tokenURL, form: ["grant_type": "refresh_token", "refresh_token": rt, "client_id": Self.clientID])
+        req.timeoutInterval = CodexDeviceAuth.refreshTimeout
+        let data: Data
+        do {
+            (data, _) = try await http.send(req, bearer: nil)
+        } catch ProviderError.unauthorized {
+            Self.log.error("refresh: HTTP 401 invalidGrant")
+            throw ProviderError.invalidGrant
+        } catch let ProviderError.http(status, _, _) where status == 400 {
+            Self.log.error("refresh: HTTP 400 invalidGrant")
+            throw ProviderError.invalidGrant
+        } catch let error as ProviderError {
+            Self.log.error("refresh failed: \(error.description, privacy: .public)")
+            throw error
+        }
+        return try Self.credential(fromTokenResponse: data, now: now(), previous: c)
+    }
+
+    /// `previous` set means a refresh: refresh_token and identity fall back to it.
+    /// The id_token is read for `sub` / `email` only (TLS straight from the issuer) and not kept.
     static func credential(fromTokenResponse data: Data, now: Date, previous: Credential? = nil) throws -> Credential {
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw ProviderError.schema(keys: [])
@@ -135,6 +187,7 @@ public struct GrokDeviceAuth: Sendable {
         } else {
             expiresAt = nil
         }
+        let id = (obj["id_token"] as? String).flatMap(CodexDeviceAuth.jwtPayload)
         return Credential(
             kind: .grok,
             access: Secret(access),
@@ -142,9 +195,14 @@ public struct GrokDeviceAuth: Sendable {
             expiresAt: expiresAt,
             refreshExpiresAt: nil,
             scopes: [],
-            remoteAccountID: previous?.remoteAccountID,
-            accountEmail: previous?.accountEmail
+            remoteAccountID: nonEmpty(id?["sub"]) ?? previous?.remoteAccountID,
+            accountEmail: nonEmpty(id?["email"]) ?? previous?.accountEmail
         )
+    }
+
+    static func nonEmpty(_ raw: Any?) -> String? {
+        guard let s = raw as? String, !s.isEmpty else { return nil }
+        return s
     }
 
     /// The server's URL only when it is https on an xAI host; anything else gets the fixed fallback.
@@ -158,6 +216,16 @@ public struct GrokDeviceAuth: Sendable {
 
     /// Returns 2xx/400/401 bodies with their status; other statuses throw from `sendOAuth`.
     private func post(_ url: URL, form: [String: String], step: StaticString) async throws -> (Data, Int) {
+        do {
+            let (data, response) = try await http.sendOAuth(Self.formRequest(url, form: form))
+            return (data, response.statusCode)
+        } catch let error as ProviderError {
+            if case .http = error {} else { Self.log.error("device login \(step, privacy: .public) failed: \(error.description, privacy: .public)") }
+            throw error
+        }
+    }
+
+    static func formRequest(_ url: URL, form: [String: String]) -> URLRequest {
         var c = URLComponents()
         c.queryItems = form.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) }
         var req = URLRequest(url: url)
@@ -165,12 +233,6 @@ public struct GrokDeviceAuth: Sendable {
         req.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
         req.httpBody = Data((c.percentEncodedQuery ?? "").replacingOccurrences(of: "+", with: "%2B").utf8)
-        do {
-            let (data, response) = try await http.sendOAuth(req)
-            return (data, response.statusCode)
-        } catch let error as ProviderError {
-            if case .http = error {} else { Self.log.error("device login \(step, privacy: .public) failed: \(error.description, privacy: .public)") }
-            throw error
-        }
+        return req
     }
 }
