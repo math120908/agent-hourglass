@@ -60,11 +60,26 @@ enum Fixtures {
                       resetsAt: now.addingTimeInterval(1_296_000), windowLength: .seconds(2_592_000)),
             ]
         )
+        // Mirrors Tests/UsageCoreTests/Fixtures/google-summary.json as GoogleQuotaDecoding.summaryMeters decodes it.
+        let googleID = AccountID(kind: .google, remoteID: "acct-synthetic")
+        let fiveHour = Duration.seconds(18000)
+        let google = UsageSnapshot(
+            accountID: googleID,
+            fetchedAt: fetched,
+            plan: "Google AI Pro",
+            meters: [
+                Meter(kind: .window, label: "Gemini, 5-hour", percentUsed: 38, resetsAt: now.addingTimeInterval(2 * 3600), windowLength: fiveHour, pool: "gemini"),
+                Meter(kind: .window, label: "Gemini, weekly", percentUsed: 10, resetsAt: now.addingTimeInterval(4 * 86_400), windowLength: week, pool: "gemini"),
+                Meter(kind: .window, label: "Claude + GPT, 5-hour", percentUsed: 75, resetsAt: now.addingTimeInterval(3.5 * 3600), windowLength: fiveHour, pool: "claude-gpt"),
+                Meter(kind: .window, label: "Claude + GPT, weekly", percentUsed: 50, resetsAt: now.addingTimeInterval(4 * 86_400), windowLength: week, pool: "claude-gpt"),
+            ]
+        )
         return PopoverContent(
             accounts: [
                 PopoverAccount(id: claudeID, name: "Snorlax", kind: .claude, snapshot: claude, status: .fresh),
                 PopoverAccount(id: copilotID, name: "pikachu-dev", kind: .copilot, snapshot: copilot, status: .fresh),
                 PopoverAccount(id: codexID, name: "Mewtwo", kind: .codex, snapshot: codex, status: .fresh),
+                PopoverAccount(id: googleID, name: "Togepi", kind: .google, snapshot: google, status: .fresh),
             ],
             isOffline: false,
             now: now,

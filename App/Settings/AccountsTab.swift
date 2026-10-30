@@ -8,6 +8,7 @@ struct AccountsTab: View {
     var addCopilot: () -> Void = {}
     var addCodex: () -> Void = {}
     var addClaudeCode: () -> Void = {}
+    var addGoogle: () -> Void = {}
     @State private var pendingRemoval: AccountEntry?
 
     var body: some View {
@@ -44,6 +45,7 @@ struct AccountsTab: View {
                     } label: { Label { Text("Claude") } icon: { ProviderIcon(kind: .claude) } }
                     Button(action: addCopilot) { Label { Text("GitHub Copilot") } icon: { ProviderIcon(kind: .copilot) } }
                     Button(action: addCodex) { Label { Text("Codex") } icon: { ProviderIcon(kind: .codex) } }
+                    Button(action: addGoogle) { Label { Text("Google AI") } icon: { ProviderIcon(kind: .google) } }
                 } label: {
                     Label("Add Account", systemImage: "plus")
                 }
