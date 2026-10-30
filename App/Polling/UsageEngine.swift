@@ -17,6 +17,8 @@ final class UsageEngine {
     private var gh = GhTokenSource()
     /// Shared read-only view of ~/.codex/auth.json for add and polling.
     private let codex = CodexAuthSource()
+    /// Shared Antigravity OAuth client discovery: at most one probe per launch for add and polling.
+    private let googleClient = AntigravityClientDiscovery(oauth: GoogleOAuth(http: HTTPClient()))
     let service: AccountService?
     /// Usage history; nil when the store could not be opened (polling continues without it).
     let history: HistoryStore?
@@ -58,6 +60,7 @@ final class UsageEngine {
         let gh = GhTokenSource()
         self.gh = gh
         let codex = codex
+        let google = googleClient
         self.registry = registry
         service = AccountService(
             registry: registry,
@@ -72,7 +75,7 @@ final class UsageEngine {
                 )
             },
             makeClient: { id in
-                Self.makeClient(id, store: store, label: labels.label(for: id), gh: gh, codex: codex, login: labels.login(for: id))
+                Self.makeClient(id, store: store, label: labels.label(for: id), gh: gh, codex: codex, google: google, login: labels.login(for: id))
             },
             ghTokens: gh,
             codexAuth: codex
@@ -135,7 +138,7 @@ final class UsageEngine {
         publish(entries)
         let store = CredentialStore()
         for e in entries {
-            await poller.add(client: Self.makeClient(e.id, store: store, label: labels.label(for: e.id), gh: gh, codex: codex, login: e.remoteLogin))
+            await poller.add(client: Self.makeClient(e.id, store: store, label: labels.label(for: e.id), gh: gh, codex: codex, google: googleClient, login: e.remoteLogin))
         }
         Self.log.info("engine accounts=\(entries.count, privacy: .public)")
     }
@@ -168,6 +171,16 @@ final class UsageEngine {
     func addCodex() async throws -> AccountID {
         guard let service, let registry else { throw AccountServiceError.unknownAccount }
         let id = try await service.addCodex()
+        publish(await registry.accounts())
+        return id
+    }
+
+    /// Adds a Google AI account: loopback PKCE sign-in as the Antigravity client found on this Mac.
+    func addGoogle() async throws -> AccountID {
+        guard let service, let registry else { throw AccountServiceError.unknownAccount }
+        let credential = try await GoogleSignIn(oauth: GoogleOAuth(http: HTTPClient()), client: googleClient)
+            .run(open: { url in await MainActor.run { AddAccountModel.open(url) } })
+        let id = try await service.addGoogle(credential: credential)
         publish(await registry.accounts())
         return id
     }
@@ -244,6 +257,7 @@ final class UsageEngine {
         label: String,
         gh: GhTokenSource,
         codex: CodexAuthSource,
+        google: AntigravityClientDiscovery,
         login: String? = nil
     ) -> AccountClient {
         if id.isClaudeCodeLocal {
@@ -261,6 +275,16 @@ final class UsageEngine {
             return AccountClient(
                 id: id,
                 provider: CodexProvider(auth: codex),
+                http: HTTPClient(),
+                store: store,
+                clock: ContinuousClock(),
+                now: { Date() }
+            )
+        }
+        if id.kind == .google {
+            return AccountClient(
+                id: id,
+                provider: GoogleProvider(client: google),
                 http: HTTPClient(),
                 store: store,
                 clock: ContinuousClock(),

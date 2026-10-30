@@ -31,6 +31,7 @@ final class AddAccountModel {
             state = .failed("Sign-in already in progress")
             return
         }
+        resetFlow()
         step = .flow
         let hint = email.trimmingCharacters(in: .whitespaces)
         task = Task { [engine] in
@@ -63,13 +64,16 @@ final class AddAccountModel {
 
     private(set) var isClaudeCode = false
 
+    private(set) var isGoogle = false
+
     /// Adds Claude Code (local, read-only): reads Claude Code's own Keychain login on each poll.
     func addClaudeCodeLocal() {
-        isClaudeCode = true
         guard state.begin() else {
             state = .failed("Sign-in already in progress")
             return
         }
+        resetFlow()
+        isClaudeCode = true
         step = .flow
         task = Task { [engine] in
             do {
@@ -81,16 +85,17 @@ final class AddAccountModel {
     }
 
     func retry() {
-        if isClaudeCode { addClaudeCodeLocal() } else if isCodex { addCodex() } else if let copilotLogin { addCopilot(copilotLogin) } else { start() }
+        if isClaudeCode { addClaudeCodeLocal() } else if isGoogle { addGoogle() } else if isCodex { addCodex() } else if let copilotLogin { addCopilot(copilotLogin) } else { start() }
     }
 
     /// Adds the Codex CLI's ChatGPT login from ~/.codex/auth.json (read-only, no browser).
     func addCodex() {
-        isCodex = true
         guard state.begin() else {
             state = .failed("Sign-in already in progress")
             return
         }
+        resetFlow()
+        isCodex = true
         step = .flow
         task = Task { [engine] in
             do {
@@ -103,12 +108,41 @@ final class AddAccountModel {
         }
     }
 
-    func addCopilot(_ login: String) {
-        copilotLogin = login
+    /// Google AI login: loopback PKCE in the browser as the Antigravity client found on this Mac.
+    func addGoogle() {
         guard state.begin() else {
             state = .failed("Sign-in already in progress")
             return
         }
+        resetFlow()
+        isGoogle = true
+        step = .flow
+        task = Task { [engine] in
+            do {
+                state = .success(try await engine.addGoogle())
+            } catch is CancellationError {
+                state = .idle
+                step = .provider
+            } catch {
+                // A cancelled URLSession call surfaces as ProviderError.transport, not CancellationError.
+                if Task.isCancelled {
+                    state = .idle
+                    step = .provider
+                } else {
+                    state = AddFlowState.googleFailure(error)
+                }
+            }
+            Self.currentURL = nil
+        }
+    }
+
+    func addCopilot(_ login: String) {
+        guard state.begin() else {
+            state = .failed("Sign-in already in progress")
+            return
+        }
+        resetFlow()
+        copilotLogin = login
         step = .flow
         task = Task { [engine] in
             do {
@@ -117,6 +151,14 @@ final class AddAccountModel {
                 state = AddFlowState.failure(error)
             }
         }
+    }
+
+    /// Clears every provider flag so the sheet and `retry()` follow only the flow that just started.
+    private func resetFlow() {
+        copilotLogin = nil
+        isCodex = false
+        isClaudeCode = false
+        isGoogle = false
     }
 
     /// Cancelling the task cancels `awaitCallback`, whose `defer` closes the listener.
