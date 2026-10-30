@@ -313,3 +313,11 @@ struct CodexDeviceAuthTests {
         }
     }
 }
+
+extension CodexDeviceAuthTests {
+    @Test func numberAcceptsNumericString() {
+        #expect(CodexDeviceAuth.number("420") == 420)
+        #expect(CodexDeviceAuth.number(NSNumber(value: 1.5)) == 1.5)
+        #expect(CodexDeviceAuth.number("x") == nil)
+    }
+}
