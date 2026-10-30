@@ -83,7 +83,10 @@ public final class HTTPClient: Sendable {
     /// for RFC 6749/8628 error bodies (`authorization_pending`, `slow_down`).
     public func sendOAuth(_ req: URLRequest) async throws -> (Data, HTTPURLResponse) {
         let host = req.url?.host() ?? ""
-        guard req.value(forHTTPHeaderField: "Authorization") == nil, req.url?.scheme == "https" else {
+        guard req.value(forHTTPHeaderField: "Authorization") == nil,
+              Self.authHosts.contains(host),
+              req.url?.scheme == "https"
+        else {
             throw ProviderError.hostNotAllowed(host)
         }
 

@@ -119,4 +119,22 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
         }
         #expect(StubProtocol.requests.isEmpty)
     }
+
+    @Test func sendOAuthRejectsForeignHost() async {
+        StubProtocol.reset()
+        let req = URLRequest(url: URL(string: "https://example.com/oauth2/token")!)
+        await #expect(throws: ProviderError.hostNotAllowed("example.com")) {
+            _ = try await client.sendOAuth(req)
+        }
+        #expect(StubProtocol.requests.isEmpty)
+    }
+
+    @Test func sendOAuthReturns401Body() async throws {
+        let body = Data(#"{"error":"invalid_grant"}"#.utf8)
+        StubProtocol.reset(status: 401, body: body)
+        let req = URLRequest(url: URL(string: "https://auth.x.ai/oauth2/token")!)
+        let (data, resp) = try await client.sendOAuth(req)
+        #expect(resp.statusCode == 401)
+        #expect(data == body)
+    }
 }
