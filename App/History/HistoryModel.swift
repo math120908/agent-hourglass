@@ -114,10 +114,19 @@ final class HistoryModel {
         case let m where m.hasPrefix(Meter.Kind.weeklyModel.rawValue + ":"):
             style = .model; name = String(m.dropFirst(Meter.Kind.weeklyModel.rawValue.count + 1))
         case let m where m.hasPrefix(Meter.Kind.window.rawValue + ":"):
-            style = .window; name = Int(m.dropFirst(Meter.Kind.window.rawValue.count + 1)).map(Meter.windowLabel(seconds:)) ?? "Window"
+            style = .window; name = windowName(m.dropFirst(Meter.Kind.window.rawValue.count + 1))
         default: style = .copilot; name = "Premium requests"
         }
         return ChartLine(id: s.id, name: name, style: style, points: s.points)
+    }
+
+    /// `<seconds>[:<pool>]` → "5-hour, gemini", "5-hour", "gemini", else "Window".
+    static func windowName(_ rest: Substring) -> String {
+        let parts = rest.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
+        let label = parts.first.flatMap { Int($0) }.flatMap { $0 > 0 ? Meter.windowLabel(seconds: $0) : nil }
+        let pool = parts.count > 1 && !parts[1].isEmpty ? String(parts[1]) : nil
+        let name = [label, pool].compactMap { $0 }.joined(separator: ", ")
+        return name.isEmpty ? "Window" : name
     }
 
     // MARK: Export
