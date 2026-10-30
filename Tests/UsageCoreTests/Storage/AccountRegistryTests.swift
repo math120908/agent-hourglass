@@ -128,4 +128,108 @@ struct AccountRegistryTests {
         try await reg.upsert(entry("a"))
         #expect(try mode(reg.url) == 0o600)
     }
+
+    // A registry that treats codex as a new kind stands in for google/grok (not yet in ProviderKind).
+    func extRegistry() -> AccountRegistry { AccountRegistry(directory: dir, isMain: { $0 != .codex }) }
+
+    func codex(_ remote: String) -> AccountEntry {
+        AccountEntry(
+            id: AccountID(kind: .codex, remoteID: remote),
+            kind: .codex,
+            displayName: "Codex",
+            remoteLogin: nil,
+            order: 0,
+            addedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            status: "active"
+        )
+    }
+
+    func json(_ name: String) throws -> [String: Any] {
+        try JSONSerialization.jsonObject(with: Data(contentsOf: dir.appendingPathComponent(name))) as! [String: Any]
+    }
+
+    func ids(_ file: [String: Any]) -> [String] {
+        (file["accounts"] as! [[String: Any]]).map { $0["id"] as! String }
+    }
+
+    @Test func newKindGoesToExtFile() async throws {
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let reg = extRegistry()
+        _ = try await reg.load()
+        try await reg.upsert(entry("a"))
+        try await reg.upsert(codex("x"))
+        #expect(ids(try json(AccountRegistry.fileName)) == ["claude:a"])
+        #expect(ids(try json(AccountRegistry.extFileName)) == ["codex:x"])
+        #expect(try mode(reg.url) == 0o600)
+        #expect(try mode(reg.extURL) == 0o600)
+    }
+
+    @Test func mergedOrderSurvivesReload() async throws {
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let reg = extRegistry()
+        _ = try await reg.load()
+        try await reg.upsert(entry("a"))
+        try await reg.upsert(codex("x"))
+        try await reg.reorder([AccountID(kind: .codex, remoteID: "x"), AccountID(kind: .claude, remoteID: "a")])
+        #expect(try await extRegistry().load().map(\.id.rawValue) == ["codex:x", "claude:a"])
+    }
+
+    @Test func menuBarExtIDStaysInMainFile() async throws {
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let reg = extRegistry()
+        _ = try await reg.load()
+        try await reg.upsert(entry("a"))
+        try await reg.upsert(codex("x"))
+        let x = AccountID(kind: .codex, remoteID: "x")
+        try await reg.setMenuBarAccount(x)
+        #expect(try json(AccountRegistry.fileName)["menuBarAccountID"] as? String == "codex:x")
+        #expect(try json(AccountRegistry.extFileName)["menuBarAccountID"] == nil)
+        let fresh = extRegistry()
+        _ = try await fresh.load()
+        #expect(await fresh.menuBarAccountID == x)
+    }
+
+    @Test func unknownExtEntryPreservedOnWrite() async throws {
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let future: [String: Any] = [
+            "id": "future:z", "kind": "future", "displayName": "Future", "order": 0,
+            "addedAt": "2023-11-14T22:13:20Z", "status": "active", "extra": ["nested": 1],
+        ]
+        let valid = try JSONSerialization.jsonObject(with: JSONEncoder.iso.encode(codex("x"))) as! [String: Any]
+        let seed: [String: Any] = ["version": 1, "accounts": [valid, future]]
+        try JSONSerialization.data(withJSONObject: seed).write(to: dir.appendingPathComponent(AccountRegistry.extFileName))
+        let reg = extRegistry()
+        #expect(try await reg.load().map(\.id.rawValue) == ["codex:x"])
+        #expect(await reg.accounts().map(\.id.rawValue) == ["codex:x"])
+        #expect(await reg.loadedCleanly)
+        try await reg.upsert(codex("y"))
+        let written = try json(AccountRegistry.extFileName)["accounts"] as! [[String: Any]]
+        #expect(written.map { $0["id"] as! String }.sorted() == ["codex:x", "codex:y", "future:z"])
+        let kept = try #require(written.first { $0["id"] as? String == "future:z" })
+        #expect(NSDictionary(dictionary: kept).isEqual(to: future))
+    }
+
+    @Test func corruptExtFileQuarantinesOnlyExt() async throws {
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let reg = extRegistry()
+        _ = try await reg.load()
+        try await reg.upsert(entry("a"))
+        try Data("not json".utf8).write(to: reg.extURL)
+        let fresh = extRegistry()
+        #expect(try await fresh.load().map(\.id.rawValue) == ["claude:a"])
+        #expect(await !fresh.loadedCleanly)
+        let names = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+        #expect(names.contains { $0.hasPrefix("\(AccountRegistry.extFileName).bad-") })
+        #expect(!names.contains { $0.hasPrefix("\(AccountRegistry.fileName).bad-") })
+        #expect(names.contains(AccountRegistry.fileName))
+        #expect(await fresh.menuBarAccountID?.rawValue == "claude:a")
+    }
+}
+
+private extension JSONEncoder {
+    static let iso: JSONEncoder = {
+        let e = JSONEncoder()
+        e.dateEncodingStrategy = .iso8601
+        return e
+    }()
 }

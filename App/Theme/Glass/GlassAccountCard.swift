@@ -185,7 +185,7 @@ struct GlassAccountCard: View {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 5) {
                         Text(row.label).font(.system(size: 12, weight: .semibold))
-                        if isWeekly && account.kind != .codex { StatusChipView(text: "Weekly") }
+                        if isWeekly && !account.kind.usesWindowMeters { StatusChipView(text: "Weekly") }
                     }
                     if row.paceTick == nil && account.kind == .claude {
                         Text("5-hour rolling window")

@@ -71,6 +71,8 @@ Settings > Accounts > **Add Account** menu (the list refreshes as soon as an acc
 - **GitHub Copilot** uses the GitHub CLI. Install `gh` (Homebrew) and run `gh auth login` first; the app asks `gh` for the token on each poll and does not store it.
 - **Claude Code (local, read-only)** (Add Account > Claude > Claude Code (local, read-only)) reuses the login Claude Code keeps in your Keychain. macOS asks once for access: click **Always Allow**. The app only reads that item on each poll, keeps the token in memory, and never writes, refreshes, or changes it. When the token is near expiry it shows "Run `claude` to refresh login"; using Claude Code refreshes it. Experimental.
 - **Codex** reads the Codex CLI login from `~/.codex/auth.json` (read-only; run `codex login` first). The app never refreshes or writes that file. Meters are labelled by window length (for example `30-day`).
+- **Google AI** (experimental, personal builds only) signs in with Google in the browser as the Antigravity client and shows Google AI plan quota. Needs Antigravity installed: the client secret is read from it at runtime. The app keeps its own token in the Keychain and never reads `~/.gemini`. Details in [DEVELOPMENT.md](DEVELOPMENT.md#google-ai-antigravity-provider-experimental).
+- **Grok** (experimental, personal builds only) signs in with a device code and shows the SuperGrok weekly credit pool. The app keeps its own token in the Keychain and never reads `~/.grok`. Details in [DEVELOPMENT.md](DEVELOPMENT.md#grok-provider-experimental).
 
 ## Codex reset radar
 

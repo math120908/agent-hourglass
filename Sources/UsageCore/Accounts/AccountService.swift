@@ -6,6 +6,7 @@ public enum AccountServiceError: Error, Equatable {
     case differentAccount
     case unknownAccount
     case missingAccountID
+    case reauthUnsupported
 }
 
 /// Orchestrates AccountRegistry + CredentialStore + Poller (spec §4, §5).
@@ -143,6 +144,32 @@ public actor AccountService {
         return id
     }
 
+    /// Adds a Google AI account from the loopback PKCE sign-in. The credential's `remoteAccountID` (the
+    /// userinfo `sub`) is the stable id; an id already in the registry is a re-auth.
+    @discardableResult
+    public func addGoogle(credential: Credential) async throws -> AccountID {
+        guard credential.kind == .google, let remote = credential.remoteAccountID, !remote.isEmpty else {
+            throw AccountServiceError.missingAccountID
+        }
+        let id = AccountID(kind: .google, remoteID: remote)
+        let email = credential.accountEmail.flatMap { $0.isEmpty ? nil : $0 }
+        try await commit(credential, id: id, kind: .google, defaultName: { $0 == 1 ? "Google AI" : "Google AI #\($0)" }, autoName: email, remoteLogin: nil)
+        return id
+    }
+
+    /// Adds a Grok account from the device-code login. `remoteAccountID` (the OIDC `sub`) is the stable id;
+    /// an id already in the registry is a re-auth. The login email is the default name.
+    @discardableResult
+    public func addGrok(credential: Credential) async throws -> AccountID {
+        guard credential.kind == .grok, let remote = credential.remoteAccountID, !remote.isEmpty else {
+            throw AccountServiceError.missingAccountID
+        }
+        let id = AccountID(kind: .grok, remoteID: remote)
+        let email = credential.accountEmail.flatMap { $0.isEmpty ? nil : $0 }
+        try await commit(credential, id: id, kind: .grok, defaultName: { $0 == 1 ? "Grok" : "Grok #\($0)" }, autoName: email, remoteLogin: nil)
+        return id
+    }
+
     /// Adds the read-only Claude Code (local) account. Writes only the registry; the first poll reads the Keychain.
     /// `name` is the user name Claude Code reports (Mac: `ClaudeCodeProfile`); nil keeps the old or default name.
     @discardableResult
@@ -172,10 +199,12 @@ public actor AccountService {
         await poller.refreshAll(force: false)
     }
 
-    /// Re-auths `id`. A login that resolves to another account is dropped without any write.
+    /// Re-auths a Claude `id`. A login that resolves to another account is dropped without any write.
+    /// Other kinds re-auth by adding the account again (`reauthUnsupported`).
     public func reauth(_ id: AccountID) async throws {
         guard let entry = await registry.accounts().first(where: { $0.id == id }) else { throw AccountServiceError.unknownAccount }
         if id.isClaudeCodeLocal { return try await readdClaudeCodeLocal() }
+        guard entry.kind == .claude else { throw AccountServiceError.reauthUnsupported }
         let remote = String(id.rawValue.dropFirst(entry.kind.rawValue.count + 1))
         let (cred, remoteID) = try await signIn(entry.remoteLogin, remote)
         guard AccountID(kind: entry.kind, remoteID: remoteID) == id else { throw AccountServiceError.differentAccount }
@@ -201,10 +230,18 @@ public actor AccountService {
         try await history.deleteAccount(id)
     }
 
-    /// Deletes Keychain items under our service that have no registry entry.
+    /// Deletes Keychain items under our service that have no registry entry, for every kind except Codex
+    /// and Copilot (left alone, as before); an id of unknown kind is kept.
+    /// Entries the registry keeps hidden (undecodable) count as known. Skipped entirely when the registry
+    /// quarantined a file: its entries are unknown, not absent.
     public func cleanupOrphans() async throws {
-        let known = Set(await registry.accounts().map(\.id))
-        for id in try store.allAccountIDs() where id.kind == .claude && !known.contains(id) {
+        guard await registry.loadedCleanly else {
+            Self.log.notice("orphan cleanup skipped: registry quarantined")
+            return
+        }
+        let known = Set(await registry.accounts().map(\.id) + registry.hiddenIDs())
+        let owned = { (id: AccountID) in id.kind.map { $0 != .codex && $0 != .copilot } ?? false }
+        for id in try store.allAccountIDs() where owned(id) && !known.contains(id) {
             try store.delete(id)
         }
     }

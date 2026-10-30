@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>AHGoogleClientSecret</key>
+	<string>$(GOOGLE_AG_CLIENT_SECRET)</string>
 	<key>AHKeychainAccessGroup</key>
 	<string>$(TeamIdentifierPrefix)cc.kuoc.agent-hourglass.shared</string>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>

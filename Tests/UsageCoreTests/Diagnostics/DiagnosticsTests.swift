@@ -23,4 +23,8 @@ struct DiagnosticsTests {
         #expect(out.contains("status=needsLogin"))
         #expect(out.contains("age=60s"))
     }
+
+    @Test func quotaUnavailableStatusName() {
+        #expect(Diagnostics.statusName(.quotaUnavailable) == "quotaUnavailable")
+    }
 }

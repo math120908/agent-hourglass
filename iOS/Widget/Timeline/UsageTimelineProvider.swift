@@ -111,6 +111,7 @@ struct UsageTimelineProvider: AppIntentTimelineProvider {
         case "claudeCodeNotSignedIn": .claudeCodeNotSignedIn
         case "claudeCodeExpired": .claudeCodeExpired
         case "claudeCodeDenied": .claudeCodeDenied
+        case "quotaUnavailable": .quotaUnavailable
         case "offline": .offline
         default: nil
         }

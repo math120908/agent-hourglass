@@ -81,6 +81,7 @@ import Testing
         #expect(make(s, .offline).statusChip == nil)
         #expect(make(s, .offline).isDimmed)
         #expect(make(s, .needsLogin).statusChip == "Sign in again")
+        #expect(make(s, .quotaUnavailable).statusChip == "Quota unavailable")
         #expect(make(s, .fresh).statusChip == nil)
         #expect(!make(s, .fresh).isDimmed)
     }
@@ -108,6 +109,10 @@ import Testing
         #expect(make(claude([], plan: "pro")).planTag == "Pro")
         #expect(make(claude([], plan: "enterprise")).planTag == "Enterprise")
         #expect(make(claude([], plan: "free")).planTag == "Free")
+        #expect(make(claude([], plan: "PLUS")).planTag == "Plus")
+        #expect(make(claude([], plan: "Google AI Pro")).planTag == "Google AI Pro")
+        #expect(make(claude([], plan: "SuperGrok")).planTag == "SuperGrok")
+        #expect(make(claude([], plan: "Google_AI_Ultra")).planTag == "Google AI Ultra")
     }
     @Test func copilotCredits() {
         let s = UsageSnapshot(accountID: copilotID, fetchedAt: now, plan: "enterprise",
@@ -143,5 +148,44 @@ import Testing
         let m = make(claude([session(42, resetsIn: 3600), weekly(39, resetsIn: 86400)],
                             spend: Money(usedMinor: 1, limitMinor: 2, currency: "EUR", exponent: 2)), .stale)
         #expect(!String(describing: m).contains("\u{00B7}"))
+    }
+
+    func window(_ seconds: Int, _ p: Double) -> Meter {
+        Meter(kind: .window, label: Meter.windowLabel(seconds: seconds), percentUsed: p,
+              resetsAt: now.addingTimeInterval(3600), windowLength: .seconds(seconds))
+    }
+    func codex(_ meters: [Meter]) -> UsageSnapshot {
+        UsageSnapshot(accountID: AccountID(kind: .codex, remoteID: "c"), fetchedAt: now, plan: nil, meters: meters, spend: nil)
+    }
+    @Test func codexHeadlineAndSecondary() {
+        let m = make(codex([window(18000, 12), window(604_800, 50)]), .fresh, .codex)
+        #expect(m.headline?.label == Meter.windowLabel(seconds: 18000))
+        #expect(m.secondary == "Wk 50%")
+    }
+    @Test func secondarySkipsSameLengthWindow() {
+        #expect(make(codex([window(604_800, 96), window(604_800, 84)]), .fresh, .codex).secondary == nil)
+        #expect(make(codex([window(18000, 10), window(18000, 20), window(604_800, 50)]), .fresh, .codex).secondary == "Wk 50%")
+    }
+    @Test func googleHeadlineIsFirstWindow() {
+        let snap = UsageSnapshot(accountID: AccountID(kind: .google, remoteID: "g"), fetchedAt: now, plan: nil,
+                                 meters: [window(18000, 12), window(604_800, 50)], spend: nil)
+        let m = make(snap, .fresh, .google)
+        #expect(m.headline?.label == Meter.windowLabel(seconds: 18000))
+        #expect(m.secondary == "Wk 50%")
+    }
+
+    @Test func grokHeadlineIsWeeklyWindow() {
+        var build = window(604_800, 84)
+        build.label = "Build"
+        build.pool = "build"
+        var chat = window(604_800, 12)
+        chat.label = "Chat"
+        chat.pool = "chat"
+        let snap = UsageSnapshot(accountID: AccountID(kind: .grok, remoteID: "g"), fetchedAt: now, plan: nil,
+                                 meters: [window(604_800, 96), build, chat], spend: nil)
+        let m = make(snap, .fresh, .grok)
+        #expect(m.headline?.label == Meter.windowLabel(seconds: 604_800))
+        #expect(m.headline?.percentText == "96%")
+        #expect(m.secondary == nil)
     }
 }

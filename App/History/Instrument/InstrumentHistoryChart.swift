@@ -80,7 +80,7 @@ struct InstrumentHistoryChart: View {
         case .weekly: HistoryChart.weekly
         case .model: HistoryChart.model
         case .copilot: GlassStyle.copilot
-        case .window: GlassStyle.codex
+        case .window: GlassStyle.accent(kind)
         }
     }
 
@@ -98,8 +98,8 @@ struct InstrumentHistoryChart: View {
     }
 
     private func tooltip(at t: Date) -> some View {
-        var rows: [(String, Double?, Color)] = kind == .codex
-            ? Set(visible.filter { $0.style == .window }.map(\.name)).sorted().map { ($0, value(.window, name: $0, at: t), GlassStyle.codex) }
+        var rows: [(String, Double?, Color)] = kind.usesWindowMeters
+            ? Set(visible.filter { $0.style == .window }.map(\.name)).sorted().map { ($0, value(.window, name: $0, at: t), GlassStyle.accent(kind)) }
             : kind == .copilot
             ? [("Premium", value(.copilot, at: t), GlassStyle.copilot)]
             : [("Session", value(.session, at: t), GlassStyle.claude), ("Weekly", value(.weekly, at: t), HistoryChart.weekly)]

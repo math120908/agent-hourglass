@@ -19,6 +19,8 @@ public struct Meter: Codable, Sendable, Equatable {
     public var windowLength: Duration?
     public var isUnlimited: Bool
     public var severity: Severity
+    /// Quota pool that separates same-length windows of one account (Google model group, Grok product). nil for Claude, Copilot and Codex.
+    public var pool: String?
 
     public init(
         kind: Kind,
@@ -30,7 +32,8 @@ public struct Meter: Codable, Sendable, Equatable {
         resetsAt: Date? = nil,
         windowLength: Duration? = nil,
         isUnlimited: Bool = false,
-        severity: Severity = .normal
+        severity: Severity = .normal,
+        pool: String? = nil
     ) {
         self.kind = kind
         self.label = label
@@ -42,6 +45,7 @@ public struct Meter: Codable, Sendable, Equatable {
         self.windowLength = windowLength
         self.isUnlimited = isUnlimited
         self.severity = severity
+        self.pool = pool
     }
 
     /// Window length in whole seconds, nil when unknown.

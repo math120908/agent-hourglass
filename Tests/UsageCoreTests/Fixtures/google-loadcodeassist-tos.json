@@ -1,0 +1,6 @@
+{
+  "allowedTiers": [],
+  "ineligibleTiers": [
+    { "reasonCode": "GOOGLE_TOS_NOT_SUPPORTED_BY_CLIENT", "tierId": "free-tier" }
+  ]
+}

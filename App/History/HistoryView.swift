@@ -93,8 +93,8 @@ struct GlassHistoryView: View {
         HStack(spacing: 14) {
             if model.kind == .copilot {
                 swatch(GlassStyle.copilot, dashed: false, "Premium requests")
-            } else if model.kind == .codex {
-                ForEach(model.windowNames.isEmpty ? ["30-day"] : model.windowNames, id: \.self) { swatch(GlassStyle.codex, dashed: false, $0) }
+            } else if model.kind.usesWindowMeters {
+                ForEach(model.windowNames.isEmpty ? ["30-day"] : model.windowNames, id: \.self) { swatch(GlassStyle.accent(model.kind), dashed: false, $0) }
             } else {
                 swatch(GlassStyle.claude, dashed: false, "Session (5h)")
                 swatch(HistoryChart.weekly, dashed: true, "All models, weekly")
@@ -139,16 +139,14 @@ struct GlassHistoryView: View {
     private var peakLabel: String {
         switch model.kind {
         case .copilot: "Peak premium"
-        case .codex: "Peak usage"
-        default: "Peak session"
+        default: model.kind.usesWindowMeters ? "Peak usage" : "Peak session"
         }
     }
 
     private var endLabel: String {
         switch model.kind {
         case .copilot: "Premium at range end"
-        case .codex: "Usage at range end"
-        default: "Weekly at range end"
+        default: model.kind.usesWindowMeters ? "Usage at range end" : "Weekly at range end"
         }
     }
 

@@ -1,0 +1,19 @@
+{
+  "groups": [
+    {
+      "displayName": "Gemini models",
+      "buckets": [
+        { "bucketId": "gemini-5h", "displayName": "5-hour limit", "window": "5h", "remaining": { "remainingFraction": 0.62 }, "resetTime": "2026-10-30T06:00:00Z" },
+        { "bucketId": "gemini-weekly", "displayName": "Weekly limit", "window": "weekly", "remaining": { "remainingFraction": 0.9 }, "resetTime": "2026-11-03T00:00:00.123Z" }
+      ]
+    },
+    {
+      "displayName": "Claude and GPT models",
+      "buckets": [
+        { "bucketId": "claude-gpt-5h", "displayName": "5-hour limit", "window": "5h", "remaining": { "remainingFraction": 0.25 }, "resetTime": "2026-10-30T07:30:00Z" },
+        { "bucketId": "claude-gpt-weekly", "displayName": "Weekly limit", "window": "weekly", "remaining": { "remainingFraction": 0.5 }, "resetTime": "2026-11-03T00:00:00Z" },
+        { "bucketId": "claude-gpt-daily", "displayName": "Daily limit", "window": "daily", "remaining": { "remainingFraction": 1 }, "disabled": true }
+      ]
+    }
+  ]
+}

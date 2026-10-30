@@ -51,8 +51,8 @@ struct InstrumentHistoryView: View {
         HStack(spacing: 14) {
             if model.kind == .copilot {
                 swatch(GlassStyle.copilot, dashed: false, "Premium")
-            } else if model.kind == .codex {
-                ForEach(model.windowNames.isEmpty ? ["30-day"] : model.windowNames, id: \.self) { swatch(GlassStyle.codex, dashed: false, $0) }
+            } else if model.kind.usesWindowMeters {
+                ForEach(model.windowNames.isEmpty ? ["30-day"] : model.windowNames, id: \.self) { swatch(GlassStyle.accent(model.kind), dashed: false, $0) }
             } else {
                 swatch(GlassStyle.claude, dashed: false, "Session")
                 swatch(HistoryChart.weekly, dashed: true, "Weekly")
@@ -95,8 +95,8 @@ struct InstrumentHistoryHeader: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 18) {
-            figure(model.kind == .copilot ? "Premium now" : model.kind == .codex ? "Usage now" : "Weekly now", fmt.weeklyNow, .primary)
-            figure(model.kind == .copilot ? "Peak premium" : model.kind == .codex ? "Peak usage" : "Peak session", fmt.peakSession, model.isEmpty ? .primary : GlassStyle.accent(model.kind))
+            figure(model.kind == .copilot ? "Premium now" : model.kind.usesWindowMeters ? "Usage now" : "Weekly now", fmt.weeklyNow, .primary)
+            figure(model.kind == .copilot ? "Peak premium" : model.kind.usesWindowMeters ? "Peak usage" : "Peak session", fmt.peakSession, model.isEmpty ? .primary : GlassStyle.accent(model.kind))
             Spacer()
             HStack(spacing: 8) {
                 Text(HistorySummaryFormatting.rangeLabel(model.interval, isNow: !model.canGoNext))

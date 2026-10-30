@@ -15,31 +15,59 @@ import UsageCore
     }
 
     let title: String
+    let kind: ProviderKind
+    /// Verification host named on the sheet ("Open …" and the lead line).
+    let host: String
+    let lead: String
     private(set) var state: State = .starting
 
     @ObservationIgnored private let start: @Sendable () async throws -> DeviceCodePrompt
     @ObservationIgnored private let complete: @Sendable (DeviceCodePrompt) async throws -> AccountID
     @ObservationIgnored private let now: @Sendable () -> Date
     @ObservationIgnored private let wake: (@Sendable () -> Void)?
+    /// Provider copy for a failed start or poll; nil keeps the generic lines.
+    @ObservationIgnored private let failureMessage: (@Sendable (any Error) -> String)?
     @ObservationIgnored private var task: Task<Void, Never>?
 
     init(
         title: String,
+        kind: ProviderKind = .codex,
+        host: String = "auth.openai.com",
+        lead: String? = nil,
         start: @escaping @Sendable () async throws -> DeviceCodePrompt,
         complete: @escaping @Sendable (DeviceCodePrompt) async throws -> AccountID,
         now: @escaping @Sendable () -> Date = { Date() },
         wake: (@Sendable () -> Void)? = nil,
+        failureMessage: (@Sendable (any Error) -> String)? = nil,
     ) {
         self.title = title
+        self.kind = kind
+        self.host = host
+        // Broken by hand into two balanced lines; the natural wrap left "back here." alone.
+        self.lead = lead ?? "Enter this code on \(host),\nthen come back here."
         self.start = start
         self.complete = complete
         self.now = now
         self.wake = wake
+        self.failureMessage = failureMessage
     }
 
     /// Fixed-state init for previews and snapshots.
-    convenience init(title: String, state: State) {
-        self.init(title: title, start: { throw CancellationError() }, complete: { _ in throw CancellationError() })
+    convenience init(
+        title: String,
+        kind: ProviderKind = .codex,
+        host: String = "auth.openai.com",
+        lead: String? = nil,
+        state: State,
+    ) {
+        self.init(
+            title: title,
+            kind: kind,
+            host: host,
+            lead: lead,
+            start: { throw CancellationError() },
+            complete: { _ in throw CancellationError() },
+        )
         self.state = state
     }
 
@@ -75,7 +103,7 @@ import UsageCore
     private enum Outcome: Sendable {
         case done(AccountID)
         case expired
-        case failed
+        case failed(String)
     }
 
     private func run() async {
@@ -83,25 +111,25 @@ import UsageCore
         do {
             prompt = try await start()
         } catch {
-            if !Task.isCancelled { state = .failed("Couldn't get a code") }
+            if !Task.isCancelled { state = .failed(failureMessage?(error) ?? "Couldn't get a code") }
             return
         }
         guard !Task.isCancelled else { return }
         state = .waiting(prompt)
-        let complete = self.complete
+        let complete = self.complete, failureMessage = self.failureMessage
         let remaining = prompt.expiresAt.timeIntervalSince(now())
         let outcome: Outcome = await withTaskGroup(of: Outcome.self) { group in
             group.addTask {
                 do { return .done(try await complete(prompt)) } catch {
                     Self.log.error("device login complete failed: \(Self.describe(error), privacy: .public)")
-                    return .failed
+                    return .failed(failureMessage?(error) ?? "Sign-in failed")
                 }
             }
             group.addTask {
                 if remaining > 0 { try? await Task.sleep(for: .seconds(remaining)) }
                 return .expired
             }
-            let first = await group.next() ?? .failed
+            let first = await group.next() ?? .failed("Sign-in failed")
             group.cancelAll()
             return first
         }
@@ -109,7 +137,7 @@ import UsageCore
         switch outcome {
         case .done(let id): state = .success(id)
         case .expired: state = .expired
-        case .failed: state = now() >= prompt.expiresAt ? .expired : .failed("Sign-in failed")
+        case .failed(let message): state = now() >= prompt.expiresAt ? .expired : .failed(message)
         }
     }
 }

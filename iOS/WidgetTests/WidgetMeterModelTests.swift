@@ -22,6 +22,11 @@ final class WidgetMeterModelTests: XCTestCase {
         XCTAssertEqual(String(data: data, encoding: .utf8), "[\"window:18000\"]")
     }
 
+    func testMeterKeyPool() {
+        let m = Meter(kind: .window, label: "Weekly", percentUsed: 5, windowLength: .seconds(604_800), pool: "build")
+        XCTAssertEqual(MeterKey(m).rawValue, "window:604800:build")
+    }
+
     func testRowMatchesMeterDisplay() {
         for remaining in [false, true] {
             for style in [ResetStyle.clock, .countdown] {

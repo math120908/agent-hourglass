@@ -59,11 +59,14 @@ final class SvcFakeLogin: @unchecked Sendable {
 struct AccountServiceTests {
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent("acctsvc-\(UUID().uuidString)")
     let log = SvcEventLog()
+    let logins = SvcEventLog()
+    let clients = SvcEventLog()
 
-    func make(_ ids: [String], gate: AsyncStream<Void>? = nil) throws -> (AccountService, SvcLoggingStore, AccountRegistry) {
+    /// `store` carries Keychain items across a simulated relaunch (a fresh registry and service on the same dir).
+    func make(_ ids: [String], gate: AsyncStream<Void>? = nil, store reused: SvcLoggingStore? = nil) throws -> (AccountService, SvcLoggingStore, AccountRegistry) {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let registry = AccountRegistry(directory: dir)
-        let store = SvcLoggingStore(log: log, registryURL: registry.url)
+        let store = reused ?? SvcLoggingStore(log: log, registryURL: registry.url)
         let provider = SvcLoggingProvider(log: log, registryURL: registry.url)
         let poller = Poller(clients: [], clock: ContinuousClock(), now: { Date() }, jitter: { 0 }) { _, _ in }
         let login = SvcFakeLogin(ids)
@@ -72,12 +75,16 @@ struct AccountServiceTests {
             store: store,
             poller: poller,
             history: SvcFakeHistory(log: log),
-            claudeLogin: { _, _ in
+            claudeLogin: { [logins] _, _ in
+                logins.add("login")
                 if let gate { for await _ in gate { break } }
                 let id = login.next()
                 return (Credential(kind: .claude, access: Secret("tok-\(id)"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), id)
             },
-            makeClient: { id in AccountClient(id: id, provider: provider, http: HTTPClient(), store: store, clock: ContinuousClock(), now: { Date() }) }
+            makeClient: { [clients] id in
+                clients.add(id.rawValue)
+                return AccountClient(id: id, provider: provider, http: HTTPClient(), store: store, clock: ContinuousClock(), now: { Date() })
+            }
         )
         return (svc, store, registry)
     }
@@ -145,6 +152,132 @@ struct AccountServiceTests {
         #expect(try store.allAccountIDs() == [cid("a")])
     }
 
+    @Test func reauthRefusesNonClaude() async throws {
+        let (svc, _, registry) = try make(["x"])
+        let id = AccountID(kind: .codex, remoteID: "x")
+        try await registry.upsert(AccountEntry(id: id, kind: .codex, displayName: "Codex", remoteLogin: nil, order: 0, addedAt: Date(), status: "ok"))
+        await #expect(throws: AccountServiceError.reauthUnsupported) { try await svc.reauth(id) }
+        #expect(logins.all.isEmpty)
+    }
+
+    @Test func cleanupOrphansKeepsCodex() async throws {
+        let (svc, store, _) = try make([])
+        let codex = AccountID(kind: .codex, remoteID: "x")
+        try store.inner.write(Credential(kind: .codex, access: Secret("x"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: codex, label: "t")
+        try store.inner.write(Credential(kind: .claude, access: Secret("y"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: cid("y"), label: "t")
+        try await svc.cleanupOrphans()
+        #expect(try store.allAccountIDs() == [codex])
+    }
+
+    @Test func cleanupOrphansDeletesGoogle() async throws {
+        let (svc, store, _) = try make([])
+        let google = AccountID(kind: .google, remoteID: "x")
+        let codex = AccountID(kind: .codex, remoteID: "y")
+        try store.inner.write(Credential(kind: .google, access: Secret("x"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: google, label: "t")
+        try store.inner.write(Credential(kind: .codex, access: Secret("y"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: codex, label: "t")
+        try await svc.cleanupOrphans()
+        #expect(try store.allAccountIDs() == [codex])
+    }
+
+    @Test func cleanupOrphansDeletesGrok() async throws {
+        let (svc, store, _) = try make([])
+        let codex = AccountID(kind: .codex, remoteID: "y")
+        try store.inner.write(Credential(kind: .grok, access: Secret("x"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: AccountID(kind: .grok, remoteID: "x"), label: "t")
+        try store.inner.write(Credential(kind: .codex, access: Secret("y"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: codex, label: "t")
+        try await svc.cleanupOrphans()
+        #expect(try store.allAccountIDs() == [codex])
+    }
+
+    @Test func cleanupSkippedWhenRegistryQuarantined() async throws {
+        let (svc, store, registry) = try make([])
+        try Data("{\"version\":1,\"accou".utf8).write(to: registry.url)
+        _ = try await registry.load()
+        try store.inner.write(Credential(kind: .claude, access: Secret("y"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: cid("y"), label: "t")
+        try await svc.cleanupOrphans()
+        #expect(try store.allAccountIDs() == [cid("y")])
+    }
+
+    @Test func cleanupKeepsHiddenUndecodableEntry() async throws {
+        let (svc, store, registry) = try make([])
+        // A claude entry missing `status` fails per-entry decode and is kept hidden.
+        let file: [String: Any] = ["version": 1, "accounts": [["id": "claude:h", "kind": "claude", "displayName": "H", "order": 0, "addedAt": "2023-11-14T22:13:20Z"]]]
+        try JSONSerialization.data(withJSONObject: file).write(to: registry.url)
+        #expect(try await registry.load().isEmpty)
+        #expect(await registry.loadedCleanly)
+        try store.inner.write(Credential(kind: .claude, access: Secret("h"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: cid("h"), label: "t")
+        try store.inner.write(Credential(kind: .claude, access: Secret("o"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: cid("orphan"), label: "t")
+        try await svc.cleanupOrphans()
+        #expect(try store.allAccountIDs() == [cid("h")])
+    }
+
+    func claudeCred(_ s: String) -> Credential {
+        Credential(kind: .claude, access: Secret(s), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: [])
+    }
+
+    @Test func cleanupSkippedWhenRegistryUnreadable() async throws {
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: dir.appendingPathComponent("accounts.json").path)
+            try? FileManager.default.removeItem(at: dir)
+        }
+        let (svc, store, registry) = try make([])
+        try await registry.upsert(AccountEntry(id: cid("a"), kind: .claude, displayName: "A", remoteLogin: nil, order: 0, addedAt: Date(), status: "ok"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: registry.url.path)
+        #expect(try await registry.load().isEmpty)
+        #expect(await !registry.loadedCleanly)
+        let names = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+        #expect(names.contains("accounts.json"))
+        #expect(!names.contains { $0.hasPrefix("accounts.json.bad-") })
+        try store.inner.write(claudeCred("a"), for: cid("a"), label: "t")
+        try store.inner.write(claudeCred("y"), for: cid("y"), label: "t")
+        try await svc.cleanupOrphans()
+        #expect(Set(try store.allAccountIDs()) == [cid("a"), cid("y")])
+    }
+
+    @Test func commitRefusesToOverwriteUnreadableFile() async throws {
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: dir.appendingPathComponent("accounts.json").path)
+            try? FileManager.default.removeItem(at: dir)
+        }
+        let (_, _, registry) = try make([])
+        try await registry.upsert(AccountEntry(id: cid("a"), kind: .claude, displayName: "A", remoteLogin: nil, order: 0, addedAt: Date(), status: "ok"))
+        let before = try Data(contentsOf: registry.url)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: registry.url.path)
+        _ = try await registry.load()
+        await #expect(throws: AccountRegistryError.unreadableFile) {
+            try await registry.upsert(AccountEntry(id: cid("b"), kind: .claude, displayName: "B", remoteLogin: nil, order: 0, addedAt: Date(), status: "ok"))
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: registry.url.path)
+        #expect(try Data(contentsOf: registry.url) == before)
+    }
+
+    @Test func quarantineKeepsCleanupOffNextLaunch() async throws {
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let (svc1, store, registry1) = try make([])
+        try Data("{\"version\":1,\"accou".utf8).write(to: registry1.url)
+        _ = try await registry1.load()
+        try store.inner.write(claudeCred("y"), for: cid("y"), label: "t")
+        try await svc1.cleanupOrphans()
+        let (svc2, _, registry2) = try make([], store: store)
+        #expect(try await registry2.load().isEmpty)
+        #expect(await !registry2.loadedCleanly)
+        try await svc2.cleanupOrphans()
+        #expect(try store.allAccountIDs() == [cid("y")])
+    }
+
+    @Test func quarantineKeepsCleanupOffAfterAddInSameLaunch() async throws {
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let (svc1, store, registry1) = try make(["a"])
+        try Data("{\"version\":1,\"accou".utf8).write(to: registry1.url)
+        _ = try await registry1.load()
+        try store.inner.write(claudeCred("y"), for: cid("y"), label: "t")
+        try await svc1.addClaude(loginHint: nil)
+        let (svc2, _, registry2) = try make([], store: store)
+        #expect(try await registry2.load().map(\.id) == [cid("a")])
+        #expect(await !registry2.loadedCleanly)
+        try await svc2.cleanupOrphans()
+        #expect(Set(try store.allAccountIDs()) == [cid("a"), cid("y")])
+    }
+
     @Test func labelHasNoDisplayName() async throws {
         let (svc, store, registry) = try make(["a", "a"])
         let id = try await svc.addClaude(loginHint: nil)
@@ -161,5 +294,105 @@ struct AccountServiceTests {
         await #expect(throws: AccountServiceError.signInInProgress) { try await svc.addClaude(loginHint: nil) }
         cont.yield()
         #expect(try await first.value == cid("a"))
+    }
+
+    func googleCred(_ tok: String, sub: String?, email: String? = "pat@example.com") -> Credential {
+        Credential(kind: .google, access: Secret(tok), refresh: Secret("r-\(tok)"), expiresAt: nil, refreshExpiresAt: nil, scopes: [], remoteAccountID: sub, accountEmail: email)
+    }
+
+    @Test func addGoogleWritesKeychainAndRegistry() async throws {
+        let (svc, store, registry) = try make([])
+        let id = try await svc.addGoogle(credential: googleCred("g1", sub: "sub-1"))
+        #expect(id == AccountID(kind: .google, remoteID: "sub-1"))
+        #expect(try store.read(id)?.access.reveal() == "g1")
+        #expect(store.labels == [AccountService.keychainLabel(kind: .google, number: 1)])
+        #expect(await registry.accounts().first { $0.id == id }?.displayName == "pat@example.com")
+        #expect(clients.all == ["google:sub-1"])
+        #expect(try String(contentsOf: registry.extURL, encoding: .utf8).contains("google:sub-1"))
+        let main = try JSONSerialization.jsonObject(with: Data(contentsOf: registry.url)) as? [String: Any]
+        #expect((main?["accounts"] as? [Any])?.isEmpty == true)
+    }
+
+    @Test func addGoogleWithoutEmailUsesDefaultName() async throws {
+        let (svc, _, registry) = try make([])
+        try await svc.addGoogle(credential: googleCred("g1", sub: "sub-1", email: nil))
+        let id2 = try await svc.addGoogle(credential: googleCred("g2", sub: "sub-2", email: ""))
+        #expect(await registry.accounts().map(\.displayName) == ["Google AI", "Google AI #2"])
+        #expect(await registry.accounts().last?.id == id2)
+    }
+
+    @Test func addGoogleTwiceIsReauth() async throws {
+        let (svc, store, registry) = try make([])
+        let codex = AccountID(kind: .codex, remoteID: "c")
+        try await registry.upsert(AccountEntry(id: codex, kind: .codex, displayName: "Codex", remoteLogin: nil, order: 0, addedAt: Date(), status: "ok"))
+        let id = try await svc.addGoogle(credential: googleCred("g1", sub: "sub-1"))
+        let before = await registry.accounts().map(\.id)
+        try await svc.addGoogle(credential: googleCred("g2", sub: "sub-1"))
+        #expect(await registry.accounts().map(\.id) == before)
+        #expect(before == [codex, id])
+        #expect(try store.read(id)?.access.reveal() == "g2")
+        #expect(clients.all == ["google:sub-1", "google:sub-1"])
+    }
+
+    @Test func addGoogleRejectsMissingID() async throws {
+        let (svc, store, registry) = try make([])
+        await #expect(throws: AccountServiceError.missingAccountID) { try await svc.addGoogle(credential: googleCred("g", sub: nil)) }
+        await #expect(throws: AccountServiceError.missingAccountID) { try await svc.addGoogle(credential: googleCred("g", sub: "")) }
+        await #expect(throws: AccountServiceError.missingAccountID) {
+            try await svc.addGoogle(credential: Credential(kind: .codex, access: Secret("x"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: [], remoteAccountID: "sub-1"))
+        }
+        #expect(store.labels.isEmpty)
+        #expect(clients.all.isEmpty)
+        #expect(await registry.accounts().isEmpty)
+    }
+
+    func grokCred(_ tok: String, sub: String?, email: String? = "pat@example.com") -> Credential {
+        Credential(kind: .grok, access: Secret(tok), refresh: Secret("r-\(tok)"), expiresAt: nil, refreshExpiresAt: nil, scopes: [], remoteAccountID: sub, accountEmail: email)
+    }
+
+    @Test func addGrokWritesKeychainAndRegistry() async throws {
+        let (svc, store, registry) = try make([])
+        let id = try await svc.addGrok(credential: grokCred("g1", sub: "sub-1"))
+        #expect(id == AccountID(kind: .grok, remoteID: "sub-1"))
+        #expect(try store.read(id)?.access.reveal() == "g1")
+        #expect(store.labels == [AccountService.keychainLabel(kind: .grok, number: 1)])
+        #expect(await registry.accounts().first { $0.id == id }?.displayName == "pat@example.com")
+        #expect(clients.all == ["grok:sub-1"])
+        #expect(try String(contentsOf: registry.extURL, encoding: .utf8).contains("grok:sub-1"))
+        let main = try JSONSerialization.jsonObject(with: Data(contentsOf: registry.url)) as? [String: Any]
+        #expect((main?["accounts"] as? [Any])?.isEmpty == true)
+    }
+
+    @Test func addGrokWithoutEmailUsesDefaultName() async throws {
+        let (svc, _, registry) = try make([])
+        try await svc.addGrok(credential: grokCred("g1", sub: "sub-1", email: nil))
+        let id2 = try await svc.addGrok(credential: grokCred("g2", sub: "sub-2", email: ""))
+        #expect(await registry.accounts().map(\.displayName) == ["Grok", "Grok #2"])
+        #expect(await registry.accounts().last?.id == id2)
+    }
+
+    @Test func addGrokTwiceIsReauth() async throws {
+        let (svc, store, registry) = try make([])
+        let codex = AccountID(kind: .codex, remoteID: "c")
+        try await registry.upsert(AccountEntry(id: codex, kind: .codex, displayName: "Codex", remoteLogin: nil, order: 0, addedAt: Date(), status: "ok"))
+        let id = try await svc.addGrok(credential: grokCred("g1", sub: "sub-1"))
+        let before = await registry.accounts().map(\.id)
+        try await svc.addGrok(credential: grokCred("g2", sub: "sub-1"))
+        #expect(await registry.accounts().map(\.id) == before)
+        #expect(before == [codex, id])
+        #expect(try store.read(id)?.access.reveal() == "g2")
+        #expect(clients.all == ["grok:sub-1", "grok:sub-1"])
+    }
+
+    @Test func addGrokRejectsMissingID() async throws {
+        let (svc, store, registry) = try make([])
+        await #expect(throws: AccountServiceError.missingAccountID) { try await svc.addGrok(credential: grokCred("g", sub: nil)) }
+        await #expect(throws: AccountServiceError.missingAccountID) { try await svc.addGrok(credential: grokCred("g", sub: "")) }
+        await #expect(throws: AccountServiceError.missingAccountID) {
+            try await svc.addGrok(credential: Credential(kind: .codex, access: Secret("x"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: [], remoteAccountID: "sub-1"))
+        }
+        #expect(store.labels.isEmpty)
+        #expect(clients.all.isEmpty)
+        #expect(await registry.accounts().isEmpty)
     }
 }

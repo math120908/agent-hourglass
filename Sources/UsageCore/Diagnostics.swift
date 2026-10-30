@@ -57,6 +57,7 @@ public enum Diagnostics {
         case .claudeCodeNotSignedIn: "claudeCodeNotSignedIn"
         case .claudeCodeExpired: "claudeCodeExpired"
         case .claudeCodeDenied: "claudeCodeDenied"
+        case .quotaUnavailable: "quotaUnavailable"
         }
     }
 }

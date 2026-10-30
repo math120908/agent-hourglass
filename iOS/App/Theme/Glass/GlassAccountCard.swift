@@ -46,7 +46,7 @@ struct GlassAccountCard: View {
     }
 
     private var headline: MeterDisplay? {
-        let k: Meter.Kind = kind == .codex ? .window : .session5h
+        let k: Meter.Kind = kind.usesWindowMeters ? .window : .session5h
         return meters.first { $0.kind == k }.map { MeterDisplay.make($0, now: now, options: options) }
     }
 

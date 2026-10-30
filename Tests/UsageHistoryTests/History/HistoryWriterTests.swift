@@ -46,6 +46,24 @@ import Testing
         #expect(key == "window:2592000")
     }
 
+    @Test func windowKeyWithoutPoolUnchanged() {
+        let m = Meter(kind: .window, label: "5-hour", percentUsed: 1, windowLength: .seconds(18000))
+        #expect(HistoryStore.meterKey(m) == "window:18000")
+    }
+
+    @Test func windowKeyWithPool() {
+        let m = Meter(kind: .window, label: "5-hour", percentUsed: 1, windowLength: .seconds(18000), pool: "gemini")
+        #expect(HistoryStore.meterKey(m) == "window:18000:gemini")
+    }
+
+    @Test func sameLengthPoolsKeptApart() async throws {
+        let s = try HistoryStore.inMemory()
+        let gemini = Meter(kind: .window, label: "5-hour", percentUsed: 10, windowLength: .seconds(18000), pool: "gemini")
+        let claudeGPT = Meter(kind: .window, label: "5-hour", percentUsed: 20, windowLength: .seconds(18000), pool: "claude-gpt")
+        try await s.record(snap(t0, 0, meters: [gemini, claudeGPT]))
+        #expect(try count(s) == 2)
+    }
+
     @Test func weeklyModelKeyed() async throws {
         let s = try HistoryStore.inMemory()
         try await s.record(snap(t0, 0, meters: [Meter(kind: .weeklyModel, label: "Fable", percentUsed: 5)]))

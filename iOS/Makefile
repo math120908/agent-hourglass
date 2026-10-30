@@ -7,7 +7,12 @@ XCB = xcodebuild -project AgentHourglassiOS.xcodeproj -scheme AgentHourglassiOS 
 APP = $(DD)/Build/Products/Debug-iphonesimulator/AgentHourglass.app
 export SIM_NAME SIM_OS
 
-.PHONY: generate build test run-sim render render-widgets mac-ref icon testflight security-pass security-pass-start-log archive
+.PHONY: google-config generate build test run-sim render render-widgets mac-ref icon testflight security-pass security-pass-start-log archive
+
+# SPIKE, dev builds only: discover the Antigravity client secret on this Mac into the untracked
+# Config/GoogleOAuth.local.xcconfig. testflight.sh refuses to archive while it is set.
+google-config:
+	cd .. && swift run -c release usagectl google-oauth-xcconfig iOS/Config/GoogleOAuth.local.xcconfig
 
 generate:
 	xcodegen generate --quiet

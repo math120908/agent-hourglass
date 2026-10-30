@@ -123,6 +123,7 @@ extension AccountStatus {
         case .claudeCodeNotSignedIn: "Claude Code not signed in"
         case .claudeCodeExpired: "Run `claude` to refresh login"
         case .claudeCodeDenied: "Keychain access denied"
+        case .quotaUnavailable: "Quota unavailable"
         }
     }
 

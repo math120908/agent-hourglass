@@ -326,6 +326,15 @@ public actor AccountClient {
             status = .codexNotSignedIn
             return .codexNotSignedIn
         }
+        if error is GoogleOAuthError {
+            Self.log.error("google client unavailable")
+            status = .needsLogin
+            return .needsLogin
+        }
+        if error is QuotaError {
+            status = .quotaUnavailable
+            return .quotaUnavailable
+        }
         switch error as? ProviderError {
         case .invalidGrant, .unauthorized:
             s = .needsLogin

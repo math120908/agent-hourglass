@@ -35,7 +35,9 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             addClaude: { addAccount.show() },
             addCopilot: { addAccount.show(copilot: true) },
             addCodex: { addAccount.show(codex: true) },
-            addClaudeCode: { addAccount.show(claudeCode: true) }
+            addClaudeCode: { addAccount.show(claudeCode: true) },
+            addGoogle: { addAccount.show(google: true) },
+            addGrok: { addAccount.show(grok: true) }
         )
         let backend = settingsBackend
         historyWindow = HistoryWindowController(engine: engine) { await backend.load().entries }
@@ -64,6 +66,10 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             },
             signIn: { [weak self] id in
                 self?.popover.performClose(nil)
+                // Google has no reauth: signing in again is Add Account (same remote id upserts).
+                if id.kind == .google { self?.addAccount.show(google: true); return }
+                // Grok has no reauth: signing in again is Add Account (same remote id upserts).
+                if id.kind == .grok { self?.addAccount.show(grok: true); return }
                 self?.settings.show(tab: .accounts)
                 self?.settings.model.reauth(id)
             },

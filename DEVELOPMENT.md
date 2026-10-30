@@ -52,6 +52,43 @@ log show --last 1d --info --predicate 'subsystem == "cc.kuoc.agent-hourglass" AN
 
 A new `itemModified` value followed by `ok` with no prompt means the grant survived the rewrite. A prompt (or `userCanceled`) right after a new `itemModified` means Claude Code recreated the item and dropped the grant. Use `log stream` with the same predicate to watch live.
 
+## Google AI (Antigravity) provider (experimental)
+
+Personal builds only: not in a release. Shows Google AI plan quota (Pro/Ultra) from the Code Assist `v1internal` API.
+
+- **Risk**: this works only by posing as Google's Antigravity OAuth client (`GoogleOAuth.antigravityClientID`) against an undocumented API, with the Antigravity Hub `User-Agent`. Google can rotate the client or block it at any time, and one user reports an account disabled for a ToS violation. A read-only quota poll is low risk, not zero. Never ship it in a distributed build.
+- **Client secret, found at runtime**: no secret is committed (`secret-scan.sh` rejects `GOCSPX-` strings). On first sign-in `AntigravityClientDiscovery` scans installed files that contain the Antigravity client id for `GOCSPX-` candidates, probes Google with each (at most 4), and caches the accepted one in Keychain service `cc.kuoc.agent-hourglass.oauth-client`. Discovery runs once per launch, and again in the same launch after Google rejects the cached secret (it is dropped from Keychain; the sheet says "Google rejected the Antigravity client. Retry" and Retry rediscovers) or after a probe that failed offline, rate-limited or with a 5xx (the sheet shows the network or rate-limit message). Otherwise (no candidate accepted) the sheet says "Install Antigravity or the agy CLI first" and discovery waits for the next launch. Files scanned (regular, owned by root or you, not group/world-writable):
+  - `Antigravity.app`, plus any `.app` with bundle id `com.google.antigravity`, `com.google.antigravity-ide` or `com.google.GeminiMacOS`, in `/Applications` and `~/Applications`: `language_server_macos{_arm,_x64,}` under `Contents/Resources/app/extensions/antigravity/bin/`, `Contents/Resources/app/out/main.js`, `Contents/Resources/bin/language_server{,_macos}`, `Contents/MacOS/Gemini`
+  - `~/.local/bin/agy`
+- **Sign-in**: loopback PKCE on `127.0.0.1:<random port>`, scope `cloud-platform userinfo.email`. With no Antigravity install the add flow fails before a port opens or a browser starts.
+- **Tokens**: the app keeps its own chain in Keychain service `cc.kuoc.agent-hourglass`. Google does not rotate refresh tokens, so the previous one is kept. An ineligible client (`UNSUPPORTED_CLIENT`, `GOOGLE_TOS_NOT_SUPPORTED_BY_CLIENT`) shows "needs sign-in".
+- **Never reads `~/.gemini`**: the Gemini CLI and Antigravity logins are left untouched. `source-guards.sh` rejects the path. Removing the account does not revoke the token; remove Antigravity at myaccount.google.com/permissions.
+- **Usage**: `loadCodeAssist`, then `retrieveUserQuotaSummary`, falling back to `fetchAvailableModels` and `retrieveUserQuota`, at most once per 5 min. No project, or a placeholder the fallback cannot confirm, shows "Quota unavailable", never fake numbers.
+- **Storage**: Google accounts live in `accounts-ext.json`, next to `accounts.json`. Shipped builds never open it, so a downgrade only hides Google accounts until this build runs again.
+
+Response shapes log at `debug` level (category `ResponseShape`), which is not persisted. Values under token, secret, email, project, code, `sub` and similar keys become `<redacted>`; other strings become `<str N>` (length only). Numbers, bools and nulls pass through verbatim, numeric ids included. Google keeps strings only under a short allowlist (`GoogleProvider.shapeKeep`: `bucketId`, `modelId`, `resetTime`, `tierId` and similar). Start the stream before adding the account:
+
+```bash
+log stream --level debug --predicate 'subsystem == "cc.kuoc.agent-hourglass"'
+```
+
+Add `AND category == "ResponseShape"` to see only the shapes. Discovery logs which file the secret came from (file name only) under category `AntigravityClientDiscovery`.
+
+To read them later with `log show --last 1h --debug` (same predicate), persist debug first: `sudo log config --subsystem cc.kuoc.agent-hourglass --mode "level:debug,persist:debug"`.
+
+## Grok provider (experimental)
+
+Personal builds only: not in a release. Shows the SuperGrok weekly credit pool.
+
+- **Client**: reuses the public Grok-CLI OAuth client (`GrokDeviceAuth.clientID`, issuer `https://auth.x.ai`) with exactly its scope `openid profile email offline_access grok-cli:access api:access`. No extra scopes such as `billing:read` are guessed.
+- **Sign-in**: RFC 8628 device code (show code, open the xAI page, poll). No loopback port, so it never clashes with a concurrent `grok login`. `access_denied` / `expired_token` stop at once; `slow_down` adds 5 s.
+- **Tokens**: the app keeps its own chain in Keychain service `cc.kuoc.agent-hourglass`. The refresh token rotates on every refresh (a response without one keeps the previous one); `invalid_grant` shows "needs sign-in", never a retry loop.
+- **Never reads `~/.grok`**: the Grok CLI's own login is left untouched, so neither side logs the other out. `source-guards.sh` rejects the path.
+- **Usage**: `GET https://cli-chat-proxy.grok.com/v1/billing?format=credits` (meters) and `/v1/settings` (plan, best effort), at most once per 5 min. A billing 403 shows "Quota unavailable". A missing `creditUsagePercent` gives an empty meter, never 0%.
+- **Storage**: Grok accounts live in `accounts-ext.json`, next to `accounts.json`. Shipped builds never open it, so a downgrade only hides Grok accounts until this build runs again.
+
+Response shapes log the same way as Google AI above (category `ResponseShape`). A billing 403 logs no body: only the status line `billing 403` (category `GrokProvider`, `error` level).
+
 ## Dev-only tools
 
 Not part of a normal install. These exist for testing and must not be used with shipped builds:
@@ -88,8 +125,17 @@ Each run asks for Touch ID: once when preflight checks the item, and again befor
 - `make -C iOS archive`: preflight, archive, verify, export an `.ipa` without uploading
 - `make -C iOS testflight`: same, then upload to App Store Connect (TestFlight internal only)
 
+Grok (experimental, see above): sign-in uses the same device-code sheet as Codex ("Open x.ai"). The widget refreshes Grok under the shared cross-process refresh lock (`FileRefreshLock`), since rotating refresh tokens are single use. Accounts live in `accounts-ext.json`.
+
 Versioning: `MARKETING_VERSION` 1.0.0 in `iOS/project.yml`; build number `YYMMDD.HMMSS` in UTC from `iOS/scripts/build-number.sh`, set on the archive command line. TestFlight builds expire after 90 days: upload at least that often.
 
 Release checks: [iOS/docs/testflight-checklist.md](iOS/docs/testflight-checklist.md). `make test` includes `make check-ios` (UsageCore builds for iOS) and the source guards and secret scan, which cover `iOS/`.
+
+Google AI sign-in (spike, dev builds only):
+
+- `make -C iOS google-config`: runs the Antigravity client discovery on this Mac (see [Google AI](#google-ai-antigravity-provider-experimental)) and writes the secret to the untracked, mode 0600 `iOS/Config/GoogleOAuth.local.xcconfig`. Without that file, Google is hidden on iOS.
+- Test on a real iPhone: the simulator shares the Mac's loopback.
+- Remove the file before a TestFlight run. `testflight.sh` refuses to run while it holds a secret, and its post-archive check refuses any archive whose app or widget Info.plist has a non-empty `AHGoogleClientSecret`.
+- While the file exists, the `test-testflight.sh` cases that run the real script go red.
 
 Simulator defaults: `SIM_NAME=iPhone 17`, `SIM_OS=26.5` (override on the make command line). Signing is automatic with team R7V5X99HYA; simulator builds need no signing.
