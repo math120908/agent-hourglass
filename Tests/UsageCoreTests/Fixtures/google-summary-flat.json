@@ -1,0 +1,11 @@
+{
+  "groups": [
+    {
+      "displayName": "Gemini models",
+      "buckets": [
+        { "bucketId": "gemini-5h", "window": "5h", "remainingFraction": 0.4, "resetTime": "2026-10-30T06:00:00Z" },
+        { "bucketId": "x-custom", "displayName": "Custom limit", "window": "monthly-ish", "remainingFraction": "0.8" }
+      ]
+    }
+  ]
+}

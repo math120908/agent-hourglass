@@ -1,0 +1,8 @@
+{
+  "currentTier": { "id": "g1-pro-tier", "name": "Google AI Pro" },
+  "paidTier": { "id": "g1-pro-tier", "name": "Google AI Pro", "description": "Google AI Pro quota" },
+  "cloudaicompanionProject": "proj-synthetic",
+  "allowedTiers": [],
+  "planInfo": { "planType": "PRO" },
+  "futureField": 1
+}
