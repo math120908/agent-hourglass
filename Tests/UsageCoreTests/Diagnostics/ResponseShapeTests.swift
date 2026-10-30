@@ -29,6 +29,9 @@ struct ResponseShapeTests {
             #expect(!out.contains(leaked), "leaked \(leaked)")
         }
         #expect(out.contains(#""email":"<redacted>""#))
+        let apiKeys = shape(#"{"apiKey":"AIza-1","api_key":"sk-2"}"#, keep: ["apiKey", "api_key"])
+        #expect(apiKeys.contains(#""apiKey":"<redacted>""#) && apiKeys.contains(#""api_key":"<redacted>""#))
+        #expect(!apiKeys.contains("AIza-1") && !apiKeys.contains("sk-2"))
     }
 
     @Test func redactsSensitiveContainers() {
