@@ -22,10 +22,13 @@ struct AddAccountMenu: View {
 
 struct AddAccountItems: View {
     @Binding var present: AddFlow?
+    /// Google only in a dev build that carries the client secret (SPIKE).
+    var google = BundleGoogleOAuthClient.isConfigured()
 
     var body: some View {
         Button { present = .claude(loginHint: nil) } label: { item("Claude", .claude) }
         Button { present = .codex } label: { item("Codex", .codex) }
+        if google { Button { present = .google } label: { item("Google AI", .google) } }
     }
 
     private func item(_ title: String, _ kind: ProviderKind) -> some View {

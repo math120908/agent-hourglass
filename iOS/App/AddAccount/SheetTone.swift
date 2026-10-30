@@ -26,7 +26,7 @@ enum SheetTone {
         scheme == .dark ? Color(red: 1.0, green: 0.76, blue: 0.60) : Color(red: 0.72, green: 0.35, blue: 0.18)
     }
 
-    /// Current-step ring: Claude keeps its ring tone, Codex uses its readable accent.
+    /// Current-step ring: Claude keeps its ring tone, other kinds use their readable accent.
     static func ring(_ kind: ProviderKind, _ scheme: ColorScheme) -> Color {
         kind == .claude ? claude(scheme) : accentText(kind, scheme)
     }
@@ -36,6 +36,8 @@ enum SheetTone {
         switch (kind, scheme) {
         case (.codex, .dark): Color(red: 0.55, green: 0.92, blue: 0.88)
         case (.codex, _): Color(red: 0.0, green: 0.32, blue: 0.30)
+        case (.google, .dark): Color(red: 0.78, green: 0.86, blue: 1.0)
+        case (.google, _): Color(red: 0.08, green: 0.28, blue: 0.66)
         case (_, .dark): claude(.dark)
         default: Color(red: 0.52, green: 0.22, blue: 0.10)
         }

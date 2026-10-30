@@ -33,14 +33,15 @@ struct UsageEnvironment: Sendable {
         }
     }
 
-    /// Claude (or no kind) and Codex only. iOS v1 has no Copilot: returns nil for a Copilot id.
+    /// Claude (or no kind), Codex and Google. iOS v1 has no Copilot: returns nil for a Copilot id.
+    /// Google refreshes with the bundle's dev-only secret; without one its refresh fails (SPIKE).
     func makeClient(_ id: AccountID) -> AccountClient? {
         let provider: UsageProvider
         switch id.kind ?? .claude {
         case .claude: provider = ClaudeProvider()
         case .codex: provider = CodexProvider(auth: nil)
         case .copilot: return nil
-        case .google: return nil
+        case .google: provider = GoogleProvider(client: BundleGoogleOAuthClient())
         }
         return AccountClient(
             id: id,

@@ -23,4 +23,20 @@ struct AddFlowTests {
     @Test func testIdsDistinct() {
         #expect(AddFlow.codex.id != AddFlow.claude(loginHint: nil).id)
     }
+
+    @Test func testGoogleIdAndKind() {
+        #expect(AddFlow.google.id == "google")
+        #expect(AddFlow.google.kind == .google)
+    }
+
+    @Test func testGoogleSignInOnlyWhenConfigured() {
+        #expect(AddFlow.signIn(for: entry(.google, login: "a@b"), googleConfigured: false) == nil)
+        #expect(AddFlow.signIn(for: entry(.google, login: "a@b"), googleConfigured: true) == .google)
+    }
+
+    /// The test host has no xcconfig, so the default build offers no Google flow.
+    @Test func testGoogleAbsentByDefault() {
+        #expect(!BundleGoogleOAuthClient.isConfigured())
+        #expect(AddFlow.signIn(for: entry(.google, login: nil)) == nil)
+    }
 }

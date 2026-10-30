@@ -48,23 +48,27 @@ private func query(_ url: URL) -> [String: String] {
 }
 
 /// Plays the auth sheet. `redirects`: `start` hits the authorize URL's loopback redirect with its `state`,
-/// as Google would. Otherwise `start` ends the session at once, as a user closing the sheet does.
+/// as Google would. `holds`: `start` leaves the sheet open, as a user still on Google's page does.
+/// Otherwise `start` ends the session at once, as a user closing the sheet does.
 /// Like the real session, `cancel` also runs the completion.
 private final class FakeSession: PasteAuthSession {
     let url: URL
     let redirects: Bool
+    let holds: Bool
     let done: @Sendable () -> Void
     private(set) var started = 0
     private(set) var cancelled = 0
 
-    init(url: URL, redirects: Bool, done: @escaping @Sendable () -> Void) {
+    init(url: URL, redirects: Bool, holds: Bool = false, done: @escaping @Sendable () -> Void) {
         self.url = url
         self.redirects = redirects
+        self.holds = holds
         self.done = done
     }
 
     func start() -> Bool {
         started += 1
+        if holds { return true }
         guard redirects else { done(); return true }
         let q = query(url)
         var c = URLComponents(string: q["redirect_uri"] ?? "")!
@@ -85,9 +89,9 @@ private final class FakeSession: PasteAuthSession {
 }
 
 /// True once nothing accepts connections on `port` (the listener closed its sockets).
-private func refused(port: String) async -> Bool {
+private func refused(port: String, attempts: Int = 100) async -> Bool {
     let url = URL(string: "http://127.0.0.1:\(port)/probe")!
-    for _ in 0..<100 {
+    for _ in 0..<attempts {
         do { _ = try await URLSession.shared.data(from: url) } catch { return true }
         try? await Task.sleep(for: .milliseconds(20))
     }
@@ -115,10 +119,10 @@ struct GoogleSignInModelTests {
         GoogleSignIn(oauth: GoogleOAuth(http: HTTPClient(transport: FixedTransport([tokens]))), client: client)
     }
 
-    private func browser(redirects: Bool) -> (PasteBrowser, () -> [FakeSession]) {
+    private func browser(redirects: Bool, holds: Bool = false) -> (PasteBrowser, () -> [FakeSession]) {
         var made: [FakeSession] = []
         let b = PasteBrowser { url, _, done in
-            let s = FakeSession(url: url, redirects: redirects, done: done)
+            let s = FakeSession(url: url, redirects: redirects, holds: holds, done: done)
             made.append(s)
             return s
         }
@@ -153,6 +157,23 @@ struct GoogleSignInModelTests {
         #expect(m.state == .failed("Sign-in was cancelled"))
         let session = try #require(made().first)
         let port = try #require(URLComponents(string: query(session.url)["redirect_uri"] ?? "")?.port)
+        #expect(await refused(port: String(port)))
+        #expect(await env.registry.accounts().isEmpty)
+    }
+
+    /// The add sheet went away mid-flow: the listener is released at once, not after the 300 s timeout.
+    @Test func testCancelReleasesListener() async throws {
+        let (app, env) = try appAndEnv()
+        await app.load()
+        let (b, made) = browser(redirects: false, holds: true)
+        let m = GoogleSignInModel(app: app, signIn: signIn(), browser: b)
+        m.start()
+        await waitUntil { !made().isEmpty }
+        let session = try #require(made().first)
+        let port = try #require(URLComponents(string: query(session.url)["redirect_uri"] ?? "")?.port)
+        #expect(!(await refused(port: String(port), attempts: 3)))
+        m.cancel()
+        #expect(session.cancelled == 1)
         #expect(await refused(port: String(port)))
         #expect(await env.registry.accounts().isEmpty)
     }

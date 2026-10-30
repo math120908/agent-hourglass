@@ -57,7 +57,7 @@ private func makeTestEnv() throws -> (UsageEnvironment, URL) {
 
 @Test func makeClientKeepsTheIDForSupportedKinds() async throws {
     let (env, _) = try makeTestEnv()
-    for kind in [ProviderKind.claude, .codex] {
+    for kind in [ProviderKind.claude, .codex, .google] {
         let id = AccountID(kind: kind, remoteID: "x")
         let client = try #require(env.makeClient(id))
     #expect(await client.id == id)

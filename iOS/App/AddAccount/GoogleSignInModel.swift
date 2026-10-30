@@ -10,7 +10,7 @@ import UsageCore
 
     private(set) var state: State = .idle
 
-    @ObservationIgnored private let app: AppModel
+    @ObservationIgnored private let app: AppModel?
     @ObservationIgnored private let signIn: GoogleSignIn
     @ObservationIgnored private let browser: PasteBrowser
     @ObservationIgnored private var task: Task<Void, Never>?
@@ -19,6 +19,19 @@ import UsageCore
         self.app = app
         self.signIn = signIn
         self.browser = browser
+    }
+
+    /// The live flow: the bundle's dev-only client secret, tokens over the app's HTTP client.
+    convenience init(app: AppModel) {
+        self.init(app: app, signIn: GoogleSignIn(oauth: GoogleOAuth(http: app.http), client: BundleGoogleOAuthClient()))
+    }
+
+    /// Fixed-state init for previews and snapshots; never signs in.
+    init(state: State) {
+        app = nil
+        signIn = GoogleSignIn(oauth: GoogleOAuth(http: HTTPClient()), client: BundleGoogleOAuthClient())
+        browser = PasteBrowser()
+        self.state = state
     }
 
     func start() {
@@ -40,6 +53,7 @@ import UsageCore
             let credential = try await signIn.run(open: { [weak self] url in await self?.present(url) })
             guard !Task.isCancelled else { return }
             browser.cancel()
+            guard let app else { return }
             let service = app.service
             let id = try await app.add { try await service.addGoogle(credential: credential) }
             state = .success(id)

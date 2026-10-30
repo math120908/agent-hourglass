@@ -3,15 +3,21 @@ import SwiftUI
 
 enum AddMenuSnapshots {
     static let scenes: [SnapshotScene] = [
-        SnapshotScene(name: "add-menu", size: .fitting(width: 402)) { theme in
+        menu("add-menu", google: false, height: 160),
+        // A dev build with the Google client secret (SPIKE).
+        menu("add-menu-google", google: true, height: 210),
+    ]
+
+    private static func menu(_ name: String, google: Bool, height: CGFloat) -> SnapshotScene {
+        SnapshotScene(name: name, size: .fitting(width: 402)) { theme in
             AnyView(
-                List { AddAccountItems(present: .constant(nil)) }
+                List { AddAccountItems(present: .constant(nil), google: google) }
                     .listStyle(.insetGrouped)
                     .scrollDisabled(true)
-                    .frame(height: 160)
+                    .frame(height: height)
                     .appTheme(theme)
             )
-        },
-    ]
+        }
+    }
 }
 #endif
