@@ -63,6 +63,10 @@ final class AddAccountModel {
 
     private(set) var isClaudeCode = false
 
+    private(set) var isGrok = false
+    /// The Grok device code being waited on; shown in the sheet and copied by "Copy code".
+    private(set) var devicePrompt: DeviceCodePrompt?
+
     /// Adds Claude Code (local, read-only): reads Claude Code's own Keychain login on each poll.
     func addClaudeCodeLocal() {
         isClaudeCode = true
@@ -81,7 +85,7 @@ final class AddAccountModel {
     }
 
     func retry() {
-        if isClaudeCode { addClaudeCodeLocal() } else if isCodex { addCodex() } else if let copilotLogin { addCopilot(copilotLogin) } else { start() }
+        if isClaudeCode { addClaudeCodeLocal() } else if isGrok { addGrok() } else if isCodex { addCodex() } else if let copilotLogin { addCopilot(copilotLogin) } else { start() }
     }
 
     /// Adds the Codex CLI's ChatGPT login from ~/.codex/auth.json (read-only, no browser).
@@ -100,6 +104,35 @@ final class AddAccountModel {
             } catch {
                 state = AddFlowState.failure(error)
             }
+        }
+    }
+
+    /// Grok device-code login: show and open the code, poll until it is approved, then add the account.
+    func addGrok() {
+        isGrok = true
+        guard state.begin() else {
+            state = .failed("Sign-in already in progress")
+            return
+        }
+        step = .flow
+        devicePrompt = nil
+        task = Task { [engine] in
+            do {
+                let auth = GrokDeviceAuth(http: HTTPClient())
+                let p = try await auth.start()
+                try Task.checkCancellation()
+                devicePrompt = p
+                Self.open(p.verificationURL)
+                let cred = try await auth.poll(p)
+                state = .success(try await engine.addGrok(credential: cred))
+            } catch is CancellationError {
+                state = .idle
+                step = .provider
+            } catch {
+                state = AddFlowState.deviceFailure(error)
+            }
+            devicePrompt = nil
+            Self.currentURL = nil
         }
     }
 
@@ -123,11 +156,18 @@ final class AddAccountModel {
     func cancel() {
         task?.cancel()
         task = nil
+        devicePrompt = nil
     }
 
     func copyLink() {
         guard let url = Self.currentURL else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(url.absoluteString, forType: .string)
+    }
+
+    func copyCode() {
+        guard let code = devicePrompt?.userCode else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(code, forType: .string)
     }
 }

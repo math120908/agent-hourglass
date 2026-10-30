@@ -172,6 +172,14 @@ final class UsageEngine {
         return id
     }
 
+    /// Adds a Grok account from a finished device-code login (`GrokDeviceAuth.poll`).
+    func addGrok(credential: Credential) async throws -> AccountID {
+        guard let service, let registry else { throw AccountServiceError.unknownAccount }
+        let id = try await service.addGrok(credential: credential)
+        publish(await registry.accounts())
+        return id
+    }
+
     /// Adds the read-only Claude Code (local) account. The first poll triggers the Keychain prompt.
     func addClaudeCodeLocal() async throws -> AccountID {
         guard let service, let registry else { throw AccountServiceError.unknownAccount }
@@ -261,6 +269,16 @@ final class UsageEngine {
             return AccountClient(
                 id: id,
                 provider: CodexProvider(auth: codex),
+                http: HTTPClient(),
+                store: store,
+                clock: ContinuousClock(),
+                now: { Date() }
+            )
+        }
+        if id.kind == .grok {
+            return AccountClient(
+                id: id,
+                provider: GrokProvider(),
                 http: HTTPClient(),
                 store: store,
                 clock: ContinuousClock(),
