@@ -102,10 +102,15 @@ func googleOAuthXcconfig(_ args: [String]) async throws {
     }
     let path = args[1]
     let client = try await AntigravityClientDiscovery(oauth: GoogleOAuth(http: HTTPClient()), cache: InMemoryCredentialStore()).client()
-    let fm = FileManager.default
-    if fm.fileExists(atPath: path) { try fm.removeItem(atPath: path) }
+    // Mode 0600 from creation (umask 077), in a temp file beside the target, then renamed over it.
+    let tmp = "\(path).tmp-\(getpid())"
     let line = Data("GOOGLE_AG_CLIENT_SECRET = \(client.secret.reveal())\n".utf8)
-    guard fm.createFile(atPath: path, contents: line, attributes: [.posixPermissions: 0o600]) else { die("cannot write \(path)") }
+    let oldMask = umask(0o077)
+    defer { umask(oldMask) }
+    unlink(tmp)
+    guard FileManager.default.createFile(atPath: tmp, contents: line, attributes: [.posixPermissions: 0o600]),
+          rename(tmp, path) == 0
+    else { unlink(tmp); die("cannot write \(path)") }
     print("wrote \(path)")
 }
 

@@ -67,6 +67,11 @@ verify_bundles() { # <app> <build> <commit> <dist> <label>
   [ "$(plist CFBundleIdentifier "$app/Info.plist")" = "$APP_ID" ] || die "verify: app bundle id"
   [ "$(plist CFBundleIdentifier "$appex/Info.plist")" = "$WIDGET_ID" ] || die "verify: widget bundle id"
   [ "$(plist GitCommit "$app/Info.plist")" = "$commit" ] || die "verify: GitCommit is not $commit"
+  # The dev-only Google client secret must never ship, however the build setting got its value.
+  for b in "$app" "$appex"; do
+    [ -z "$(plist AHGoogleClientSecret "$b/Info.plist")" ] \
+      || die "verify: $(basename "$b") Info.plist carries a Google client secret (AHGoogleClientSecret)"
+  done
   # iPhone only and portrait only. A build that also targets iPad must support every orientation, or App
   # Store Connect rejects it (ITMS-90474); XcodeGen's per-target preset once overrode the project's "1".
   plist_is "$app/Info.plist" UIDeviceFamily '[1]' app
@@ -158,9 +163,16 @@ ASC_OP_ITEM=${ASC_OP_ITEM:-Apple Developer - App Store Connect API key (agent-ho
 [ $dry -eq 1 ] || [ -z "${BUILD_NUMBER_NOW:-}" ] || die "BUILD_NUMBER_NOW is only allowed with --dry-run"
 [ -z "$(git status --porcelain)" ] || die "dirty tree"
 # The dev-only Google secret (an untracked xcconfig, so the clean-tree check misses it) would ship in the IPA.
-gsecret=$(rg -o -r '$1' '^\s*GOOGLE_AG_CLIENT_SECRET\s*=\s*(\S+)' Config/GoogleOAuth.local.xcconfig 2>/dev/null || true)
-[ -z "$gsecret" ] || die "Google client secret configured (iOS/Config/GoogleOAuth.local.xcconfig); it would ship in the IPA"
-unset gsecret
+# Early refusal only; verify_bundles checks the built plists, which no xcconfig trick gets past. An
+# unreadable file fails closed. XCODE_XCCONFIG_FILE would layer another xcconfig over every build.
+unset XCODE_XCCONFIG_FILE
+gfile=Config/GoogleOAuth.local.xcconfig
+if [ -e "$gfile" ] || [ -L "$gfile" ]; then
+  grc=0; gsecret=$(rg -o -r '$1' '^\s*GOOGLE_AG_CLIENT_SECRET\s*=\s*(\S+)' "$gfile" 2>/dev/null) || grc=$?
+  [ "$grc" -le 1 ] || die "cannot read iOS/$gfile"
+  [ -z "$gsecret" ] || die "Google client secret configured (iOS/$gfile); it would ship in the IPA"
+fi
+unset gfile grc gsecret
 asc=${ASC_ENV:-$HOME/.config/agent-hourglass/asc.env}
 [ -f "$asc" ] || die "missing App Store Connect env file (set ASC_ENV or create ~/.config/agent-hourglass/asc.env)"
 [ "$(/usr/bin/stat -f '%Lp' "$asc")" = 600 ] || die "App Store Connect env file must be mode 600"
