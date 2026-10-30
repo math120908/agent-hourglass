@@ -33,10 +33,10 @@ struct URLSessionTransport: HTTPTransport {
 
 public final class HTTPClient: Sendable {
     /// Hosts that may receive a bearer token. Any other host is rejected before sending.
-    public static let authHosts: Set<String> = ["api.anthropic.com", "platform.claude.com", "claude.ai", "api.github.com", "chatgpt.com"]
+    public static let authHosts: Set<String> = ["api.anthropic.com", "platform.claude.com", "claude.ai", "api.github.com", "chatgpt.com", "openidconnect.googleapis.com"]
 
     /// Hosts whose redirects are always refused, even without a bearer (login flows).
-    public static let noRedirectHosts: Set<String> = ["auth.openai.com"]
+    public static let noRedirectHosts: Set<String> = ["auth.openai.com", "oauth2.googleapis.com"]
 
     let configuration: URLSessionConfiguration
     private static let log = Logger(subsystem: "cc.kuoc.agent-hourglass", category: "HTTPClient")
