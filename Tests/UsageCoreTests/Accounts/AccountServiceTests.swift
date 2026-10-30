@@ -173,6 +173,33 @@ struct AccountServiceTests {
         #expect(try store.allAccountIDs() == [cid("y")])
     }
 
+    @Test func cleanupKeepsHiddenUndecodableEntry() async throws {
+        let (svc, store, registry) = try make([])
+        // A claude entry missing `status` fails per-entry decode and is kept hidden.
+        let file: [String: Any] = ["version": 1, "accounts": [["id": "claude:h", "kind": "claude", "displayName": "H", "order": 0, "addedAt": "2023-11-14T22:13:20Z"]]]
+        try JSONSerialization.data(withJSONObject: file).write(to: registry.url)
+        #expect(try await registry.load().isEmpty)
+        #expect(await registry.loadedCleanly)
+        try store.inner.write(Credential(kind: .claude, access: Secret("h"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: cid("h"), label: "t")
+        try store.inner.write(Credential(kind: .claude, access: Secret("o"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: cid("orphan"), label: "t")
+        try await svc.cleanupOrphans()
+        #expect(try store.allAccountIDs() == [cid("h")])
+    }
+
+    @Test func cleanupSkippedWhenRegistryUnreadable() async throws {
+        let (svc, store, registry) = try make([])
+        try await registry.upsert(AccountEntry(id: cid("a"), kind: .claude, displayName: "A", remoteLogin: nil, order: 0, addedAt: Date(), status: "ok"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: registry.url.path)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        #expect(try await registry.load().isEmpty)
+        #expect(await !registry.loadedCleanly)
+        let bad = try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.hasPrefix("accounts.json.bad-") }
+        #expect(bad.count == 1)
+        try store.inner.write(Credential(kind: .claude, access: Secret("a"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: cid("a"), label: "t")
+        try await svc.cleanupOrphans()
+        #expect(try store.allAccountIDs() == [cid("a")])
+    }
+
     @Test func labelHasNoDisplayName() async throws {
         let (svc, store, registry) = try make(["a", "a"])
         let id = try await svc.addClaude(loginHint: nil)

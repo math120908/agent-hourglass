@@ -76,6 +76,7 @@ public actor AccountRegistry {
     private struct Slice {
         var entries: [AccountEntry] = []
         var raw: [Data] = []
+        var rawIDs: [AccountID] = []
     }
 
     public static let fileName = "accounts.json"
@@ -115,6 +116,9 @@ public actor AccountRegistry {
     }
 
     public func accounts() -> [AccountEntry] { entries }
+
+    /// Ids of entries kept verbatim because this build cannot decode them; orphan cleanup counts them as known.
+    public func hiddenIDs() -> [AccountID] { main.rawIDs + ext.rawIDs }
 
     /// Inserts a new entry at the end, or replaces an existing one with the same id (re-auth), keeping its order.
     public func upsert(_ entry: AccountEntry) throws {
@@ -175,6 +179,7 @@ public actor AccountRegistry {
     }
 
     /// Partitions by `isMain` and rewrites only the file whose slice changed; `menuBarAccountID` goes to the main file only.
+    /// Main is written first so a failed ext write never leaves older builds an inconsistent `accounts.json`.
     private func commit(_ next: [AccountEntry], menuBar: AccountID?) throws {
         let nextMain = next.filter { isMain($0.kind) }
         let nextExt = next.filter { !isMain($0.kind) }
@@ -202,9 +207,19 @@ public actor AccountRegistry {
         try AppSupport.secureWrite(data, to: file)
     }
 
-    /// Parses one file per entry. Returns an empty slice for a missing file and after quarantining a bad one.
+    /// Parses one file per entry. Returns an empty slice for a missing file and after quarantining a bad one;
+    /// a file that exists but cannot be read is quarantined too.
     private func read(_ file: URL, name: String) throws -> (Slice, AccountID?) {
-        guard let data = try? Data(contentsOf: file) else { return (Slice(), nil) }
+        let data: Data
+        do {
+            data = try Data(contentsOf: file)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            return (Slice(), nil)
+        } catch {
+            loadedCleanly = false
+            try quarantine(file, name: name)
+            return (Slice(), nil)
+        }
         guard let header = try? Self.decoder.decode(Header.self, from: data),
               header.version == 1,
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -221,6 +236,9 @@ public actor AccountRegistry {
                 slice.entries.append(entry)
             } else {
                 slice.raw.append(item)
+                if let id = (element as? [String: Any])?["id"] as? String, let rawID = AccountID(rawValue: id) {
+                    slice.rawIDs.append(rawID)
+                }
             }
         }
         return (slice, header.menuBarAccountID)
