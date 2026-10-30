@@ -31,6 +31,7 @@ enum GlassStyle {
         case .claude: claude
         case .copilot: Color.gray
         case .codex: codex
+        case .google: Color(red: 0.26, green: 0.52, blue: 0.96)
         }
     }
 

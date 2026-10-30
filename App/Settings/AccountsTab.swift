@@ -77,6 +77,8 @@ struct AccountsTab: View {
             "This deletes the account's usage history from this Mac. gh is not touched: your gh login is left as is."
         case .codex:
             "This deletes the account's usage history from this Mac. ~/.codex and your Codex CLI login are not touched."
+        case .google:
+            "This deletes the account's saved sign-in and its usage history from this Mac. ~/.gemini and the Antigravity app are not touched. To revoke the token, remove Antigravity at myaccount.google.com/permissions."
         }
     }
 }

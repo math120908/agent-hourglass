@@ -32,6 +32,7 @@ enum AccountCatalog {
         case .claude: "Claude"
         case .codex: "Codex"
         case .copilot: "GitHub Copilot"
+        case .google: "Google AI"
         }
     }
 

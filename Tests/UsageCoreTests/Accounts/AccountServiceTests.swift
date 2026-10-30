@@ -165,6 +165,16 @@ struct AccountServiceTests {
         #expect(try store.allAccountIDs() == [codex])
     }
 
+    @Test func cleanupOrphansDeletesGoogle() async throws {
+        let (svc, store, _) = try make([])
+        let google = AccountID(kind: .google, remoteID: "x")
+        let codex = AccountID(kind: .codex, remoteID: "y")
+        try store.inner.write(Credential(kind: .google, access: Secret("x"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: google, label: "t")
+        try store.inner.write(Credential(kind: .codex, access: Secret("y"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: codex, label: "t")
+        try await svc.cleanupOrphans()
+        #expect(try store.allAccountIDs() == [codex])
+    }
+
     @Test func cleanupSkippedWhenRegistryQuarantined() async throws {
         let (svc, store, registry) = try make([])
         try Data("{\"version\":1,\"accou".utf8).write(to: registry.url)
