@@ -112,13 +112,14 @@ public struct GoogleProvider: UsageProvider {
         return data
     }
 
-    /// Google does not rotate refresh tokens. A rejected client secret is dropped from the cache.
+    /// Google does not rotate refresh tokens. A rejected client secret is dropped from the cache;
+    /// `AccountClient` reports any `GoogleOAuthError` as needsLogin.
     public func refresh(credential: Credential, http: HTTPClient) async throws -> Credential? {
         do {
             return try await GoogleOAuth(http: http).refresh(credential, client: try await client.client())
         } catch GoogleOAuthError.clientRejected {
             await client.invalidate()
-            throw GoogleOAuthError.clientUnavailable
+            throw GoogleOAuthError.clientRejected
         }
     }
 }

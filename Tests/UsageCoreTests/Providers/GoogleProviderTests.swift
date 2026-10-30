@@ -168,7 +168,7 @@ struct GoogleProviderTests {
     @Test func refreshClientRejectedInvalidates() async throws {
         let source = StubGoogleClientSource()
         let t = ScriptedTransport([(401, #"{"error":"invalid_client"}"#, [:])])
-        await #expect(throws: GoogleOAuthError.clientUnavailable) {
+        await #expect(throws: GoogleOAuthError.clientRejected) {
             try await GoogleProvider(client: source).refresh(credential: cred, http: HTTPClient(transport: t))
         }
         #expect(await source.invalidations == 1)

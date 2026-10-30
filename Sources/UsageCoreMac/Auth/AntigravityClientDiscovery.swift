@@ -7,7 +7,8 @@ import os
 ///
 /// The secret is never committed: it is read from installed binaries, held only as `Secret`, and
 /// cached in a dedicated Keychain service (`cc.kuoc.agent-hourglass.oauth-client`) that account
-/// cleanup never lists. Discovery runs at most once per app launch; a later launch reads the cache.
+/// cleanup never lists. Discovery runs at most once per app launch, again after `invalidate()` or a
+/// transient probe failure; a later launch reads the cache.
 ///
 /// Reference enumeration mirrors CodexBar `AntigravityOAuthCredentialsStore.swift`
 /// `candidateOAuthClientArtifactURLs` at `5f93dc3`.
@@ -243,6 +244,11 @@ public final class AntigravityClientDiscovery: GoogleOAuthClientSource, @uncheck
                     return candidate
                 }
             }
+        } catch let error as ProviderError where Self.isTransient(error) {
+            // Offline, 429 or 5xx is no verdict on the candidates: the next attempt discovers again.
+            lock.withLock { discoveryAttempted = false }
+            Self.log.error("probe failed: \(error.description, privacy: .public)")
+            throw error
         } catch {
             Self.notFound(scanned)
             throw GoogleOAuthError.clientUnavailable
@@ -251,12 +257,24 @@ public final class AntigravityClientDiscovery: GoogleOAuthClientSource, @uncheck
         throw GoogleOAuthError.clientUnavailable
     }
 
+    private static func isTransient(_ error: ProviderError) -> Bool {
+        switch error {
+        case .transport, .rateLimited: true
+        case let .http(status, _, _): status >= 500
+        default: false
+        }
+    }
+
     private static func notFound(_ scanned: (candidates: [(secret: String, file: String)], filesRead: Int)) {
         log.error("not found (files=\(scanned.filesRead, privacy: .public) candidates=\(scanned.candidates.count, privacy: .public))")
     }
 
+    /// Called after Google rejected the secret: the next `client()` discovers again (once per rejection).
     public func invalidate() async {
         try? cache.delete(Self.cacheID)
-        lock.withLock { cachedClient = nil }
+        lock.withLock {
+            cachedClient = nil
+            discoveryAttempted = false
+        }
     }
 }

@@ -31,7 +31,7 @@ public struct GoogleSignIn: Sendable {
             return try await oauth.exchange(code: code, pkce: pkce, redirectURI: redirect, client: c)
         } catch GoogleOAuthError.clientRejected {
             await client.invalidate()
-            throw GoogleOAuthError.clientUnavailable
+            throw GoogleOAuthError.clientRejected
         }
     }
 }

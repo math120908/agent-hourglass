@@ -23,6 +23,7 @@ struct AddFlowStateTests {
     @Test func googleClientUnavailableMessage() {
         #expect(AddFlowState.googleFailure(GoogleOAuthError.clientUnavailable) == .failed("Install Antigravity or the agy CLI first"))
         #expect(AddFlowState.googleFailure(AuthError.timeout) == AddFlowState.failure(AuthError.timeout))
+        #expect(AddFlowState.googleFailure(GoogleOAuthError.clientRejected) == .failed("Google rejected the Antigravity client. Retry"))
     }
 
     @Test func googleProviderErrorsHaveSpecificMessages() {

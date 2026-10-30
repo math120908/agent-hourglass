@@ -297,6 +297,56 @@ struct AntigravityClientDiscoveryTests {
         #expect(try cache.read(AntigravityClientDiscovery.cacheID) == nil)
     }
 
+    @Test func invalidateRediscoversSameLaunch() async throws {
+        let tmp = TempDir()
+        let secret = Self.fakeSecret()
+        let f = tmp.write("bin", Self.blob([secret]))
+        let (d, t) = discovery(files: [f], accept: [secret])
+        _ = try await d.client()
+        #expect(t.requests.count == 1)
+        await d.invalidate()
+        let again = try await d.client()
+        #expect(again.secret.reveal() == secret)
+        #expect(t.requests.count == 2)
+    }
+
+    /// Fails the first `failures` requests as offline, then answers like `ProbeTransport`.
+    final class OfflineThenProbe: HTTPTransport, @unchecked Sendable {
+        private let lock = NSLock()
+        private var remaining: Int
+        private var count = 0
+        let probe: ProbeTransport
+        init(failures: Int, accept: Set<String>) {
+            remaining = failures
+            probe = ProbeTransport(accept: accept)
+        }
+
+        var calls: Int { lock.withLock { count } }
+
+        func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+            let fail: Bool = lock.withLock {
+                count += 1
+                guard remaining > 0 else { return false }
+                remaining -= 1
+                return true
+            }
+            if fail { throw URLError(.notConnectedToInternet) }
+            return try await probe.data(for: request)
+        }
+    }
+
+    @Test func offlineProbeRetriesLaterSameLaunch() async throws {
+        let tmp = TempDir()
+        let secret = Self.fakeSecret()
+        let f = tmp.write("bin", Self.blob([secret]))
+        let t = OfflineThenProbe(failures: 1, accept: [secret])
+        let d = AntigravityClientDiscovery(oauth: GoogleOAuth(http: HTTPClient(transport: t)), cache: InMemoryCredentialStore(), files: [f])
+        await #expect(throws: ProviderError.transport(host: "oauth2.googleapis.com")) { _ = try await d.client() }
+        let client = try await d.client()
+        #expect(client.secret.reveal() == secret)
+        #expect(t.calls == 2)
+    }
+
     @Test func clientDescriptionRedacted() async throws {
         let tmp = TempDir()
         let secret = Self.fakeSecret("z")

@@ -70,7 +70,7 @@ struct GoogleSignInTests {
 
     @Test func clientRejectedInvalidatesCachedClient() async throws {
         let source = StubGoogleClientSource()
-        await #expect(throws: GoogleOAuthError.clientUnavailable) {
+        await #expect(throws: GoogleOAuthError.clientRejected) {
             _ = try await signIn(ScriptedTransport([GoogleOAuthTests.invalidClient]), client: source)
                 .run(open: { await Self.callback($0) }, timeout: .seconds(10))
         }
