@@ -55,6 +55,8 @@ public enum AccountRegistryError: Error, Equatable {
     case unknownAccount
     case emptyName
     case unsupportedVersion(Int)
+    /// The file exists but could not be read this load (e.g. iOS before first unlock); it is never overwritten.
+    case unreadableFile
 }
 
 /// Owns `accounts.json` and `accounts-ext.json` (spec §4). Non-secret metadata only; every write goes through
@@ -77,6 +79,8 @@ public actor AccountRegistry {
         var entries: [AccountEntry] = []
         var raw: [Data] = []
         var rawIDs: [AccountID] = []
+        /// The file exists but could not be read: its contents are unknown, so commit refuses to overwrite it.
+        var unreadable = false
     }
 
     public static let fileName = "accounts.json"
@@ -100,11 +104,13 @@ public actor AccountRegistry {
 
     /// Reads both files and merges them by `order` (main first on ties). A missing file is empty; an unparseable
     /// one (or `version != 1`) is moved aside to `<name>.bad-<ts>` (0600) and only that file starts empty.
-    /// A single entry that fails to decode is hidden and kept verbatim.
+    /// An unreadable file is left in place and starts empty. A single entry that fails to decode is hidden and
+    /// kept verbatim. `loadedCleanly` stays false while any `.bad-*` file remains, so cleanup stays off across launches.
     public func load() throws -> [AccountEntry] {
         loadedCleanly = true
         let (m, menuBar) = try read(url, name: Self.fileName)
         let (e, _) = try read(extURL, name: Self.extFileName)
+        if hasQuarantinedFile() { loadedCleanly = false }
         main = m
         ext = e
         mainMenuBar = menuBar
@@ -180,15 +186,19 @@ public actor AccountRegistry {
 
     /// Partitions by `isMain` and rewrites only the file whose slice changed; `menuBarAccountID` goes to the main file only.
     /// Main is written first so a failed ext write never leaves older builds an inconsistent `accounts.json`.
+    /// Throws `unreadableFile` before writing anything when a file that needs rewriting could not be read.
     private func commit(_ next: [AccountEntry], menuBar: AccountID?) throws {
         let nextMain = next.filter { isMain($0.kind) }
         let nextExt = next.filter { !isMain($0.kind) }
-        if nextMain != main.entries || menuBar != mainMenuBar {
+        let mainChanged = nextMain != main.entries || menuBar != mainMenuBar
+        let extChanged = nextExt != ext.entries
+        if (mainChanged && main.unreadable) || (extChanged && ext.unreadable) { throw AccountRegistryError.unreadableFile }
+        if mainChanged {
             try write(nextMain, raw: main.raw, menuBar: menuBar, to: url)
             main.entries = nextMain
             mainMenuBar = menuBar
         }
-        if nextExt != ext.entries {
+        if extChanged {
             try write(nextExt, raw: ext.raw, menuBar: nil, to: extURL)
             ext.entries = nextExt
         }
@@ -199,16 +209,18 @@ public actor AccountRegistry {
     private func write(_ accounts: [AccountEntry], raw: [Data], menuBar: AccountID?, to file: URL) throws {
         var data = try Self.encoder.encode(File(version: 1, menuBarAccountID: menuBar, accounts: accounts))
         if !raw.isEmpty {
-            var object = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+            guard var object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let accounts = object["accounts"] as? [Any]
+            else { throw CocoaError(.coderInvalidValue) }
             let kept = try raw.map { try JSONSerialization.jsonObject(with: $0, options: .fragmentsAllowed) }
-            object["accounts"] = (object["accounts"] as! [Any]) + kept
+            object["accounts"] = accounts + kept
             data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
         }
         try AppSupport.secureWrite(data, to: file)
     }
 
-    /// Parses one file per entry. Returns an empty slice for a missing file and after quarantining a bad one;
-    /// a file that exists but cannot be read is quarantined too.
+    /// Parses one file per entry. Returns an empty slice for a missing file, after quarantining an unparseable one,
+    /// and (marked `unreadable`, left in place) for one that exists but cannot be read.
     private func read(_ file: URL, name: String) throws -> (Slice, AccountID?) {
         let data: Data
         do {
@@ -217,8 +229,9 @@ public actor AccountRegistry {
             return (Slice(), nil)
         } catch {
             loadedCleanly = false
-            try quarantine(file, name: name)
-            return (Slice(), nil)
+            var slice = Slice()
+            slice.unreadable = true
+            return (slice, nil)
         }
         guard let header = try? Self.decoder.decode(Header.self, from: data),
               header.version == 1,
@@ -242,6 +255,11 @@ public actor AccountRegistry {
             }
         }
         return (slice, header.menuBarAccountID)
+    }
+
+    private func hasQuarantinedFile() -> Bool {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: url.deletingLastPathComponent().path)) ?? []
+        return names.contains { $0.hasPrefix("\(Self.fileName).bad-") || $0.hasPrefix("\(Self.extFileName).bad-") }
     }
 
     private func quarantine(_ file: URL, name: String) throws {
