@@ -7,7 +7,7 @@ import os
 public enum ResponseShape {
     private static let logger = Logger(subsystem: "cc.kuoc.agent-hourglass", category: "ResponseShape")
     private static let arrayLimit = 20
-    private static let sensitiveParts = ["token", "secret", "password", "cookie", "email", "project", "authorization"]
+    private static let sensitiveParts = ["token", "secret", "password", "cookie", "email", "project", "authorization", "apikey", "api_key"]
     private static let sensitiveNames: Set<String> = ["sub", "code", "device_code", "user_code", "key"]
 
     public static func describe(_ data: Data, keep: Set<String> = []) -> String {
