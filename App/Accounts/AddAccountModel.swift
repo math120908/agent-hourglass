@@ -31,6 +31,7 @@ final class AddAccountModel {
             state = .failed("Sign-in already in progress")
             return
         }
+        resetFlow()
         step = .flow
         let hint = email.trimmingCharacters(in: .whitespaces)
         task = Task { [engine] in
@@ -69,11 +70,12 @@ final class AddAccountModel {
 
     /// Adds Claude Code (local, read-only): reads Claude Code's own Keychain login on each poll.
     func addClaudeCodeLocal() {
-        isClaudeCode = true
         guard state.begin() else {
             state = .failed("Sign-in already in progress")
             return
         }
+        resetFlow()
+        isClaudeCode = true
         step = .flow
         task = Task { [engine] in
             do {
@@ -90,11 +92,12 @@ final class AddAccountModel {
 
     /// Adds the Codex CLI's ChatGPT login from ~/.codex/auth.json (read-only, no browser).
     func addCodex() {
-        isCodex = true
         guard state.begin() else {
             state = .failed("Sign-in already in progress")
             return
         }
+        resetFlow()
+        isCodex = true
         step = .flow
         task = Task { [engine] in
             do {
@@ -109,13 +112,13 @@ final class AddAccountModel {
 
     /// Grok device-code login: show and open the code, poll until it is approved, then add the account.
     func addGrok() {
-        isGrok = true
         guard state.begin() else {
             state = .failed("Sign-in already in progress")
             return
         }
+        resetFlow()
+        isGrok = true
         step = .flow
-        devicePrompt = nil
         task = Task { [engine] in
             do {
                 let auth = GrokDeviceAuth(http: HTTPClient())
@@ -137,11 +140,12 @@ final class AddAccountModel {
     }
 
     func addCopilot(_ login: String) {
-        copilotLogin = login
         guard state.begin() else {
             state = .failed("Sign-in already in progress")
             return
         }
+        resetFlow()
+        copilotLogin = login
         step = .flow
         task = Task { [engine] in
             do {
@@ -150,6 +154,15 @@ final class AddAccountModel {
                 state = AddFlowState.failure(error)
             }
         }
+    }
+
+    /// Clears every provider flag so the sheet and `retry()` follow only the flow that just started.
+    private func resetFlow() {
+        copilotLogin = nil
+        isCodex = false
+        isClaudeCode = false
+        isGrok = false
+        devicePrompt = nil
     }
 
     /// Cancelling the task cancels `awaitCallback`, whose `defer` closes the listener.
