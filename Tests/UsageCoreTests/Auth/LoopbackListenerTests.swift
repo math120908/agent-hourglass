@@ -1,7 +1,6 @@
 import Foundation
 import Testing
 @testable import UsageCore
-@testable import UsageCoreMac
 
 /// Raw HTTP client so we control Host header and address family.
 func rawRequest(_ host: String, _ port: UInt16, _ text: String) -> String? {
