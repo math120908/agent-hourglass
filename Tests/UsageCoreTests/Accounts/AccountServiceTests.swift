@@ -61,10 +61,11 @@ struct AccountServiceTests {
     let log = SvcEventLog()
     let logins = SvcEventLog()
 
-    func make(_ ids: [String], gate: AsyncStream<Void>? = nil) throws -> (AccountService, SvcLoggingStore, AccountRegistry) {
+    /// `store` carries Keychain items across a simulated relaunch (a fresh registry and service on the same dir).
+    func make(_ ids: [String], gate: AsyncStream<Void>? = nil, store reused: SvcLoggingStore? = nil) throws -> (AccountService, SvcLoggingStore, AccountRegistry) {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let registry = AccountRegistry(directory: dir)
-        let store = SvcLoggingStore(log: log, registryURL: registry.url)
+        let store = reused ?? SvcLoggingStore(log: log, registryURL: registry.url)
         let provider = SvcLoggingProvider(log: log, registryURL: registry.url)
         let poller = Poller(clients: [], clock: ContinuousClock(), now: { Date() }, jitter: { 0 }) { _, _ in }
         let login = SvcFakeLogin(ids)
@@ -186,18 +187,72 @@ struct AccountServiceTests {
         #expect(try store.allAccountIDs() == [cid("h")])
     }
 
+    func claudeCred(_ s: String) -> Credential {
+        Credential(kind: .claude, access: Secret(s), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: [])
+    }
+
     @Test func cleanupSkippedWhenRegistryUnreadable() async throws {
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: dir.appendingPathComponent("accounts.json").path)
+            try? FileManager.default.removeItem(at: dir)
+        }
         let (svc, store, registry) = try make([])
         try await registry.upsert(AccountEntry(id: cid("a"), kind: .claude, displayName: "A", remoteLogin: nil, order: 0, addedAt: Date(), status: "ok"))
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: registry.url.path)
-        defer { try? FileManager.default.removeItem(at: dir) }
         #expect(try await registry.load().isEmpty)
         #expect(await !registry.loadedCleanly)
-        let bad = try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { $0.hasPrefix("accounts.json.bad-") }
-        #expect(bad.count == 1)
-        try store.inner.write(Credential(kind: .claude, access: Secret("a"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: []), for: cid("a"), label: "t")
+        let names = try FileManager.default.contentsOfDirectory(atPath: dir.path)
+        #expect(names.contains("accounts.json"))
+        #expect(!names.contains { $0.hasPrefix("accounts.json.bad-") })
+        try store.inner.write(claudeCred("a"), for: cid("a"), label: "t")
+        try store.inner.write(claudeCred("y"), for: cid("y"), label: "t")
         try await svc.cleanupOrphans()
-        #expect(try store.allAccountIDs() == [cid("a")])
+        #expect(Set(try store.allAccountIDs()) == [cid("a"), cid("y")])
+    }
+
+    @Test func commitRefusesToOverwriteUnreadableFile() async throws {
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: dir.appendingPathComponent("accounts.json").path)
+            try? FileManager.default.removeItem(at: dir)
+        }
+        let (_, _, registry) = try make([])
+        try await registry.upsert(AccountEntry(id: cid("a"), kind: .claude, displayName: "A", remoteLogin: nil, order: 0, addedAt: Date(), status: "ok"))
+        let before = try Data(contentsOf: registry.url)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: registry.url.path)
+        _ = try await registry.load()
+        await #expect(throws: AccountRegistryError.unreadableFile) {
+            try await registry.upsert(AccountEntry(id: cid("b"), kind: .claude, displayName: "B", remoteLogin: nil, order: 0, addedAt: Date(), status: "ok"))
+        }
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: registry.url.path)
+        #expect(try Data(contentsOf: registry.url) == before)
+    }
+
+    @Test func quarantineKeepsCleanupOffNextLaunch() async throws {
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let (svc1, store, registry1) = try make([])
+        try Data("{\"version\":1,\"accou".utf8).write(to: registry1.url)
+        _ = try await registry1.load()
+        try store.inner.write(claudeCred("y"), for: cid("y"), label: "t")
+        try await svc1.cleanupOrphans()
+        let (svc2, _, registry2) = try make([], store: store)
+        #expect(try await registry2.load().isEmpty)
+        #expect(await !registry2.loadedCleanly)
+        try await svc2.cleanupOrphans()
+        #expect(try store.allAccountIDs() == [cid("y")])
+    }
+
+    @Test func quarantineKeepsCleanupOffAfterAddInSameLaunch() async throws {
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let (svc1, store, registry1) = try make(["a"])
+        try Data("{\"version\":1,\"accou".utf8).write(to: registry1.url)
+        _ = try await registry1.load()
+        try store.inner.write(claudeCred("y"), for: cid("y"), label: "t")
+        try await svc1.addClaude(loginHint: nil)
+        let (svc2, _, registry2) = try make([], store: store)
+        #expect(try await registry2.load().map(\.id) == [cid("a")])
+        #expect(await !registry2.loadedCleanly)
+        try await svc2.cleanupOrphans()
+        #expect(Set(try store.allAccountIDs()) == [cid("a"), cid("y")])
     }
 
     @Test func labelHasNoDisplayName() async throws {
