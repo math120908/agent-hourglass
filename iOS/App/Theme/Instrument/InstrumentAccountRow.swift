@@ -75,12 +75,15 @@ struct InstrumentAccountRow: View {
         HStack(spacing: 10) {
             RingGauge(fraction: headline?.fraction, label: ringLabel, color: ringColor)
             VStack(alignment: .leading, spacing: 1) {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 6) {
-                        name.fixedSize()
-                        if let plan = c.planTag { StatusChipView(text: plan) }
+                HStack(spacing: 6) {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 6) {
+                            name.fixedSize()
+                            if let plan = c.planTag { StatusChipView(text: plan) }
+                        }
+                        name
                     }
-                    name
+                    UsagePageSlot(kind: kind)
                 }
                 Text(subtitle)
                     .font(.system(size: 11).monospacedDigit())
@@ -100,6 +103,7 @@ struct InstrumentAccountRow: View {
         .contentShape(Rectangle())
         .onTapGesture { withAnimation(.easeOut(duration: 0.18)) { isExpanded.toggle() } }
         .accessibilityAddTraits(.isButton)
+        .usagePageLink(kind: kind)
     }
 
     private var name: some View {

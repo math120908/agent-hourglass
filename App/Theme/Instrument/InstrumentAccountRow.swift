@@ -7,6 +7,7 @@ struct InstrumentAccountRow: View {
     var card: CardModel
     @Binding var isExpanded: Bool
     var onSignIn: () -> Void = {}
+    var onOpenUsagePage: (URL) -> Void = { _ in }
     var onDiagnostics: () -> Void = {}
     var now: Date = .now
     var calendar: Calendar = .current
@@ -54,12 +55,15 @@ struct InstrumentAccountRow: View {
             HStack(spacing: 10) {
                 RingGauge(fraction: card.headline?.fraction, label: ringLabel, color: ringColor)
                 VStack(alignment: .leading, spacing: 1) {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 6) {
-                            name.fixedSize()
-                            if let plan = card.planTag { StatusChipView(text: plan) }
+                    HStack(spacing: 6) {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 6) {
+                                name.fixedSize()
+                                if let plan = card.planTag { StatusChipView(text: plan) }
+                            }
+                            name
                         }
-                        name
+                        UsagePageSlot(kind: account.kind)
                     }
                     Text(subtitle)
                         .font(.system(size: 11).monospacedDigit())
@@ -79,6 +83,7 @@ struct InstrumentAccountRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .usagePageLink(kind: account.kind, open: onOpenUsagePage)
     }
 
     private var name: some View {

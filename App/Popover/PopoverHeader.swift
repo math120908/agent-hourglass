@@ -7,6 +7,7 @@ struct PopoverActions {
     var settings: () -> Void = {}
     var addAccount: () -> Void = {}
     var signIn: (AccountID) -> Void = { _ in }
+    var openURL: (URL) -> Void = { _ in }
     /// schemaError recovery: opens About, where "Copy diagnostics" lives.
     var diagnostics: () -> Void = {}
     /// Ideal popover height whenever cards expand/collapse or content changes.

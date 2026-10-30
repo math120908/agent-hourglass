@@ -104,12 +104,15 @@ struct GlassAccountCard: View {
             HStack(spacing: 9) {
                 glyph
                 VStack(alignment: .leading, spacing: 1) {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 5) {
-                            nameText.fixedSize()
-                            if let plan = c.planTag { StatusChipView(text: plan) }
+                    HStack(spacing: 5) {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 5) {
+                                nameText.fixedSize()
+                                if let plan = c.planTag { StatusChipView(text: plan) }
+                            }
+                            nameText
                         }
-                        nameText
+                        UsagePageSlot(kind: kind)
                     }
                     Text(c.secondary ?? ageText)
                         .font(.system(size: 10.5))
@@ -135,6 +138,7 @@ struct GlassAccountCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .usagePageLink(kind: kind)
     }
 
     private func color(_ d: MeterDisplay?) -> Color {

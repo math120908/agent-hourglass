@@ -73,6 +73,10 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
                 self?.settings.show(tab: .accounts)
                 self?.settings.model.reauth(id)
             },
+            openURL: { [weak self] url in
+                self?.popover.performClose(nil)
+                NSWorkspace.shared.open(url)
+            },
             diagnostics: { [weak self] in
                 self?.popover.performClose(nil)
                 self?.settings.show(tab: .about)
