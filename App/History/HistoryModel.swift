@@ -27,12 +27,11 @@ struct ChartLine: Identifiable, Equatable {
 }
 
 extension HistoryModel {
-    /// Copilot / Codex plot one style; nil for Claude (session + weekly + models).
+    /// Copilot / window kinds (Codex) plot one style; nil for Claude (session + weekly + models).
     var singleStyle: ChartLine.Style? {
         switch kind {
         case .copilot: .copilot
-        case .codex: .window
-        default: nil
+        default: kind.usesWindowMeters ? .window : nil
         }
     }
 

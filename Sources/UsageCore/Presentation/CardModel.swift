@@ -43,7 +43,7 @@ public struct CardModel: Equatable, Sendable {
     ) -> CardModel {
         let ctx = Ctx(now: now, calendar: calendar, locale: locale)
         let meters = (snapshot?.meters ?? []).filter(isVisible)
-        let headlineKind: Meter.Kind = kind == .claude ? .session5h : kind == .codex ? .window : .copilotPremium
+        let headlineKind: Meter.Kind = kind == .claude ? .session5h : kind.usesWindowMeters ? .window : .copilotPremium
         return CardModel(
             headline: meters.first { $0.kind == headlineKind }.map { ctx.row($0) },
             secondary: secondary(meters, kind: kind),
@@ -56,15 +56,21 @@ public struct CardModel: Equatable, Sendable {
         )
     }
 
-    /// Claude: weekly-all percent. Codex: the second window, captioned from its length.
+    /// Claude: weekly-all percent. Window kinds: the first later window whose length differs from the headline's, captioned from its length.
     static func secondary(_ meters: [Meter], kind: ProviderKind) -> String? {
-        if kind == .codex {
-            let windows = meters.filter { $0.kind == .window }
-            guard windows.count > 1, let s = windows[1].windowSeconds, let p = windows[1].percentUsed else { return nil }
+        if kind.usesWindowMeters {
+            guard let second = secondWindow(meters), let s = second.windowSeconds, let p = second.percentUsed else { return nil }
             let cap = s == 604_800 ? "Wk" : Meter.windowCaption(seconds: s)
             return "\(cap) \(Int(p.rounded()))%"
         }
         return meters.first { $0.kind == .weeklyAll }?.percentUsed.map { "Wk \(Int($0.rounded()))%" }
+    }
+
+    /// The first `.window` meter after the headline window whose length differs from it; nil when none.
+    static func secondWindow(_ meters: [Meter]) -> Meter? {
+        let windows = meters.filter { $0.kind == .window }
+        guard let head = windows.first else { return nil }
+        return windows.dropFirst().first { $0.windowSeconds != head.windowSeconds }
     }
 
     static func isVisible(_ m: Meter) -> Bool {

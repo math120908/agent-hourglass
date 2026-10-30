@@ -42,7 +42,7 @@ struct InstrumentAccountRow: View {
     private var meters: [Meter] { MeterDisplay.visibleMeters(snapshot) }
 
     private var headline: MeterDisplay? {
-        let k: Meter.Kind = kind == .codex ? .window : .session5h
+        let k: Meter.Kind = kind.usesWindowMeters ? .window : .session5h
         return meters.first { $0.kind == k }.map { MeterDisplay.make($0, now: now, options: options) }
     }
 
@@ -120,7 +120,7 @@ struct InstrumentAccountRow: View {
         guard let h = headline else {
             return snapshot.map { MeterDisplay.ageText(fetchedAt: $0.fetchedAt, now: now, options: options) } ?? "No data yet"
         }
-        if kind == .codex {
+        if kind.usesWindowMeters {
             let reset = h.resetText.hasPrefix("Resets ") ? "resets " + h.resetText.dropFirst(7) : h.resetText
             let second = meters.dropFirst().first.map { MeterDisplay.make($0, now: now, options: options) }
             return "\(h.label) \(h.percentText) | " + (second.map { "\($0.label) \($0.percentText)" } ?? reset)

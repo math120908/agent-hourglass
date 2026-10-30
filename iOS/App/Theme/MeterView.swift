@@ -59,7 +59,7 @@ struct MeterView: View {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 5) {
                         Text(d.label).font(.system(size: 12, weight: .semibold))
-                        if isWeekly && kind != .codex { StatusChipView(text: "Weekly") }
+                        if isWeekly && !kind.usesWindowMeters { StatusChipView(text: "Weekly") }
                     }
                     if d.paceTick == nil && kind == .claude {
                         Text("5-hour rolling window").font(.system(size: 10.5)).glassTone()
@@ -105,7 +105,7 @@ struct MeterView: View {
 
     private func instrumentLabel(_ d: MeterDisplay) -> String {
         if kind == .claude && d.paceTick == nil && d.paceText == nil && d.label == "Session" { return "Session (5h)" }
-        if kind == .codex { return d.label }
+        if kind.usesWindowMeters { return d.label }
         return d.paceText != nil || d.paceTick != nil ? "\(d.label), weekly" : d.label
     }
 

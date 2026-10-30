@@ -144,4 +144,21 @@ import Testing
                             spend: Money(usedMinor: 1, limitMinor: 2, currency: "EUR", exponent: 2)), .stale)
         #expect(!String(describing: m).contains("\u{00B7}"))
     }
+
+    func window(_ seconds: Int, _ p: Double) -> Meter {
+        Meter(kind: .window, label: Meter.windowLabel(seconds: seconds), percentUsed: p,
+              resetsAt: now.addingTimeInterval(3600), windowLength: .seconds(seconds))
+    }
+    func codex(_ meters: [Meter]) -> UsageSnapshot {
+        UsageSnapshot(accountID: AccountID(kind: .codex, remoteID: "c"), fetchedAt: now, plan: nil, meters: meters, spend: nil)
+    }
+    @Test func codexHeadlineAndSecondary() {
+        let m = make(codex([window(18000, 12), window(604_800, 50)]), .fresh, .codex)
+        #expect(m.headline?.label == Meter.windowLabel(seconds: 18000))
+        #expect(m.secondary == "Wk 50%")
+    }
+    @Test func secondarySkipsSameLengthWindow() {
+        #expect(make(codex([window(604_800, 96), window(604_800, 84)]), .fresh, .codex).secondary == nil)
+        #expect(make(codex([window(18000, 10), window(18000, 20), window(604_800, 50)]), .fresh, .codex).secondary == "Wk 50%")
+    }
 }

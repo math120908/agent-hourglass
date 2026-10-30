@@ -103,7 +103,7 @@ struct InstrumentAccountRow: View {
             let reset = h.resetText.hasPrefix("Resets ") ? "resets " + h.resetText.dropFirst(7) : h.resetText
             return String(format: "Premium %.1f%% | ", f * 100) + reset
         }
-        if account.kind == .codex {
+        if account.kind.usesWindowMeters {
             let reset = h.resetText.hasPrefix("Resets ") ? "resets " + h.resetText.dropFirst(7) : h.resetText
             return "\(h.label) \(h.percentText) | " + (card.secondary ?? reset)
         }
