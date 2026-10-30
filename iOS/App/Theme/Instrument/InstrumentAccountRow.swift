@@ -83,7 +83,7 @@ struct InstrumentAccountRow: View {
                         }
                         name
                     }
-                    UsagePageButton(kind: kind)
+                    UsagePageSlot(kind: kind)
                 }
                 Text(subtitle)
                     .font(.system(size: 11).monospacedDigit())
@@ -103,6 +103,7 @@ struct InstrumentAccountRow: View {
         .contentShape(Rectangle())
         .onTapGesture { withAnimation(.easeOut(duration: 0.18)) { isExpanded.toggle() } }
         .accessibilityAddTraits(.isButton)
+        .usagePageLink(kind: kind)
     }
 
     private var name: some View {

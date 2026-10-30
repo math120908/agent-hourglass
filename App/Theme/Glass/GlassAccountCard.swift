@@ -100,7 +100,7 @@ struct GlassAccountCard: View {
                             }
                             nameText
                         }
-                        UsagePageButton(kind: account.kind, open: onOpenUsagePage)
+                        UsagePageSlot(kind: account.kind)
                     }
                     Text(subtitle)
                         .font(.system(size: 10.5))
@@ -128,6 +128,7 @@ struct GlassAccountCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .usagePageLink(kind: account.kind, open: onOpenUsagePage)
     }
 
     /// Full name wins over the plan tag; the tag drops first when the row is tight.

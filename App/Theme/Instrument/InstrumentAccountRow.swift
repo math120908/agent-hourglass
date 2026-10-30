@@ -63,7 +63,7 @@ struct InstrumentAccountRow: View {
                             }
                             name
                         }
-                        UsagePageButton(kind: account.kind, open: onOpenUsagePage)
+                        UsagePageSlot(kind: account.kind)
                     }
                     Text(subtitle)
                         .font(.system(size: 11).monospacedDigit())
@@ -83,6 +83,7 @@ struct InstrumentAccountRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .usagePageLink(kind: account.kind, open: onOpenUsagePage)
     }
 
     private var name: some View {

@@ -112,7 +112,7 @@ struct GlassAccountCard: View {
                             }
                             nameText
                         }
-                        UsagePageButton(kind: kind)
+                        UsagePageSlot(kind: kind)
                     }
                     Text(c.secondary ?? ageText)
                         .font(.system(size: 10.5))
@@ -138,6 +138,7 @@ struct GlassAccountCard: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .usagePageLink(kind: kind)
     }
 
     private func color(_ d: MeterDisplay?) -> Color {
