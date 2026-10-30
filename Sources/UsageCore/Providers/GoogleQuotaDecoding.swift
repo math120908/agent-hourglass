@@ -133,7 +133,7 @@ enum GoogleQuotaDecoding {
     }
 
     /// Percent used from a remaining fraction, clamped to 0...100. Missing or non-finite → nil (unknown, never 0).
-    private static func percentUsed(remaining fraction: Double?) -> Double? {
+    static func percentUsed(remaining fraction: Double?) -> Double? {
         fraction.flatMap { $0.isFinite ? min(100, max(0, (1 - $0) * 100)) : nil }
     }
 
