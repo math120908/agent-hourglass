@@ -94,6 +94,21 @@ func logout() throws {
     print("logout ok")
 }
 
+/// SPIKE: writes the discovered Antigravity client secret to an untracked iOS xcconfig (dev builds only).
+/// The cache is in-memory, so this never touches the app's Keychain; it prints only the path.
+func googleOAuthXcconfig(_ args: [String]) async throws {
+    guard args.count == 2, args[1].hasSuffix(".local.xcconfig") else {
+        die("usage: usagectl google-oauth-xcconfig <path ending .local.xcconfig>")
+    }
+    let path = args[1]
+    let client = try await AntigravityClientDiscovery(oauth: GoogleOAuth(http: HTTPClient()), cache: InMemoryCredentialStore()).client()
+    let fm = FileManager.default
+    if fm.fileExists(atPath: path) { try fm.removeItem(atPath: path) }
+    let line = Data("GOOGLE_AG_CLIENT_SECRET = \(client.secret.reveal())\n".utf8)
+    guard fm.createFile(atPath: path, contents: line, attributes: [.posixPermissions: 0o600]) else { die("cannot write \(path)") }
+    print("wrote \(path)")
+}
+
 let args = Array(CommandLine.arguments.dropFirst())
 do {
     switch args.first {
@@ -101,7 +116,8 @@ do {
     case "fetch": try await fetchOnce()
     case "soak": try await soak(args)
     case "logout": try logout()
-    default: die("usage: usagectl login [--hint email] | fetch | soak [--hours H | --minutes M] [--interval S] | logout")
+    case "google-oauth-xcconfig": try await googleOAuthXcconfig(args)
+    default: die("usage: usagectl login [--hint email] | fetch | soak [--hours H | --minutes M] [--interval S] | logout | google-oauth-xcconfig <path>")
     }
 } catch {
     die("error: \(error)")

@@ -44,6 +44,8 @@
 #   stale-key-*: any AuthKey_*.p8 in one of altool's own search dirs (./private_keys, ~/private_keys,
 #               ~/.private_keys, ~/.appstoreconnect/private_keys) stops the run before make, and one that
 #               appears during the run stops it before altool.
+#   google-secret-*: a non-empty GOOGLE_AG_CLIENT_SECRET in Config/GoogleOAuth.local.xcconfig stops the run
+#               before make (it would ship in the IPA); an empty assignment passes.
 #   Every flow runs with a PATH that cannot reach the real `op`.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -426,6 +428,15 @@ RUN_SCRIPT=$cp/scripts/testflight.sh RUN_WANT_MSG='testFlightInternalTestingOnly
 fresh_copy
 RUN_SCRIPT=$cp/scripts/testflight.sh RUN_WANT_MSG='testFlightInternalTestingOnly' RUN_NO_CALL='xcodebuild -exportArchive' \
   FAKE_ARCHIVE_EO=$cp/ExportOptions.plist run_flow exportoptions-run-before-export 1 --dry-run
+
+# google-secret-*: a GOOGLE_AG_CLIENT_SECRET value in Config/GoogleOAuth.local.xcconfig (untracked, so not a
+# dirty tree) stops the run before make; an empty assignment does not. Synthetic values in the copy only.
+fresh_copy; mkdir -p "$cp/Config"; printf 'GOOGLE_AG_CLIENT_SECRET = test-secret\n' > "$cp/Config/GoogleOAuth.local.xcconfig"
+RUN_SCRIPT=$cp/scripts/testflight.sh RUN_WANT_MSG='Google client secret configured' RUN_NO_CALL=make \
+  run_flow google-secret-configured 1 --dry-run
+fresh_copy; mkdir -p "$cp/Config"; printf 'GOOGLE_AG_CLIENT_SECRET =\n' > "$cp/Config/GoogleOAuth.local.xcconfig"
+RUN_SCRIPT=$cp/scripts/testflight.sh run_flow google-secret-empty-ok 0 --dry-run
+rm -rf "$t/copy"
 
 # stale-key-*: a key in one of altool's own search dirs takes precedence over API_PRIVATE_KEYS_DIR.
 for sd in private_keys .private_keys .appstoreconnect/private_keys; do

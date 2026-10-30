@@ -157,6 +157,10 @@ ASC_OP_ITEM=${ASC_OP_ITEM:-Apple Developer - App Store Connect API key (agent-ho
 # A pinned build number would repeat across uploads; it is for --dry-run and tests only.
 [ $dry -eq 1 ] || [ -z "${BUILD_NUMBER_NOW:-}" ] || die "BUILD_NUMBER_NOW is only allowed with --dry-run"
 [ -z "$(git status --porcelain)" ] || die "dirty tree"
+# The dev-only Google secret (an untracked xcconfig, so the clean-tree check misses it) would ship in the IPA.
+gsecret=$(rg -o -r '$1' '^\s*GOOGLE_AG_CLIENT_SECRET\s*=\s*(\S+)' Config/GoogleOAuth.local.xcconfig 2>/dev/null || true)
+[ -z "$gsecret" ] || die "Google client secret configured (iOS/Config/GoogleOAuth.local.xcconfig); it would ship in the IPA"
+unset gsecret
 asc=${ASC_ENV:-$HOME/.config/agent-hourglass/asc.env}
 [ -f "$asc" ] || die "missing App Store Connect env file (set ASC_ENV or create ~/.config/agent-hourglass/asc.env)"
 [ "$(/usr/bin/stat -f '%Lp' "$asc")" = 600 ] || die "App Store Connect env file must be mode 600"

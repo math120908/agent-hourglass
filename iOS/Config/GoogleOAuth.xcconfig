@@ -1,0 +1,2 @@
+GOOGLE_AG_CLIENT_SECRET =
+#include? "GoogleOAuth.local.xcconfig"
