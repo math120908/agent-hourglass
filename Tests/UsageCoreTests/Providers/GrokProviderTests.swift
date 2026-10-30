@@ -37,7 +37,7 @@ struct GrokProviderTests {
         #expect(s.plan == "SuperGrok")
         #expect(s.meters.map(\.label) == ["Weekly", "Build, weekly", "Chat, weekly"])
         #expect(s.meters.map(\.percentUsed) == [96, 84, 12])
-        #expect(s.spend == Money(usedMinor: 420, limitMinor: nil, currency: "USD", exponent: 2))
+        #expect(s.spend == nil)
         #expect(s.rawUnknownKeys.contains("futureKey"))
     }
 
@@ -86,10 +86,10 @@ struct GrokProviderTests {
         #expect(GrokProvider.logKeep == ["type", "product", "subscription_tier_display", "start", "end"])
         let billing = ResponseShape.describe(try fixture("grok-billing-weekly"), keep: GrokProvider.logKeep)
         #expect(billing.contains("USAGE_PERIOD_TYPE_WEEKLY") && billing.contains("GrokBuild"))
-        let settings = #"{"subscription_tier_display":"SuperGrok","access_token":"tok-grok","email":"pii@example.com","name":"user-PII"}"#
+        let settings = #"{"subscription_tier_display":"SuperGrok","access_token":"tok-grok","refresh_token":"rt-grok","id_token":"idt-grok","user_id":"uid-grok-PII","email":"pii@example.com","name":"user-PII"}"#
         let shape = ResponseShape.describe(Data(settings.utf8), keep: GrokProvider.logKeep)
         #expect(shape.contains("SuperGrok"))
-        for leak in ["tok-grok", "Bearer", "pii@example.com", "user-PII"] {
+        for leak in ["tok-grok", "rt-grok", "idt-grok", "uid-grok-PII", "Bearer", "pii@example.com", "user-PII"] {
             #expect(!billing.contains(leak) && !shape.contains(leak))
         }
     }

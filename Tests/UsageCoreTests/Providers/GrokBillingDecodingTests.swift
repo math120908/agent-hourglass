@@ -12,7 +12,7 @@ struct GrokBillingDecodingTests {
         #expect(r.meters.map(\.percentUsed) == [96, 84, 12])
         #expect(r.meters.map(\.pool) == [nil, "build", "chat"])
         #expect(r.meters.allSatisfy { $0.kind == .window && $0.windowSeconds == 604_800 && $0.resetsAt == weekEnd })
-        #expect(r.spend == Money(usedMinor: 420, limitMinor: nil, currency: "USD", exponent: 2))
+        #expect(r.spend == nil, "a prepaid balance alone is credit left, not spend")
         #expect(r.unknownKeys.contains("futureKey"))
     }
 

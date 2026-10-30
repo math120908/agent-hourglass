@@ -62,15 +62,10 @@ enum GrokBillingDecoding {
         return s > 0 ? s : nil
     }
 
-    /// On-demand cap when set (USD cents), else the prepaid Extra Usage Credits balance, else none.
+    /// On-demand usage against its cap (USD cents), else none. A prepaid balance is credit left, not spend.
     private static func spend(_ root: [String: Any]) -> Money? {
-        if let cap = cents(root["onDemandCap"]), cap > 0 {
-            return Money(usedMinor: cents(root["onDemandUsed"]) ?? 0, limitMinor: cap, currency: "USD", exponent: 2)
-        }
-        if let balance = cents(root["prepaidBalance"]), balance > 0 {
-            return Money(usedMinor: balance, limitMinor: nil, currency: "USD", exponent: 2)
-        }
-        return nil
+        guard let cap = cents(root["onDemandCap"]), cap > 0 else { return nil }
+        return Money(usedMinor: cents(root["onDemandUsed"]) ?? 0, limitMinor: cap, currency: "USD", exponent: 2)
     }
 
     private static func cents(_ raw: Any?) -> Int? {

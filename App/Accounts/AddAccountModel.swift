@@ -132,7 +132,13 @@ final class AddAccountModel {
                 state = .idle
                 step = .provider
             } catch {
-                state = AddFlowState.deviceFailure(error)
+                // Cancel during start() or userinfo surfaces as a transport error; it is still a cancel.
+                if Task.isCancelled {
+                    state = .idle
+                    step = .provider
+                } else {
+                    state = AddFlowState.deviceFailure(error)
+                }
             }
             devicePrompt = nil
             Self.currentURL = nil
