@@ -36,6 +36,8 @@ enum SheetTone {
         switch (kind, scheme) {
         case (.codex, .dark): Color(red: 0.55, green: 0.92, blue: 0.88)
         case (.codex, _): Color(red: 0.0, green: 0.32, blue: 0.30)
+        case (.google, .dark): Color(red: 0.78, green: 0.86, blue: 1.0)
+        case (.google, _): Color(red: 0.08, green: 0.28, blue: 0.66)
         case (.grok, .dark): Color(red: 0.86, green: 0.88, blue: 0.92)
         case (.grok, _): Color(red: 0.24, green: 0.26, blue: 0.31)
         case (_, .dark): claude(.dark)

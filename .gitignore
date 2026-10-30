@@ -5,3 +5,4 @@ build/
 dist/
 *.p8
 asc.env
+iOS/Config/*.local.xcconfig*

@@ -25,6 +25,7 @@ enum SnapshotCatalog {
             + CodexSnapshots.scenes
             + GrokSnapshots.scenes
             + ClaudeSnapshots.scenes
+            + GoogleSnapshots.scenes
             + AddMenuSnapshots.scenes
             + SettingsSnapshots.scenes
             + AboutSnapshots.scenes

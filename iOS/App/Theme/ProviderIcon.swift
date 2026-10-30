@@ -2,7 +2,7 @@ import SwiftUI
 import UsageCore
 
 /// Provider logo from the asset catalog (Simple Icons, CC0). Template-rendered so callers pick the color.
-/// iOS ships Claude, Codex and Grok; any other kind gets a neutral SF Symbol.
+/// Copilot is not on iOS and gets a neutral SF Symbol.
 struct ProviderIcon: View {
     let kind: ProviderKind
     var size: CGFloat = 12
@@ -25,7 +25,7 @@ struct ProviderIcon: View {
         case .claude: "ProviderClaude"
         case .codex: "ProviderCodex"
         case .copilot: nil
-        case .google: nil
+        case .google: "ProviderGoogle"
         case .grok: "ProviderGrok"
         }
     }

@@ -131,4 +131,11 @@ Versioning: `MARKETING_VERSION` 1.0.0 in `iOS/project.yml`; build number `YYMMDD
 
 Release checks: [iOS/docs/testflight-checklist.md](iOS/docs/testflight-checklist.md). `make test` includes `make check-ios` (UsageCore builds for iOS) and the source guards and secret scan, which cover `iOS/`.
 
+Google AI sign-in (spike, dev builds only):
+
+- `make -C iOS google-config`: runs the Antigravity client discovery on this Mac (see [Google AI](#google-ai-antigravity-provider-experimental)) and writes the secret to the untracked, mode 0600 `iOS/Config/GoogleOAuth.local.xcconfig`. Without that file, Google is hidden on iOS.
+- Test on a real iPhone: the simulator shares the Mac's loopback.
+- Remove the file before a TestFlight run. `testflight.sh` refuses to run while it holds a secret, and its post-archive check refuses any archive whose app or widget Info.plist has a non-empty `AHGoogleClientSecret`.
+- While the file exists, the `test-testflight.sh` cases that run the real script go red.
+
 Simulator defaults: `SIM_NAME=iPhone 17`, `SIM_OS=26.5` (override on the make command line). Signing is automatic with team R7V5X99HYA; simulator builds need no signing.

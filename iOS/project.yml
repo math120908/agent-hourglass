@@ -18,6 +18,9 @@ targets:
     type: application
     platform: iOS
     sources: [App, Shared]
+    configFiles:
+      Debug: Config/GoogleOAuth.xcconfig
+      Release: Config/GoogleOAuth.xcconfig
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cc.kuoc.agent-hourglass.ios
@@ -42,6 +45,8 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         GitCommit: $(GIT_COMMIT)
         AHKeychainAccessGroup: $(TeamIdentifierPrefix)cc.kuoc.agent-hourglass.shared
+        # SPIKE: dev-only Google client secret from the untracked Config/GoogleOAuth.local.xcconfig.
+        AHGoogleClientSecret: $(GOOGLE_AG_CLIENT_SECRET)
         CFBundleURLTypes:
           - CFBundleURLName: cc.kuoc.agent-hourglass.ios
             CFBundleURLSchemes: [agenthourglass]
@@ -55,6 +60,9 @@ targets:
     platform: iOS
     # Theme primitives and provider assets compile in place (extension-safe; P5 relies on this).
     sources: [Widget, Shared, App/Theme, App/Resources/Assets.xcassets]
+    configFiles:
+      Debug: Config/GoogleOAuth.xcconfig
+      Release: Config/GoogleOAuth.xcconfig
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cc.kuoc.agent-hourglass.ios.widget
@@ -72,6 +80,7 @@ targets:
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
         AHKeychainAccessGroup: $(TeamIdentifierPrefix)cc.kuoc.agent-hourglass.shared
+        AHGoogleClientSecret: $(GOOGLE_AG_CLIENT_SECRET)
     entitlements:
       path: Widget/AgentHourglassWidget.entitlements
       properties:

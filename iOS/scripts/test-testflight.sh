@@ -44,6 +44,10 @@
 #   stale-key-*: any AuthKey_*.p8 in one of altool's own search dirs (./private_keys, ~/private_keys,
 #               ~/.private_keys, ~/.appstoreconnect/private_keys) stops the run before make, and one that
 #               appears during the run stops it before altool.
+#   google-secret-*: a non-empty GOOGLE_AG_CLIENT_SECRET in Config/GoogleOAuth.local.xcconfig stops the run
+#               before make (it would ship in the IPA); an empty assignment passes; an unreadable file fails
+#               closed; an exported XCODE_XCCONFIG_FILE never reaches xcodebuild. verify-google-secret-*: an
+#               app or widget Info.plist with a non-empty AHGoogleClientSecret fails --verify-archive/-ipa.
 #   Every flow runs with a PATH that cannot reach the real `op`.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -151,6 +155,7 @@ cat > "$bin/xcodebuild" <<'EOF'
 #!/bin/bash
 echo "xcodebuild $1" >> "$FAKE_CALLS"
 [ -z "${ASC_KEY_ID:-}${ASC_ISSUER_ID:-}" ] || { echo "ASC_* in xcodebuild env"; exit 3; }
+[ -z "${XCODE_XCCONFIG_FILE:-}" ] || { echo "XCODE_XCCONFIG_FILE in xcodebuild env"; exit 3; }
 args=("$@"); val() { local i; for ((i=0; i<${#args[@]}; i++)); do [ "${args[i]}" = "$1" ] && echo "${args[i+1]}"; done; }
 k=$(val -authenticationKeyPath)
 [ -n "$k" ] && [ -f "$k" ] || { echo "error: no key file"; exit 4; }
@@ -427,6 +432,21 @@ fresh_copy
 RUN_SCRIPT=$cp/scripts/testflight.sh RUN_WANT_MSG='testFlightInternalTestingOnly' RUN_NO_CALL='xcodebuild -exportArchive' \
   FAKE_ARCHIVE_EO=$cp/ExportOptions.plist run_flow exportoptions-run-before-export 1 --dry-run
 
+# google-secret-*: a GOOGLE_AG_CLIENT_SECRET value in Config/GoogleOAuth.local.xcconfig (untracked, so not a
+# dirty tree) stops the run before make; an empty assignment does not. Synthetic values in the copy only.
+fresh_copy; mkdir -p "$cp/Config"; printf 'GOOGLE_AG_CLIENT_SECRET = test-secret\n' > "$cp/Config/GoogleOAuth.local.xcconfig"
+RUN_SCRIPT=$cp/scripts/testflight.sh RUN_WANT_MSG='Google client secret configured' RUN_NO_CALL=make \
+  run_flow google-secret-configured 1 --dry-run
+fresh_copy; mkdir -p "$cp/Config"; printf 'GOOGLE_AG_CLIENT_SECRET =\n' > "$cp/Config/GoogleOAuth.local.xcconfig"
+RUN_SCRIPT=$cp/scripts/testflight.sh run_flow google-secret-empty-ok 0 --dry-run
+fresh_copy; mkdir -p "$cp/Config"; printf 'GOOGLE_AG_CLIENT_SECRET =\n' > "$cp/Config/GoogleOAuth.local.xcconfig"
+chmod 000 "$cp/Config/GoogleOAuth.local.xcconfig"
+RUN_SCRIPT=$cp/scripts/testflight.sh RUN_WANT_MSG='cannot read' RUN_NO_CALL=make \
+  run_flow google-secret-unreadable-fails-closed 1 --dry-run
+rm -rf "$t/copy"
+# The fake xcodebuild exits 3 when XCODE_XCCONFIG_FILE reaches it.
+XCODE_XCCONFIG_FILE=$t/override.xcconfig run_flow google-secret-xcconfig-override-dropped 0 --dry-run
+
 # stale-key-*: a key in one of altool's own search dirs takes precedence over API_PRIVATE_KEYS_DIR.
 for sd in private_keys .private_keys .appstoreconnect/private_keys; do
   h=$t/home-stale-${sd//\//-}; mkdir -p "$h/$sd"; cp "$t/fake.pem" "$h/$sd/AuthKey_OTHERKEY12.p8"; chmod 600 "$h/$sd/AuthKey_OTHERKEY12.p8"
@@ -547,6 +567,11 @@ vcase verify-orientation-missing ipa 'UISupportedInterfaceOrientations' \
 vcase verify-orientation-ipad-key archive 'UISupportedInterfaceOrientations~ipad' \
   'pbe $A/Info.plist "Add :UISupportedInterfaceOrientations~ipad array" "Add :UISupportedInterfaceOrientations~ipad:0 string UIInterfaceOrientationPortrait"'
 vcase verify-git-commit archive 'GitCommit' 'pbe $A/Info.plist "Set :GitCommit deadbee"'
+# google-secret-*: a built plist carrying AHGoogleClientSecret is refused whatever set it; empty is fine.
+vcase verify-google-secret-widget archive 'Google client secret' 'pbe $W/Info.plist "Add :AHGoogleClientSecret string test-secret"'
+vcase verify-google-secret-app ipa 'Google client secret' 'pbe $A/Info.plist "Add :AHGoogleClientSecret string test-secret"'
+vcase verify-google-secret-empty archive 0 \
+  'pbe $A/Info.plist "Add :AHGoogleClientSecret string"; pbe $W/Info.plist "Add :AHGoogleClientSecret string"'
 vcase verify-gta-app ipa 'get-task-allow' "pbe $EA 'Set :get-task-allow true'"
 vcase verify-gta-widget ipa 'get-task-allow' "pbe $EW 'Set :get-task-allow true'"
 vcase verify-gta-missing ipa 'get-task-allow' "pbe $EA 'Delete :get-task-allow'"
