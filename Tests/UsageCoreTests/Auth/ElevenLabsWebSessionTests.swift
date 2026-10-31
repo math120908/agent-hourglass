@@ -44,3 +44,41 @@ struct ElevenLabsWebSessionTests {
         #expect(!c.description.contains("fake-rt"))
     }
 }
+
+struct ElevenLabsWebSessionHostTests {
+    @Test func probeHost() {
+        #expect(ElevenLabsWebSession.isProbeHost("elevenlabs.io"))
+        #expect(ElevenLabsWebSession.isProbeHost("ElevenLabs.IO"))
+        #expect(ElevenLabsWebSession.isProbeHost("app.elevenlabs.io"))
+        #expect(!ElevenLabsWebSession.isProbeHost("evilelevenlabs.io"))
+        #expect(!ElevenLabsWebSession.isProbeHost("elevenlabs.io.evil.com"))
+        #expect(!ElevenLabsWebSession.isProbeHost(nil))
+    }
+
+    @Test(arguments: [
+        "https://elevenlabs.io/app/sign-in",
+        "https://api.elevenlabs.io/x",
+        "https://accounts.google.com/o/oauth2/auth",
+        "https://xi-labs.firebaseapp.com/__/auth/handler",
+        "about:blank",
+    ])
+    func allowed(_ s: String) {
+        #expect(ElevenLabsWebSession.isAllowedNavigation(URL(string: s)!))
+    }
+
+    @Test(arguments: [
+        "http://elevenlabs.io/app/sign-in",
+        "https://evilelevenlabs.io/",
+        "https://elevenlabs.io.evil.com/",
+        "http://accounts.google.com/",
+        "https://evil.com/",
+        "https://xi-labs.firebaseapp.com/other",
+        "https://firebaseapp.com/__/auth/handler",
+        "about:srcdoc",
+        "javascript:alert(1)",
+        "file:///etc/passwd",
+    ])
+    func refused(_ s: String) {
+        #expect(!ElevenLabsWebSession.isAllowedNavigation(URL(string: s)!))
+    }
+}

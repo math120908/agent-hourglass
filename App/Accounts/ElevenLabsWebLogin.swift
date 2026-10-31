@@ -6,7 +6,7 @@ import WebKit
 /// sign-in page and polls for the Firebase auth user the page stores once signed in. The refresh token
 /// read there is exchanged at once for a fresh ID token; nothing from the page is logged or persisted.
 @MainActor
-final class ElevenLabsWebLogin: NSObject, NSWindowDelegate {
+final class ElevenLabsWebLogin: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate {
     static let signInURL = URL(string: "https://elevenlabs.io/app/sign-in")!
 
     /// Collects every `firebase:authUser:*` value from localStorage and Firebase's IndexedDB store.
@@ -40,6 +40,7 @@ final class ElevenLabsWebLogin: NSObject, NSWindowDelegate {
 
     private var window: NSWindow?
     private var webView: WKWebView?
+    private var popups: [WKWebView] = []
     private var timer: Timer?
     private var continuation: CheckedContinuation<ElevenLabsWebSession, any Error>?
 
@@ -60,6 +61,9 @@ final class ElevenLabsWebLogin: NSObject, NSWindowDelegate {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
         let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 480, height: 720), configuration: config)
+        web.isInspectable = false
+        web.navigationDelegate = self
+        web.uiDelegate = self
         let w = NSWindow(contentRect: web.frame, styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
         w.title = "Sign in to ElevenLabs"
         w.contentView = web
@@ -77,7 +81,7 @@ final class ElevenLabsWebLogin: NSObject, NSWindowDelegate {
     }
 
     private func poll() async {
-        guard let webView, continuation != nil, webView.url?.host?.hasSuffix("elevenlabs.io") == true else { return }
+        guard let webView, continuation != nil, ElevenLabsWebSession.isProbeHost(webView.url?.host) else { return }
         let result = try? await webView.callAsyncJavaScript(Self.probeScript, contentWorld: .defaultClient)
         guard let json = result as? String, let session = ElevenLabsWebSession.parse(json) else { return }
         finish(.success(session))
@@ -92,8 +96,54 @@ final class ElevenLabsWebLogin: NSObject, NSWindowDelegate {
         window = nil
         w?.delegate = nil
         w?.close()
+        let store = webView?.configuration.websiteDataStore
+        for v in popups + [webView].compactMap({ $0 }) {
+            v.stopLoading()
+            v.navigationDelegate = nil
+            v.uiDelegate = nil
+            v.window?.close()
+        }
+        popups = []
         webView = nil
+        store?.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {}
         cont.resume(with: result)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationAction: WKNavigationAction,
+        decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
+    ) {
+        guard let url = navigationAction.request.url else { return decisionHandler(.cancel) }
+        decisionHandler(ElevenLabsWebSession.isAllowedNavigation(url) ? .allow : .cancel)
+    }
+
+    /// Popups (e.g. Google sign-in) open in a child window sharing the configuration, only when allowed.
+    func webView(
+        _ webView: WKWebView,
+        createWebViewWith configuration: WKWebViewConfiguration,
+        for navigationAction: WKNavigationAction,
+        windowFeatures: WKWindowFeatures
+    ) -> WKWebView? {
+        guard continuation != nil, let url = navigationAction.request.url,
+              ElevenLabsWebSession.isAllowedNavigation(url) else { return nil }
+        let popup = WKWebView(frame: NSRect(x: 0, y: 0, width: 480, height: 640), configuration: configuration)
+        popup.isInspectable = false
+        popup.navigationDelegate = self
+        popup.uiDelegate = self
+        let w = NSWindow(contentRect: popup.frame, styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
+        w.title = "Sign in"
+        w.contentView = popup
+        w.isReleasedWhenClosed = false
+        w.center()
+        w.makeKeyAndOrderFront(nil)
+        popups.append(popup)
+        return popup
+    }
+
+    func webViewDidClose(_ webView: WKWebView) {
+        popups.removeAll { $0 === webView }
+        webView.window?.close()
     }
 
     func windowWillClose(_ notification: Notification) {
