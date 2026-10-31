@@ -37,7 +37,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             addCodex: { addAccount.show(codex: true) },
             addClaudeCode: { addAccount.show(claudeCode: true) },
             addGoogle: { addAccount.show(google: true) },
-            addGrok: { addAccount.show(grok: true) }
+            addGrok: { addAccount.show(grok: true) },
+            addElevenLabs: { addAccount.show(elevenLabs: true) }
         )
         let backend = settingsBackend
         historyWindow = HistoryWindowController(engine: engine) { await backend.load().entries }
@@ -70,6 +71,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
                 if id.kind == .google { self?.addAccount.show(google: true); return }
                 // Grok has no reauth: signing in again is Add Account (same remote id upserts).
                 if id.kind == .grok { self?.addAccount.show(grok: true); return }
+                // ElevenLabs has no reauth either: a new web sign-in upserts the same uid.
+                if id.kind == .elevenlabs { self?.addAccount.show(elevenLabs: true); return }
                 self?.settings.show(tab: .accounts)
                 self?.settings.model.reauth(id)
             },

@@ -37,6 +37,7 @@ struct AddAccountSheet: View {
             bigButton("Codex", "terminal", enabled: true) { model.addCodex() }
             bigButton("Google AI", "g.circle", enabled: true) { model.addGoogle() }
             bigButton("Grok", "bolt.horizontal", enabled: true) { model.addGrok() }
+            bigButton("ElevenLabs", "waveform", enabled: true) { model.addElevenLabs() }
         }
     }
 
@@ -112,7 +113,7 @@ struct AddAccountSheet: View {
             VStack(alignment: .leading, spacing: 10) {
                 Label(id.kind != .claude ? "Added" : "Signed in", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                 // Codex, Google, and Grok ids carry a remote account id: never shown.
-                Text(id.isClaudeCodeLocal ? "Claude Code (local, read-only). macOS will ask once for Keychain access: click Always Allow." : id.kind == .codex ? "Codex CLI login" : id.kind == .google ? "Google AI (Antigravity quota)" : id.kind == .grok ? "Grok (SuperGrok weekly pool)" : id.rawValue.split(separator: ":", maxSplits: 1).last.map(String.init) ?? id.rawValue)
+                Text(id.isClaudeCodeLocal ? "Claude Code (local, read-only). macOS will ask once for Keychain access: click Always Allow." : id.kind == .codex ? "Codex CLI login" : id.kind == .google ? "Google AI (Antigravity quota)" : id.kind == .grok ? "Grok (SuperGrok weekly pool)" : id.kind == .elevenlabs ? "ElevenLabs (character quota)" : id.rawValue.split(separator: ":", maxSplits: 1).last.map(String.init) ?? id.rawValue)
                     .font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
                 if let snap = appState.snapshots[id] {
                     ForEach(Array(snap.meters.enumerated()), id: \.offset) { _, m in
@@ -202,7 +203,7 @@ final class AddAccountWindowController {
         self.appState = appState
     }
 
-    func show(copilot: Bool = false, pick: String? = nil, codex: Bool = false, claudeCode: Bool = false, google: Bool = false, grok: Bool = false) {
+    func show(copilot: Bool = false, pick: String? = nil, codex: Bool = false, claudeCode: Bool = false, google: Bool = false, grok: Bool = false, elevenLabs: Bool = false) {
         if let window, model?.state.isWaiting == true || window.isVisible {
             window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
@@ -210,7 +211,7 @@ final class AddAccountWindowController {
         }
         let model = AddAccountModel(engine: engine)
         self.model = model
-        if claudeCode { model.addClaudeCodeLocal() } else if google { model.addGoogle() } else if grok { model.addGrok() } else if codex { model.addCodex() } else if let pick { model.addCopilot(pick) } else if copilot { model.loadLogins() }
+        if claudeCode { model.addClaudeCodeLocal() } else if google { model.addGoogle() } else if grok { model.addGrok() } else if elevenLabs { model.addElevenLabs() } else if codex { model.addCodex() } else if let pick { model.addCopilot(pick) } else if copilot { model.loadLogins() }
         let view = AddAccountSheet(model: model, appState: appState) { [weak self] in self?.window?.close() }
         let w = NSWindow(contentViewController: NSHostingController(rootView: view))
         w.title = "Add Account"
