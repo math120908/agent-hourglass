@@ -395,4 +395,19 @@ struct AccountServiceTests {
         #expect(clients.all.isEmpty)
         #expect(await registry.accounts().isEmpty)
     }
+
+    @Test func addElevenLabsStoresInExtRegistry() async throws {
+        let (svc, store, registry) = try make([])
+        let cred = Credential(kind: .elevenlabs, access: Secret("e1"), refresh: Secret("r1"), expiresAt: nil, refreshExpiresAt: nil, scopes: [], remoteAccountID: "uid-1", accountEmail: "pat@example.com")
+        let id = try await svc.addElevenLabs(credential: cred)
+        #expect(id == AccountID(kind: .elevenlabs, remoteID: "uid-1"))
+        #expect(try store.read(id)?.access.reveal() == "e1")
+        #expect(await registry.accounts().first { $0.id == id }?.displayName == "pat@example.com")
+        #expect(try String(contentsOf: registry.extURL, encoding: .utf8).contains("elevenlabs:uid-1"))
+        let main = try JSONSerialization.jsonObject(with: Data(contentsOf: registry.url)) as? [String: Any]
+        #expect((main?["accounts"] as? [Any])?.isEmpty == true)
+        await #expect(throws: AccountServiceError.missingAccountID) {
+            try await svc.addElevenLabs(credential: Credential(kind: .grok, access: Secret("x"), refresh: nil, expiresAt: nil, refreshExpiresAt: nil, scopes: [], remoteAccountID: "uid-2"))
+        }
+    }
 }

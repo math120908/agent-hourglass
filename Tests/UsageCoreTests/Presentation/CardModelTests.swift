@@ -122,6 +122,23 @@ import Testing
         #expect(h?.detailText == "62,500 / 250,000 credits (≈ $625 / $2,500)")
         #expect(h?.resetText == "Resets Feb 1")
     }
+    @Test func elevenLabsCredits() {
+        let m = Meter(kind: .window, label: "Credits", percentUsed: 0.2, used: 200, limit: 130_539,
+                      unit: "credits", resetsAt: now.addingTimeInterval(10 * 86400), windowLength: .seconds(2_592_000))
+        let id = AccountID(kind: .elevenlabs, remoteID: "u1")
+        let h = make(UsageSnapshot(accountID: id, fetchedAt: now, plan: "Creator", meters: [m]), .fresh, .elevenlabs).headline
+        #expect(h?.detailText == "200 / 130,539 credits")
+    }
+    @Test func claudeWeeklyOnlyHeadline() {
+        let c = make(claude([weekly(6, resetsIn: 6 * 86400)], plan: nil))
+        #expect(c.headline?.percentText == "6%")
+        #expect(c.secondary == nil)
+    }
+    @Test func claudeSessionStillPreferred() {
+        let c = make(claude([session(40, resetsIn: 3600), weekly(6, resetsIn: 6 * 86400)]))
+        #expect(c.headline?.percentText == "40%")
+        #expect(c.secondary == "Wk 6%")
+    }
     @Test func copilotZeroEntitlement() {
         let s = UsageSnapshot(accountID: copilotID, fetchedAt: now, meters: [premium(used: 0, limit: 0)])
         let h = make(s, .fresh, .copilot).headline

@@ -67,6 +67,8 @@ final class AddAccountModel {
     private(set) var isGoogle = false
 
     private(set) var isGrok = false
+
+    private(set) var isElevenLabs = false
     /// The Grok device code being waited on; shown in the sheet and copied by "Copy code".
     private(set) var devicePrompt: DeviceCodePrompt?
 
@@ -89,7 +91,7 @@ final class AddAccountModel {
     }
 
     func retry() {
-        if isClaudeCode { addClaudeCodeLocal() } else if isGoogle { addGoogle() } else if isGrok { addGrok() } else if isCodex { addCodex() } else if let copilotLogin { addCopilot(copilotLogin) } else { start() }
+        if isClaudeCode { addClaudeCodeLocal() } else if isGoogle { addGoogle() } else if isGrok { addGrok() } else if isElevenLabs { addElevenLabs() } else if isCodex { addCodex() } else if let copilotLogin { addCopilot(copilotLogin) } else { start() }
     }
 
     /// Adds the Codex CLI's ChatGPT login from ~/.codex/auth.json (read-only, no browser).
@@ -175,6 +177,38 @@ final class AddAccountModel {
         }
     }
 
+    /// ElevenLabs login: sign in inside a throwaway web view, then mint a fresh ID token from the
+    /// Firebase refresh token the page stored, and add the account.
+    func addElevenLabs() {
+        guard state.begin() else {
+            state = .failed("Sign-in already in progress")
+            return
+        }
+        resetFlow()
+        isElevenLabs = true
+        step = .flow
+        task = Task { [engine] in
+            do {
+                let session = try await ElevenLabsWebLogin().signIn()
+                try Task.checkCancellation()
+                guard let cred = try await ElevenLabsProvider().refresh(credential: session.seedCredential, http: HTTPClient()) else {
+                    throw ProviderError.invalidGrant
+                }
+                state = .success(try await engine.addElevenLabs(credential: cred))
+            } catch is CancellationError {
+                state = .idle
+                step = .provider
+            } catch {
+                if Task.isCancelled {
+                    state = .idle
+                    step = .provider
+                } else {
+                    state = AddFlowState.deviceFailure(error)
+                }
+            }
+        }
+    }
+
     func addCopilot(_ login: String) {
         guard state.begin() else {
             state = .failed("Sign-in already in progress")
@@ -199,6 +233,7 @@ final class AddAccountModel {
         isClaudeCode = false
         isGoogle = false
         isGrok = false
+        isElevenLabs = false
         devicePrompt = nil
     }
 

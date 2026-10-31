@@ -193,6 +193,14 @@ final class UsageEngine {
         return id
     }
 
+    /// Adds an ElevenLabs account from a finished web sign-in (`ElevenLabsWebLogin`).
+    func addElevenLabs(credential: Credential) async throws -> AccountID {
+        guard let service, let registry else { throw AccountServiceError.unknownAccount }
+        let id = try await service.addElevenLabs(credential: credential)
+        publish(await registry.accounts())
+        return id
+    }
+
     /// Adds the read-only Claude Code (local) account. The first poll triggers the Keychain prompt.
     func addClaudeCodeLocal() async throws -> AccountID {
         guard let service, let registry else { throw AccountServiceError.unknownAccount }
@@ -303,6 +311,16 @@ final class UsageEngine {
             return AccountClient(
                 id: id,
                 provider: GrokProvider(),
+                http: HTTPClient(),
+                store: store,
+                clock: ContinuousClock(),
+                now: { Date() }
+            )
+        }
+        if id.kind == .elevenlabs {
+            return AccountClient(
+                id: id,
+                provider: ElevenLabsProvider(),
                 http: HTTPClient(),
                 store: store,
                 clock: ContinuousClock(),

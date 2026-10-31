@@ -34,6 +34,7 @@ enum AccountCatalog {
         case .copilot: "GitHub Copilot"
         case .google: "Google AI"
         case .grok: "Grok"
+        case .elevenlabs: "ElevenLabs"
         }
     }
 

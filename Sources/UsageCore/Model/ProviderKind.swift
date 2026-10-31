@@ -1,6 +1,6 @@
 import Foundation
 
-public enum ProviderKind: String, Codable, Sendable { case claude, copilot, codex, google, grok }
+public enum ProviderKind: String, Codable, Sendable { case claude, copilot, codex, google, grok, elevenlabs }
 
 extension ProviderKind {
     /// Kinds whose meters are server-sized `.window` rows (Codex-style). New kinds default to true.
@@ -17,6 +17,7 @@ extension ProviderKind {
         case .google: URL(string: "https://gemini.google.com/usage")
         case .copilot: URL(string: "https://github.com/settings/billing")
         case .grok: URL(string: "https://grok.com")
+        case .elevenlabs: URL(string: "https://elevenlabs.io/app/subscription")
         }
     }
 }

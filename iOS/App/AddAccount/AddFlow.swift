@@ -33,6 +33,7 @@ enum AddFlow: Identifiable, Equatable {
         case .copilot: nil
         case .google: googleConfigured ? .google : nil
         case .grok: .grok
+        case .elevenlabs: nil
         }
     }
 }

@@ -43,10 +43,10 @@ public struct CardModel: Equatable, Sendable {
     ) -> CardModel {
         let ctx = Ctx(now: now, calendar: calendar, locale: locale)
         let meters = (snapshot?.meters ?? []).filter(isVisible)
-        let headlineKind: Meter.Kind = kind == .claude ? .session5h : kind.usesWindowMeters ? .window : .copilotPremium
+        let headline = headlineMeter(meters, kind: kind)
         return CardModel(
-            headline: meters.first { $0.kind == headlineKind }.map { ctx.row($0) },
-            secondary: secondary(meters, kind: kind),
+            headline: headline.map { ctx.row($0) },
+            secondary: headline?.kind == .weeklyAll ? nil : secondary(meters, kind: kind),
             rows: meters.map { ctx.row($0) },
             spend: snapshot?.spend.map(spendRow),
             planTag: Formatting.planTag(snapshot?.plan),
@@ -54,6 +54,15 @@ public struct CardModel: Equatable, Sendable {
             updatedText: snapshot.map { ctx.updated($0.fetchedAt) } ?? "No data yet",
             isDimmed: !(status == .fresh || status == .noData)
         )
+    }
+
+    /// Claude: the 5-hour session, or weekly-all on plans without a session limit (verified Ultra).
+    static func headlineMeter(_ meters: [Meter], kind: ProviderKind) -> Meter? {
+        switch kind {
+        case .claude: meters.first { $0.kind == .session5h } ?? meters.first { $0.kind == .weeklyAll }
+        case .copilot: meters.first { $0.kind == .copilotPremium }
+        default: meters.first { $0.kind == .window }
+        }
     }
 
     /// Claude: weekly-all percent. Window kinds: the first later window whose length differs from the headline's, captioned from its length.
@@ -94,6 +103,7 @@ public struct CardModel: Equatable, Sendable {
             case .claude: return "Sign in again"
             case .google: return "Sign in again"
             case .grok: return "Sign in again"
+            case .elevenlabs: return "Sign in again"
             }
         case .codexNotSignedIn: return "Run `codex` to sign in"
         case .claudeCodeNotSignedIn: return "Claude Code not signed in"
@@ -152,6 +162,9 @@ public struct CardModel: Equatable, Sendable {
                     row.detailText = "\(Formatting.grouped(used)) / \(Formatting.grouped(total)) credits"
                         + " (≈ $\(dollars(used)) / $\(dollars(total)))"
                 }
+            } else if m.kind == .window, let unit = m.unit, let limit = m.limit, limit > 0 {
+                let used = Int((m.used ?? 0).rounded()), total = Int(limit.rounded())
+                row.detailText = "\(Formatting.grouped(used)) / \(Formatting.grouped(total)) \(unit)"
             }
             return row
         }

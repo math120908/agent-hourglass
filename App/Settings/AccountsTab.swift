@@ -10,6 +10,7 @@ struct AccountsTab: View {
     var addClaudeCode: () -> Void = {}
     var addGoogle: () -> Void = {}
     var addGrok: () -> Void = {}
+    var addElevenLabs: () -> Void = {}
     @State private var pendingRemoval: AccountEntry?
 
     var body: some View {
@@ -48,6 +49,7 @@ struct AccountsTab: View {
                     Button(action: addCodex) { Label { Text("Codex") } icon: { ProviderIcon(kind: .codex) } }
                     Button(action: addGoogle) { Label { Text("Google AI") } icon: { ProviderIcon(kind: .google) } }
                     Button(action: addGrok) { Label { Text("Grok") } icon: { ProviderIcon(kind: .grok) } }
+                    Button(action: addElevenLabs) { Label { Text("ElevenLabs") } icon: { ProviderIcon(kind: .elevenlabs) } }
                 } label: {
                     Label("Add Account", systemImage: "plus")
                 }
@@ -85,6 +87,8 @@ struct AccountsTab: View {
             "This deletes the account's saved sign-in and its usage history from this Mac. ~/.gemini and the Antigravity app are not touched. To revoke the token, remove Antigravity at myaccount.google.com/permissions."
         case .grok:
             "This deletes the account's saved sign-in and its usage history from this Mac. ~/.grok and your grok CLI login are not touched."
+        case .elevenlabs:
+            "This deletes the account's saved sign-in and its usage history from this Mac. Your elevenlabs.io browser session is not touched."
         }
     }
 }

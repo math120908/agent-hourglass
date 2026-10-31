@@ -87,6 +87,18 @@ enum Fixtures {
                 Meter(kind: .window, label: "Chat, weekly", percentUsed: 12, resetsAt: grokReset, windowLength: week, pool: "chat"),
             ]
         )
+        // Mirrors Tests/UsageCoreTests/Fixtures/elevenlabs-creator.json as ElevenLabsProvider.decode reads it.
+        let elevenID = AccountID(kind: .elevenlabs, remoteID: "acct-synthetic")
+        let month = Duration.seconds(2_592_000)
+        let eleven = UsageSnapshot(
+            accountID: elevenID,
+            fetchedAt: fetched,
+            plan: "Creator",
+            meters: [
+                Meter(kind: .window, label: "Characters", percentUsed: 0.2, used: 200, limit: 130_539, unit: "characters",
+                      resetsAt: now.addingTimeInterval(18 * 86_400), windowLength: month),
+            ]
+        )
         return PopoverContent(
             accounts: [
                 PopoverAccount(id: claudeID, name: "Snorlax", kind: .claude, snapshot: claude, status: .fresh),
@@ -94,6 +106,7 @@ enum Fixtures {
                 PopoverAccount(id: codexID, name: "Mewtwo", kind: .codex, snapshot: codex, status: .fresh),
                 PopoverAccount(id: googleID, name: "Togepi", kind: .google, snapshot: google, status: .fresh),
                 PopoverAccount(id: grokID, name: "Zapdos", kind: .grok, snapshot: grok, status: .fresh),
+                PopoverAccount(id: elevenID, name: "Jigglypuff", kind: .elevenlabs, snapshot: eleven, status: .fresh),
             ],
             isOffline: false,
             now: now,

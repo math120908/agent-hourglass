@@ -170,6 +170,19 @@ public actor AccountService {
         return id
     }
 
+    /// Adds an ElevenLabs account from a Firebase web-session credential. `remoteAccountID` (the Firebase uid)
+    /// is the stable id; an id already in the registry is a re-auth. The login email is the default name.
+    @discardableResult
+    public func addElevenLabs(credential: Credential) async throws -> AccountID {
+        guard credential.kind == .elevenlabs, let remote = credential.remoteAccountID, !remote.isEmpty else {
+            throw AccountServiceError.missingAccountID
+        }
+        let id = AccountID(kind: .elevenlabs, remoteID: remote)
+        let email = credential.accountEmail.flatMap { $0.isEmpty ? nil : $0 }
+        try await commit(credential, id: id, kind: .elevenlabs, defaultName: { $0 == 1 ? "ElevenLabs" : "ElevenLabs #\($0)" }, autoName: email, remoteLogin: nil)
+        return id
+    }
+
     /// Adds the read-only Claude Code (local) account. Writes only the registry; the first poll reads the Keychain.
     /// `name` is the user name Claude Code reports (Mac: `ClaudeCodeProfile`); nil keeps the old or default name.
     @discardableResult

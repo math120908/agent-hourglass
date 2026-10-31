@@ -35,9 +35,12 @@ public struct IconState: Equatable, Sendable {
         guard let id = candidates.first(where: { snapshots[$0] != nil || statuses[$0] != nil }) else { return .empty }
         let meter = snapshots[id]?.meters.first { $0.kind == .session5h }
             ?? snapshots[id]?.meters.first { $0.kind == .window }
+            ?? snapshots[id]?.meters.first { $0.kind == .weeklyAll }
             ?? snapshots[id]?.meters.first { $0.kind == .copilotPremium && !$0.isUnlimited && ($0.limit ?? 0) > 0 }
         let caption: String
-        if meter?.kind == .window, let s = meter?.windowSeconds {
+        if meter?.kind == .weeklyAll {
+            caption = "WK"
+        } else if meter?.kind == .window, let s = meter?.windowSeconds {
             caption = Meter.windowCaption(seconds: s)
         } else {
             caption = meter?.kind == .copilotPremium || id.kind == .copilot ? "PR" : "5H"
@@ -45,7 +48,7 @@ public struct IconState: Equatable, Sendable {
         let percent = meter?.percentUsed.map { Int(min(100, max(0, $0)).rounded()) }
         let pace = meter?.paceFraction(now: now).map { Int(($0 * 100).rounded()) }
         let second = id.kind?.usesWindowMeters == true ? snapshots[id].flatMap { CardModel.secondWindow($0.meters) } : nil
-        let weekly = (second ?? snapshots[id]?.meters.first { $0.kind == .weeklyAll })?.percentUsed
+        let weekly = meter?.kind == .weeklyAll ? nil : (second ?? snapshots[id]?.meters.first { $0.kind == .weeklyAll })?.percentUsed
             .map { Int(min(100, max(0, $0)).rounded()) }
         let level: Level
         switch statuses[id] ?? .fresh {
