@@ -2,7 +2,7 @@ import SwiftUI
 import UsageCore
 
 /// Provider logo from the asset catalog (Simple Icons, CC0). Template-rendered so callers pick the color.
-/// Copilot is not on iOS and gets a neutral SF Symbol.
+/// Copilot is not on iOS and gets a neutral SF Symbol; ElevenLabs uses the `waveform` SF Symbol.
 struct ProviderIcon: View {
     let kind: ProviderKind
     var size: CGFloat = 12
@@ -17,7 +17,9 @@ struct ProviderIcon: View {
     }
 
     private var image: Image {
-        if let name = Self.assetName(kind) { Image(name) } else { Image(systemName: "circle.dashed") }
+        if kind == .elevenlabs { return Image(systemName: "waveform") }
+        if let name = Self.assetName(kind) { return Image(name) }
+        return Image(systemName: "circle.dashed")
     }
 
     static func assetName(_ kind: ProviderKind) -> String? {
@@ -27,6 +29,7 @@ struct ProviderIcon: View {
         case .copilot: nil
         case .google: "ProviderGoogle"
         case .grok: "ProviderGrok"
+        case .elevenlabs: nil
         }
     }
 
@@ -37,6 +40,7 @@ struct ProviderIcon: View {
         case .copilot: "Unsupported provider"
         case .google: "Google AI"
         case .grok: "Grok"
+        case .elevenlabs: "ElevenLabs"
         }
     }
 }

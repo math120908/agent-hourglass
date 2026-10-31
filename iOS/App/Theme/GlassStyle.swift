@@ -33,6 +33,7 @@ enum GlassStyle {
         case .codex: codex
         case .google: Color(red: 0.26, green: 0.52, blue: 0.96)
         case .grok: Color(red: 0.42, green: 0.45, blue: 0.52)
+        case .elevenlabs: Color(red: 0.30, green: 0.30, blue: 0.32)
         }
     }
 

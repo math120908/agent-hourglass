@@ -128,6 +128,7 @@ struct InstrumentMeterGrid: View {
             case .codex: return Color(red: 0.72, green: 0.96, blue: 0.93)
             case .google: return Color(red: 0.78, green: 0.86, blue: 1.0)
             case .grok: return Color(red: 0.86, green: 0.88, blue: 0.92)
+            case .elevenlabs: return Color(red: 0.90, green: 0.90, blue: 0.92)
             }
         case .warning: return Color(red: 1.0, green: 0.82, blue: 0.45)
         case .critical: return InstrumentAccountRow.darkCritical

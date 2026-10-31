@@ -309,6 +309,16 @@ final class UsageEngine {
                 now: { Date() }
             )
         }
+        if id.kind == .elevenlabs {
+            return AccountClient(
+                id: id,
+                provider: ElevenLabsProvider(),
+                http: HTTPClient(),
+                store: store,
+                clock: ContinuousClock(),
+                now: { Date() }
+            )
+        }
         if id.kind == .copilot {
             return AccountClient(
                 id: id,

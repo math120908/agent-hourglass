@@ -85,6 +85,8 @@ struct AccountsTab: View {
             "This deletes the account's saved sign-in and its usage history from this Mac. ~/.gemini and the Antigravity app are not touched. To revoke the token, remove Antigravity at myaccount.google.com/permissions."
         case .grok:
             "This deletes the account's saved sign-in and its usage history from this Mac. ~/.grok and your grok CLI login are not touched."
+        case .elevenlabs:
+            "This deletes the account's saved sign-in and its usage history from this Mac. Your elevenlabs.io browser session is not touched."
         }
     }
 }

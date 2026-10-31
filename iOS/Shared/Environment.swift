@@ -48,6 +48,7 @@ struct UsageEnvironment: Sendable {
             guard googleConfigured else { return nil }
             provider = GoogleProvider(client: BundleGoogleOAuthClient())
         case .grok: provider = GrokProvider()
+        case .elevenlabs: provider = ElevenLabsProvider()
         }
         return AccountClient(
             id: id,

@@ -7,7 +7,7 @@ struct ProviderIcon: View {
     var size: CGFloat = 12
 
     var body: some View {
-        Image(Self.assetName(kind))
+        Self.image(kind)
             .renderingMode(.template)
             .resizable()
             .aspectRatio(contentMode: .fit)
@@ -15,13 +15,19 @@ struct ProviderIcon: View {
             .accessibilityLabel(Self.label(kind))
     }
 
-    static func assetName(_ kind: ProviderKind) -> String {
+    /// ElevenLabs ships no asset; the `waveform` SF Symbol stands in.
+    static func image(_ kind: ProviderKind) -> Image {
+        assetName(kind).map { Image($0) } ?? Image(systemName: "waveform")
+    }
+
+    static func assetName(_ kind: ProviderKind) -> String? {
         switch kind {
         case .claude: "ProviderClaude"
         case .copilot: "ProviderCopilot"
         case .codex: "ProviderCodex"
         case .google: "ProviderGoogle"
         case .grok: "ProviderGrok"
+        case .elevenlabs: nil
         }
     }
 
@@ -32,6 +38,7 @@ struct ProviderIcon: View {
         case .codex: "Codex"
         case .google: "Google AI"
         case .grok: "Grok"
+        case .elevenlabs: "ElevenLabs"
         }
     }
 }
