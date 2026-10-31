@@ -58,27 +58,45 @@ struct ElevenLabsWebSessionHostTests {
     @Test(arguments: [
         "https://elevenlabs.io/app/sign-in",
         "https://api.elevenlabs.io/x",
-        "https://accounts.google.com/o/oauth2/auth",
-        "https://xi-labs.firebaseapp.com/__/auth/handler",
         "about:blank",
     ])
-    func allowed(_ s: String) {
-        #expect(ElevenLabsWebSession.isAllowedNavigation(URL(string: s)!))
+    func allowedMainFrame(_ s: String) {
+        #expect(ElevenLabsWebSession.isAllowedNavigation(URL(string: s)!, isMainFrame: true))
     }
 
     @Test(arguments: [
         "http://elevenlabs.io/app/sign-in",
         "https://evilelevenlabs.io/",
         "https://elevenlabs.io.evil.com/",
-        "http://accounts.google.com/",
+        "https://accounts.google.com/o/oauth2/auth",
+        "https://xi-labs.firebaseapp.com/__/auth/handler",
+        "https://newassets.hcaptcha.com/captcha/v1/",
         "https://evil.com/",
-        "https://xi-labs.firebaseapp.com/other",
-        "https://firebaseapp.com/__/auth/handler",
         "about:srcdoc",
         "javascript:alert(1)",
         "file:///etc/passwd",
     ])
-    func refused(_ s: String) {
-        #expect(!ElevenLabsWebSession.isAllowedNavigation(URL(string: s)!))
+    func refusedMainFrame(_ s: String) {
+        #expect(!ElevenLabsWebSession.isAllowedNavigation(URL(string: s)!, isMainFrame: true))
+    }
+
+    @Test(arguments: [
+        "https://newassets.hcaptcha.com/captcha/v1/",
+        "https://challenges.cloudflare.com/turnstile/v0/",
+        "https://elevenlabs.io/app/sign-in",
+        "about:blank",
+    ])
+    func allowedSubframe(_ s: String) {
+        #expect(ElevenLabsWebSession.isAllowedNavigation(URL(string: s)!, isMainFrame: false))
+    }
+
+    @Test(arguments: [
+        "http://newassets.hcaptcha.com/captcha/v1/",
+        "about:srcdoc",
+        "javascript:alert(1)",
+        "file:///etc/passwd",
+    ])
+    func refusedSubframe(_ s: String) {
+        #expect(!ElevenLabsWebSession.isAllowedNavigation(URL(string: s)!, isMainFrame: false))
     }
 }

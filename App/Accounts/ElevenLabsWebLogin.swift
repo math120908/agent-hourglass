@@ -6,8 +6,10 @@ import WebKit
 /// sign-in page and polls for the Firebase auth user the page stores once signed in. The refresh token
 /// read there is exchanged at once for a fresh ID token; nothing from the page is logged or persisted.
 @MainActor
-final class ElevenLabsWebLogin: NSObject, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate {
+final class ElevenLabsWebLogin: NSObject, NSWindowDelegate, WKNavigationDelegate {
     static let signInURL = URL(string: "https://elevenlabs.io/app/sign-in")!
+    static let notice = "Sign in with email and password. Google, Apple and SSO sign-in aren't supported here; "
+        + "set a password at elevenlabs.io first if you use those."
 
     /// Collects every `firebase:authUser:*` value from localStorage and Firebase's IndexedDB store.
     private static let probeScript = """
@@ -40,7 +42,6 @@ final class ElevenLabsWebLogin: NSObject, NSWindowDelegate, WKNavigationDelegate
 
     private var window: NSWindow?
     private var webView: WKWebView?
-    private var popups: [WKWebView] = []
     private var timer: Timer?
     private var continuation: CheckedContinuation<ElevenLabsWebSession, any Error>?
 
@@ -63,10 +64,29 @@ final class ElevenLabsWebLogin: NSObject, NSWindowDelegate, WKNavigationDelegate
         let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 480, height: 720), configuration: config)
         web.isInspectable = false
         web.navigationDelegate = self
-        web.uiDelegate = self
-        let w = NSWindow(contentRect: web.frame, styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-        w.title = "Sign in to ElevenLabs"
-        w.contentView = web
+        // uiDelegate stays nil: popups (Google / Apple / SSO sign-in) are intentionally unsupported.
+        // Google refuses embedded web views anyway, and every extra window widens the attack surface.
+        let label = NSTextField(wrappingLabelWithString: Self.notice)
+        label.font = .systemFont(ofSize: NSFont.smallSystemFontSize)
+        label.textColor = .secondaryLabelColor
+        let stack = NSStackView(views: [label, web])
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 8
+        stack.edgeInsets = NSEdgeInsets(top: 10, left: 0, bottom: 0, right: 0)
+        label.leadingAnchor.constraint(equalTo: stack.leadingAnchor, constant: 12).isActive = true
+        label.trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: -12).isActive = true
+        web.leadingAnchor.constraint(equalTo: stack.leadingAnchor).isActive = true
+        web.trailingAnchor.constraint(equalTo: stack.trailingAnchor).isActive = true
+        web.setContentHuggingPriority(.defaultLow, for: .vertical)
+        let w = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 770),
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        w.title = "ElevenLabs"
+        w.contentView = stack
         w.isReleasedWhenClosed = false
         w.delegate = self
         w.center()
@@ -97,13 +117,8 @@ final class ElevenLabsWebLogin: NSObject, NSWindowDelegate, WKNavigationDelegate
         w?.delegate = nil
         w?.close()
         let store = webView?.configuration.websiteDataStore
-        for v in popups + [webView].compactMap({ $0 }) {
-            v.stopLoading()
-            v.navigationDelegate = nil
-            v.uiDelegate = nil
-            v.window?.close()
-        }
-        popups = []
+        webView?.stopLoading()
+        webView?.navigationDelegate = nil
         webView = nil
         store?.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {}
         cont.resume(with: result)
@@ -115,35 +130,20 @@ final class ElevenLabsWebLogin: NSObject, NSWindowDelegate, WKNavigationDelegate
         decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
     ) {
         guard let url = navigationAction.request.url else { return decisionHandler(.cancel) }
-        decisionHandler(ElevenLabsWebSession.isAllowedNavigation(url) ? .allow : .cancel)
+        // targetFrame is nil for a new-window request: treat it as main frame.
+        let isMainFrame = navigationAction.targetFrame?.isMainFrame != false
+        if ElevenLabsWebSession.isAllowedNavigation(url, isMainFrame: isMainFrame) {
+            return decisionHandler(.allow)
+        }
+        if isMainFrame, navigationAction.navigationType == .linkActivated,
+           ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
+            NSWorkspace.shared.open(url)
+        }
+        decisionHandler(.cancel)
     }
 
-    /// Popups (e.g. Google sign-in) open in a child window sharing the configuration, only when allowed.
-    func webView(
-        _ webView: WKWebView,
-        createWebViewWith configuration: WKWebViewConfiguration,
-        for navigationAction: WKNavigationAction,
-        windowFeatures: WKWindowFeatures
-    ) -> WKWebView? {
-        guard continuation != nil, let url = navigationAction.request.url,
-              ElevenLabsWebSession.isAllowedNavigation(url) else { return nil }
-        let popup = WKWebView(frame: NSRect(x: 0, y: 0, width: 480, height: 640), configuration: configuration)
-        popup.isInspectable = false
-        popup.navigationDelegate = self
-        popup.uiDelegate = self
-        let w = NSWindow(contentRect: popup.frame, styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
-        w.title = "Sign in"
-        w.contentView = popup
-        w.isReleasedWhenClosed = false
-        w.center()
-        w.makeKeyAndOrderFront(nil)
-        popups.append(popup)
-        return popup
-    }
-
-    func webViewDidClose(_ webView: WKWebView) {
-        popups.removeAll { $0 === webView }
-        webView.window?.close()
+    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        window?.title = webView.url?.host.map { "ElevenLabs \u{2014} \($0)" } ?? "ElevenLabs"
     }
 
     func windowWillClose(_ notification: Notification) {
