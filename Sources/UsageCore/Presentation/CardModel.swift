@@ -94,6 +94,7 @@ public struct CardModel: Equatable, Sendable {
             case .claude: return "Sign in again"
             case .google: return "Sign in again"
             case .grok: return "Sign in again"
+            case .elevenlabs: return "Sign in again"
             }
         case .codexNotSignedIn: return "Run `codex` to sign in"
         case .claudeCodeNotSignedIn: return "Claude Code not signed in"
