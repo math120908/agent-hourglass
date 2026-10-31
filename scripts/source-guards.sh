@@ -75,9 +75,11 @@ nocomment() { rg -v '^[^:]+:[0-9]+:\s*//'; }
 # Any attributes (with arguments) and access level before import, any import kind, after ; too;
 # any WK* type, SwiftUI WebPage/WebView, any SFSafari* type (persistent cookie store).
 # ASWebAuthenticationSession lives in AuthenticationServices: allowed, but see [ephemeral].
+# One exemption: the ElevenLabs sign-in view, held to [elevenlabs-web] below.
+ELWEB='iOS/App/AddAccount/ElevenLabsSignInView.swift'
 out=$(rg -n -P -g '*.swift' \
   -e '(^|;)\s*((@\w+(\([^)]*\))?|public|package|internal|fileprivate|private)\s*)*\bimport\s+(\w+\s+)?(WebKit|SafariServices)\b' \
-  -e '\bWK[A-Z]\w*' -e '\bWeb(Page|View)\b' -e '\bSFSafari\w*' "${IOSLINKED[@]}" 2>/dev/null | nocomment)
+  -e '\bWK[A-Z]\w*' -e '\bWeb(Page|View)\b' -e '\bSFSafari\w*' "${IOSLINKED[@]}" 2>/dev/null | grep -v "^$ELWEB:" | nocomment)
 [ -n "$out" ] && report "[webkit] WebKit / WebView / SafariServices in iOS-linked code (sign in with ASWebAuthenticationSession):" "$out"
 # Allowlist: every UIPasteboard use must be UIPasteboard.general.hasStrings or a write
 # UIPasteboard.general.string = ...; aliases, split member access and any other API fail.
@@ -96,6 +98,20 @@ out=$(rg -n -g '*.swift' '\b[Ww]ebAuthenticationSession\b' Sources App iOS 2>/de
 # `X.prefersEphemeralWebBrowserSession = true` in code; no other mention, .init, Self, #if or KVC.
 if [ -f "$AUTH" ]; then
   out=$(perl scripts/guard-auth-session.pl "$AUTH" 2>&1) || report "[ephemeral] $AUTH must build only ephemeral sessions:" "$out"
+fi
+# The ElevenLabs web view: ephemeral store only, no cookie/script injection or inspection, one
+# probe call (the model's script), a navigation allowlist, exact-host matching, and no popups.
+if [ -f "$ELWEB" ]; then
+  rg -q -F '.nonPersistent()' "$ELWEB" || report "[elevenlabs-web] $ELWEB must use .nonPersistent():" "$ELWEB"
+  out=$(rg -n -F -e '.default()' -e 'httpCookieStore' -e 'WKHTTPCookieStore' -e 'WKUserScript' -e 'addUserScript' \
+    -e 'WKScriptMessageHandler' -e 'evaluateJavaScript' -e 'isInspectable = true' -e 'hasSuffix("elevenlabs.io")' \
+    -e 'createWebViewWith' "$ELWEB"; rg -n -P 'javaScriptCanOpenWindowsAutomatically\s*=\s*true' "$ELWEB")
+  [ -n "$out" ] && report "[elevenlabs-web] forbidden API or bare suffix host match in $ELWEB:" "$out"
+  n=$(rg -c -F 'callAsyncJavaScript(' "$ELWEB"); n=${n:-0}
+  if [ "$n" -ne 1 ] || ! rg -U -q 'callAsyncJavaScript\(\s*ElevenLabsSignInModel\.probeScript\b' "$ELWEB"; then
+    report "[elevenlabs-web] $ELWEB must call callAsyncJavaScript( exactly once, with ElevenLabsSignInModel.probeScript:" "found $n"
+  fi
+  rg -q -F 'decidePolicyFor' "$ELWEB" || report "[elevenlabs-web] $ELWEB must implement decidePolicyFor:" "$ELWEB"
 fi
 out=$(rg -n -g '*.swift' '\bdump\(' "${IOSSRC[@]}" 2>/dev/null)
 [ -n "$out" ] && report "[dump] dump( in iOS/:" "$out"

@@ -29,6 +29,26 @@ private struct MeterGallery: View {
         var h24 = base; h24.hour24 = .on
         var countdown = h24; countdown.resetStyle = .countdown
         var remaining = base; remaining.showRemaining = true; remaining.hour24 = .off
+        let month = Fixtures.now.addingTimeInterval(20 * 86_400)
+        let credits = Meter(
+            kind: .window,
+            label: "Credits",
+            percentUsed: 0.2,
+            used: 200,
+            limit: 130_539,
+            unit: "credits",
+            resetsAt: month,
+            windowLength: .seconds(30 * 86_400)
+        )
+        let premium = Meter(
+            kind: .copilotPremium,
+            label: "Premium requests",
+            percentUsed: 33.7,
+            used: 84_250,
+            limit: 250_000,
+            unit: "credits",
+            resetsAt: month
+        )
         return [
             Item(meter: all, settings: h24),
             Item(meter: all, settings: countdown),
@@ -36,6 +56,8 @@ private struct MeterGallery: View {
             Item(meter: eeveeWeekly, settings: h24),
             Item(meter: codex, settings: h24),
             Item(meter: session, settings: h24),
+            Item(meter: credits, settings: h24),
+            Item(meter: premium, settings: h24),
         ]
     }
 

@@ -66,14 +66,14 @@ struct MeterView: View {
                     }
                 }
                 Spacer()
-                Text(d.percentText)
+                Text(Self.percent(d))
                     .font(.system(size: d.fraction == nil ? 13 : 20, weight: .semibold).monospacedDigit())
                     .foregroundStyle(d.fraction == nil ? dim : glassTint(d.severity, color))
             }
             if d.fraction != nil {
                 GlassMeterBar(fraction: d.fraction, paceTick: d.paceTick, color: color)
             }
-            footer(left: d.resetText, right: d.paceText ?? "")
+            footers(Self.footerLines(d, theme: .glass))
         }
     }
 
@@ -89,7 +89,7 @@ struct MeterView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(instrumentLabel(d)).font(.system(size: 12))
                 Spacer(minLength: 10)
-                Text(d.percentText)
+                Text(Self.percent(d))
                     .font(.system(size: 12, weight: .semibold).monospacedDigit())
                     .foregroundStyle(d.fraction == nil ? dim : instrumentTint(d.severity))
             }
@@ -97,7 +97,7 @@ struct MeterView: View {
                 GlassMeterBar(fraction: d.fraction, paceTick: d.paceTick, color: GlassStyle.color(d.severity, kind), height: 4)
                     .padding(.top, 5)
             }
-            footer(left: d.resetText, right: d.paceText ?? (d.fraction == 0 ? "idle" : ""))
+            footers(Self.footerLines(d, theme: .instrument))
                 .padding(.top, 7)
         }
         .padding(.top, 9)
@@ -118,12 +118,58 @@ struct MeterView: View {
 
     private var dim: Color { scheme == .dark ? .white.opacity(0.90) : .secondary }
 
-    /// Footer line; the reset text toggles the reset style when a handler exists.
-    private func footer(left: String, right: String) -> some View {
+    /// One footer line. `resetSide` marks which side holds the reset text, which toggles the reset style.
+    struct FooterLine: Equatable {
+        enum Side: Equatable { case left, right }
+        var left: String
+        var right: String
+        var resetSide: Side?
+    }
+
+    /// Meters with used/limit detail (Copilot premium, ElevenLabs credits) keep one decimal (0.2%), as on Mac.
+    nonisolated static func percent(_ d: MeterDisplay) -> String {
+        guard d.detailText != nil, let f = d.fraction else { return d.percentText }
+        return String(format: "%.1f%%", f * 100)
+    }
+
+    /// Footer lines. Without detail: reset | pace. With detail (Mac `meterSection` / `InstrumentMeterGrid`):
+    /// "used / limit unit" | reset, then a "≈ $" line for Copilot. Instrument keeps the reset visible,
+    /// unlike Mac, and moves the money or pace text to the second line.
+    nonisolated static func footerLines(_ d: MeterDisplay, theme: Theme) -> [FooterLine] {
+        guard let detail = d.detailText else {
+            let right = theme == .instrument ? d.paceText ?? (d.fraction == 0 ? "idle" : "") : d.paceText ?? ""
+            return [FooterLine(left: d.resetText, right: right, resetSide: .left)]
+        }
+        let usage = String(detail.split(separator: " (≈").first ?? "")
+        let money = detail.range(of: "(≈ ").map { "≈ " + detail[$0.upperBound...].dropLast() }
+        var lines = [FooterLine(left: usage, right: d.resetText, resetSide: .right)]
+        switch theme {
+        case .glass:
+            if let money, let f = d.fraction {
+                let other = String(format: "%.1f%%", (1 - f) * 100)
+                lines.append(FooterLine(left: money, right: other + (d.isRemaining ? " used" : " remaining")))
+            } else if let money {
+                lines.append(FooterLine(left: money, right: ""))
+            }
+        case .instrument:
+            if money != nil || d.paceText != nil {
+                lines.append(FooterLine(left: money ?? "", right: d.paceText ?? ""))
+            }
+        }
+        return lines
+    }
+
+    private func footers(_ lines: [FooterLine]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in footer(line) }
+        }
+    }
+
+    private func footer(_ line: FooterLine) -> some View {
         HStack {
-            resetLabel(left)
+            if line.resetSide == .left { resetLabel(line.left) } else { Text(line.left).lineLimit(1) }
             Spacer(minLength: 6)
-            Text(right).lineLimit(1)
+            if line.resetSide == .right { resetLabel(line.right) } else { Text(line.right).lineLimit(1) }
         }
         .font(.system(size: 10.5).monospacedDigit())
         .glassTone()
