@@ -35,6 +35,23 @@ public struct ElevenLabsWebSession: Sendable, Equatable {
         return ElevenLabsWebSession(uid: uid, email: email, refreshToken: Secret(rt))
     }
 
+    /// True for exactly `elevenlabs.io` or a subdomain of it (case-insensitive); rejects lookalikes
+    /// such as `evilelevenlabs.io`. The sign-in probe only runs on these hosts.
+    public static func isProbeHost(_ host: String?) -> Bool {
+        guard let host = host?.lowercased() else { return false }
+        return host == "elevenlabs.io" || host.hasSuffix(".elevenlabs.io")
+    }
+
+    /// Navigation allowlist for the sign-in web view. Main frame (and new windows): https to
+    /// elevenlabs.io / *.elevenlabs.io, plus `about:blank`. Subframes (captcha / Cloudflare challenges):
+    /// any https. Google / Firebase hosts are deliberately absent: Google blocks embedded web views.
+    public static func isAllowedNavigation(_ url: URL, isMainFrame: Bool) -> Bool {
+        let scheme = url.scheme?.lowercased()
+        if scheme == "about" { return url.absoluteString.lowercased() == "about:blank" }
+        guard scheme == "https", let host = url.host, !host.isEmpty else { return false }
+        return !isMainFrame || isProbeHost(host)
+    }
+
     /// A refresh-only credential: `ElevenLabsProvider.refresh` mints the ID token from it.
     public var seedCredential: Credential {
         Credential(

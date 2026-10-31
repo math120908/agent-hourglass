@@ -44,3 +44,59 @@ struct ElevenLabsWebSessionTests {
         #expect(!c.description.contains("fake-rt"))
     }
 }
+
+struct ElevenLabsWebSessionHostTests {
+    @Test func probeHost() {
+        #expect(ElevenLabsWebSession.isProbeHost("elevenlabs.io"))
+        #expect(ElevenLabsWebSession.isProbeHost("ElevenLabs.IO"))
+        #expect(ElevenLabsWebSession.isProbeHost("app.elevenlabs.io"))
+        #expect(!ElevenLabsWebSession.isProbeHost("evilelevenlabs.io"))
+        #expect(!ElevenLabsWebSession.isProbeHost("elevenlabs.io.evil.com"))
+        #expect(!ElevenLabsWebSession.isProbeHost(nil))
+    }
+
+    @Test(arguments: [
+        "https://elevenlabs.io/app/sign-in",
+        "https://api.elevenlabs.io/x",
+        "about:blank",
+    ])
+    func allowedMainFrame(_ s: String) {
+        #expect(ElevenLabsWebSession.isAllowedNavigation(URL(string: s)!, isMainFrame: true))
+    }
+
+    @Test(arguments: [
+        "http://elevenlabs.io/app/sign-in",
+        "https://evilelevenlabs.io/",
+        "https://elevenlabs.io.evil.com/",
+        "https://accounts.google.com/o/oauth2/auth",
+        "https://xi-labs.firebaseapp.com/__/auth/handler",
+        "https://newassets.hcaptcha.com/captcha/v1/",
+        "https://evil.com/",
+        "about:srcdoc",
+        "javascript:alert(1)",
+        "file:///etc/passwd",
+    ])
+    func refusedMainFrame(_ s: String) {
+        #expect(!ElevenLabsWebSession.isAllowedNavigation(URL(string: s)!, isMainFrame: true))
+    }
+
+    @Test(arguments: [
+        "https://newassets.hcaptcha.com/captcha/v1/",
+        "https://challenges.cloudflare.com/turnstile/v0/",
+        "https://elevenlabs.io/app/sign-in",
+        "about:blank",
+    ])
+    func allowedSubframe(_ s: String) {
+        #expect(ElevenLabsWebSession.isAllowedNavigation(URL(string: s)!, isMainFrame: false))
+    }
+
+    @Test(arguments: [
+        "http://newassets.hcaptcha.com/captcha/v1/",
+        "about:srcdoc",
+        "javascript:alert(1)",
+        "file:///etc/passwd",
+    ])
+    func refusedSubframe(_ s: String) {
+        #expect(!ElevenLabsWebSession.isAllowedNavigation(URL(string: s)!, isMainFrame: false))
+    }
+}
