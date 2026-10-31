@@ -30,6 +30,7 @@ struct AddAccountItems: View {
         Button { present = .codex } label: { item("Codex", .codex) }
         if google { Button { present = .google } label: { item("Google AI", .google) } }
         Button { present = .grok } label: { item("Grok", .grok) }
+        Button { present = .elevenlabs } label: { item("ElevenLabs", .elevenlabs) }
     }
 
     private func item(_ title: String, _ kind: ProviderKind) -> some View {

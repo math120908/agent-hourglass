@@ -6,6 +6,7 @@ enum AddFlow: Identifiable, Equatable {
     case codex
     case google
     case grok
+    case elevenlabs
 
     var id: String {
         switch self {
@@ -13,6 +14,7 @@ enum AddFlow: Identifiable, Equatable {
         case .codex: "codex"
         case .google: "google"
         case .grok: "grok"
+        case .elevenlabs: "elevenlabs"
         }
     }
 
@@ -22,6 +24,7 @@ enum AddFlow: Identifiable, Equatable {
         case .codex: .codex
         case .google: .google
         case .grok: .grok
+        case .elevenlabs: .elevenlabs
         }
     }
 
@@ -33,7 +36,7 @@ enum AddFlow: Identifiable, Equatable {
         case .copilot: nil
         case .google: googleConfigured ? .google : nil
         case .grok: .grok
-        case .elevenlabs: nil
+        case .elevenlabs: .elevenlabs
         }
     }
 }
@@ -51,6 +54,7 @@ struct AddFlowSheet: View {
             case .codex: DeviceCodeFlowView(model: CodexAddFlow.model(app: app), onDone: onDone)
             case .google: GoogleFlowView(model: GoogleSignInModel(app: app), onDone: onDone)
             case .grok: DeviceCodeFlowView(model: GrokAddFlow.model(app: app), onDone: onDone)
+            case .elevenlabs: ElevenLabsFlowView(app: app, onDone: onDone)
             }
         }
         .tint(GlassStyle.fill(flow.kind))
@@ -76,6 +80,32 @@ private struct GoogleFlowView: View {
     var body: some View {
         NavigationStack {
             GoogleSignInView(model: model, onDone: onDone)
+        }
+    }
+}
+
+/// Retry swaps in a fresh model, which also recreates the web view.
+private struct ElevenLabsFlowView: View {
+    let app: AppModel
+    let onDone: (AccountID) -> Void
+    @State private var model: ElevenLabsSignInModel
+
+    init(app: AppModel, onDone: @escaping (AccountID) -> Void) {
+        self.app = app
+        self.onDone = onDone
+        _model = State(initialValue: ElevenLabsSignInModel(app: app))
+    }
+
+    var body: some View {
+        NavigationStack {
+            ElevenLabsSignInView(
+                model: model,
+                onRetry: {
+                    model.cancel()
+                    model = ElevenLabsSignInModel(app: app)
+                },
+                onDone: onDone,
+            )
         }
     }
 }

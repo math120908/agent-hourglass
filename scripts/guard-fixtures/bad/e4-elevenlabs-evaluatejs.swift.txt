@@ -1,0 +1,202 @@
+// fixture: iOS/App/AddAccount/ElevenLabsSignInView.swift elevenlabs-web
+import SwiftUI
+import UIKit
+import UsageCore
+import WebKit
+
+/// ElevenLabs sign-in in an embedded, ephemeral web view. The page signs in as usual (Google
+/// popups load in place); a probe polls the page's auth user and hands it to the model, which
+/// finishes the account. Nothing read from the page is logged.
+struct ElevenLabsSignInView: View {
+    let model: ElevenLabsSignInModel
+    let onRetry: () -> Void
+    let onDone: (AccountID) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.appTheme) private var theme
+    @Environment(\.colorScheme) private var scheme
+
+    private var isGlass: Bool { theme == .glass }
+
+    private var doneID: AccountID? {
+        if case .done(let id) = model.phase { id } else { nil }
+    }
+
+    var body: some View {
+        // A new model (Retry) recreates the web view with a fresh ephemeral session.
+        VStack(spacing: 0) {
+            Text(model.currentHost ?? " ")
+                .font(.caption.monospaced())
+                .foregroundStyle(SheetTone.secondary(scheme, glass: isGlass))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
+                .background(.bar)
+                .accessibilityLabel("Current site \(model.currentHost ?? "none")")
+            ElevenLabsWebView(model: model)
+                .id(ObjectIdentifier(model))
+        }
+            .ignoresSafeArea(edges: .bottom)
+            .overlay { overlay }
+            .navigationTitle("ElevenLabs")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        model.cancel()
+                        dismiss()
+                    }
+                }
+            }
+        .onChange(of: doneID) { _, id in
+            guard let id else { return }
+            AccessibilityNotification.Announcement("Added").post()
+            onDone(id)
+        }
+        .onDisappear { model.cancel() }
+    }
+
+    @ViewBuilder private var overlay: some View {
+        switch model.phase {
+        case .browsing, .done:
+            EmptyView()
+        case .finishing:
+            card {
+                HStack(spacing: 8) {
+                    ProgressView().tint(isGlass && scheme == .dark ? .white : nil)
+                    Text("Adding account…")
+                        .font(.subheadline)
+                        .foregroundStyle(SheetTone.secondary(scheme, glass: isGlass))
+                }
+                .accessibilityElement(children: .combine)
+            }
+        case .failed(let message):
+            card {
+                VStack(spacing: 12) {
+                    SheetStatus(
+                        text: message,
+                        systemImage: "exclamationmark.triangle.fill",
+                        tint: SheetTone.criticalGlyph(scheme),
+                        font: .subheadline,
+                    )
+                    Button("Retry", action: onRetry)
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+        }
+    }
+
+    private func card(@ViewBuilder _ content: () -> some View) -> some View {
+        content()
+            .padding(20)
+            .frame(maxWidth: 320)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.black.opacity(0.2))
+    }
+}
+
+/// Ephemeral WKWebView that polls `probeScript` once a second while on elevenlabs.io and browsing.
+private struct ElevenLabsWebView: UIViewRepresentable {
+    let model: ElevenLabsSignInModel
+
+    func makeCoordinator() -> Coordinator { Coordinator(model: model) }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()
+        config.preferences.javaScriptCanOpenWindowsAutomatically = true
+        let web = WKWebView(frame: .zero, configuration: config)
+        web.isInspectable = false; web.evaluateJavaScript("1")
+        web.uiDelegate = context.coordinator
+        web.navigationDelegate = context.coordinator
+        context.coordinator.attach(web)
+        web.load(URLRequest(url: ElevenLabsSignInModel.signInURL))
+        return web
+    }
+
+    func updateUIView(_ web: WKWebView, context: Context) {}
+
+    static func dismantleUIView(_ web: WKWebView, coordinator: Coordinator) {
+        coordinator.stop()
+        let store = web.configuration.websiteDataStore
+        store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {}
+    }
+
+    /// The only pages the sign-in web view may load: https on elevenlabs.io, Google accounts, and
+    /// the Firebase auth handler. Hosts match exactly or as a dot-prefixed subdomain.
+    private static func isAllowed(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "https", let host = url.host?.lowercased() else { return false }
+        if host == "elevenlabs.io" || host.hasSuffix(".elevenlabs.io") { return true }
+        if host == "accounts.google.com" { return true }
+        return host.hasSuffix(".firebaseapp.com") && url.path.hasPrefix("/__/auth")
+    }
+
+    @MainActor final class Coordinator: NSObject, WKUIDelegate, WKNavigationDelegate {
+        private let model: ElevenLabsSignInModel
+        private weak var web: WKWebView?
+        private var timer: Timer?
+        private var probing = false
+
+        init(model: ElevenLabsSignInModel) { self.model = model }
+
+        func attach(_ web: WKWebView) {
+            self.web = web
+            timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.probe() }
+            }
+        }
+
+        func stop() {
+            timer?.invalidate()
+            timer = nil
+        }
+
+        private func probe() {
+            guard model.phase == .browsing else { return stop() }
+            guard !probing, let web, let host = web.url?.host?.lowercased(), host == "elevenlabs.io" || host.hasSuffix(".elevenlabs.io") else { return }
+            probing = true
+            Task { [weak self] in
+                let result = try? await web.callAsyncJavaScript(
+                    ElevenLabsSignInModel.probeScript,
+                    arguments: [:],
+                    in: nil,
+                    contentWorld: .defaultClient,
+                )
+                guard let self else { return }
+                self.probing = false
+                guard self.timer != nil else { return }
+                self.model.receive(probeResult: result as? String)
+            }
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void,
+        ) {
+            guard let url = navigationAction.request.url, ElevenLabsWebView.isAllowed(url) else {
+                return decisionHandler(.cancel)
+            }
+            decisionHandler(.allow)
+        }
+
+        func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+            model.currentHost = webView.url?.host?.lowercased()
+        }
+
+        /// Google sign-in opens a popup: load it in place instead, if allowed.
+        func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures,
+        ) -> WKWebView? {
+            if let url = navigationAction.request.url, ElevenLabsWebView.isAllowed(url) {
+                webView.load(navigationAction.request)
+            }
+            return nil
+        }
+    }
+}
