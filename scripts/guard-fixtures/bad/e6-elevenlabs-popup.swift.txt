@@ -1,0 +1,209 @@
+// fixture: iOS/App/AddAccount/ElevenLabsSignInView.swift elevenlabs-web
+import SwiftUI
+import UIKit
+import UsageCore
+import WebKit
+
+/// ElevenLabs sign-in in an embedded, ephemeral web view. Email and password only: Google blocks
+/// embedded web views, so social and SSO popups are dropped. A probe polls the page's auth user and
+/// hands it to the model, which finishes the account. Nothing read from the page is logged.
+struct ElevenLabsSignInView: View {
+    let model: ElevenLabsSignInModel
+    let onRetry: () -> Void
+    let onDone: (AccountID) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.appTheme) private var theme
+    @Environment(\.colorScheme) private var scheme
+
+    private var isGlass: Bool { theme == .glass }
+
+    private var doneID: AccountID? {
+        if case .done(let id) = model.phase { id } else { nil }
+    }
+
+    var body: some View {
+        // A new model (Retry) recreates the web view with a fresh ephemeral session.
+        VStack(spacing: 0) {
+            Text(model.currentHost ?? " ")
+                .font(.caption.monospaced())
+                .foregroundStyle(SheetTone.secondary(scheme, glass: isGlass))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 4)
+                .background(.bar)
+                .accessibilityLabel("Current site \(model.currentHost ?? "none")")
+            Text("Sign in with email and password. Google, Apple and SSO sign-in aren't supported here; set a password at elevenlabs.io first if you use those.")
+                .font(.footnote)
+                .foregroundStyle(SheetTone.secondary(scheme, glass: isGlass))
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+            ElevenLabsWebView(model: model)
+                .id(ObjectIdentifier(model))
+        }
+            .ignoresSafeArea(edges: .bottom)
+            .overlay { overlay }
+            .navigationTitle("ElevenLabs")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        model.cancel()
+                        dismiss()
+                    }
+                }
+            }
+        .onChange(of: doneID) { _, id in
+            guard let id else { return }
+            AccessibilityNotification.Announcement("Added").post()
+            onDone(id)
+        }
+        .onDisappear { model.cancel() }
+    }
+
+    @ViewBuilder private var overlay: some View {
+        switch model.phase {
+        case .browsing, .done:
+            EmptyView()
+        case .finishing:
+            card {
+                HStack(spacing: 8) {
+                    ProgressView().tint(isGlass && scheme == .dark ? .white : nil)
+                    Text("Adding account…")
+                        .font(.subheadline)
+                        .foregroundStyle(SheetTone.secondary(scheme, glass: isGlass))
+                }
+                .accessibilityElement(children: .combine)
+            }
+        case .failed(let message):
+            card {
+                VStack(spacing: 12) {
+                    SheetStatus(
+                        text: message,
+                        systemImage: "exclamationmark.triangle.fill",
+                        tint: SheetTone.criticalGlyph(scheme),
+                        font: .subheadline,
+                    )
+                    Button("Retry", action: onRetry)
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+        }
+    }
+
+    private func card(@ViewBuilder _ content: () -> some View) -> some View {
+        content()
+            .padding(20)
+            .frame(maxWidth: 320)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color.black.opacity(0.2))
+    }
+}
+
+/// Ephemeral WKWebView that polls `probeScript` once a second while on elevenlabs.io and browsing.
+private struct ElevenLabsWebView: UIViewRepresentable {
+    let model: ElevenLabsSignInModel
+
+    func makeCoordinator() -> Coordinator { Coordinator(model: model) }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()
+        // No popups: Google/Apple/SSO sign-in opens one, and Google refuses embedded web views.
+        // No uiDelegate either, so window.open has nowhere to go.
+        config.preferences.javaScriptCanOpenWindowsAutomatically = false
+        let web = WKWebView(frame: .zero, configuration: config)
+        web.isInspectable = false
+        web.navigationDelegate = context.coordinator
+        context.coordinator.attach(web)
+        web.load(URLRequest(url: ElevenLabsSignInModel.signInURL))
+        return web
+    }
+
+    func updateUIView(_ web: WKWebView, context: Context) {}
+
+    static func dismantleUIView(_ web: WKWebView, coordinator: Coordinator) {
+        coordinator.stop()
+        let store = web.configuration.websiteDataStore
+        store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {}
+    }
+
+    /// Main frame: https on elevenlabs.io (exact or dot-prefixed subdomain), or about:blank.
+    /// Subframes (hCaptcha, Cloudflare challenge) may load any https page.
+    private static func isAllowed(_ url: URL, isMainFrame: Bool) -> Bool {
+        if isMainFrame && url.absoluteString == "about:blank" { return true }
+        guard url.scheme?.lowercased() == "https", let host = url.host?.lowercased() else { return false }
+        if !isMainFrame { return true }
+        return host == "elevenlabs.io" || host.hasSuffix(".elevenlabs.io")
+    }
+
+    @MainActor final class Coordinator: NSObject, WKNavigationDelegate {
+        private let model: ElevenLabsSignInModel
+        private weak var web: WKWebView?
+        private var timer: Timer?
+        private var probing = false
+
+        init(model: ElevenLabsSignInModel) { self.model = model }
+
+        func attach(_ web: WKWebView) {
+            self.web = web
+            timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.probe() }
+            }
+        }
+
+        func stop() {
+            timer?.invalidate()
+            timer = nil
+        }
+
+        private func probe() {
+            guard model.phase == .browsing else { return stop() }
+            guard !probing, let web, let host = web.url?.host?.lowercased(), host == "elevenlabs.io" || host.hasSuffix(".elevenlabs.io") else { return }
+            probing = true
+            Task { [weak self] in
+                let result = try? await web.callAsyncJavaScript(
+                    ElevenLabsSignInModel.probeScript,
+                    arguments: [:],
+                    in: nil,
+                    contentWorld: .defaultClient,
+                )
+                guard let self else { return }
+                self.probing = false
+                guard self.timer != nil else { return }
+                self.model.receive(probeResult: result as? String)
+            }
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationAction: WKNavigationAction,
+            decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void,
+        ) {
+            guard let url = navigationAction.request.url else { return decisionHandler(.cancel) }
+            // targetFrame is nil for new-window requests; treat those as main frame.
+            let isMainFrame = navigationAction.targetFrame?.isMainFrame != false
+            if ElevenLabsWebView.isAllowed(url, isMainFrame: isMainFrame) { return decisionHandler(.allow) }
+            // A tapped link off the allowlist (terms, help) opens in the system browser.
+            if isMainFrame, navigationAction.navigationType == .linkActivated, url.scheme?.lowercased() == "https" {
+                UIApplication.shared.open(url)
+            }
+            decisionHandler(.cancel)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures,
+        ) -> WKWebView? { nil }
+
+        func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+            model.currentHost = webView.url?.host?.lowercased()
+        }
+    }
+}

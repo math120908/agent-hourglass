@@ -100,11 +100,12 @@ if [ -f "$AUTH" ]; then
   out=$(perl scripts/guard-auth-session.pl "$AUTH" 2>&1) || report "[ephemeral] $AUTH must build only ephemeral sessions:" "$out"
 fi
 # The ElevenLabs web view: ephemeral store only, no cookie/script injection or inspection, one
-# probe call (the model's script), a navigation allowlist, and exact-host matching.
+# probe call (the model's script), a navigation allowlist, exact-host matching, and no popups.
 if [ -f "$ELWEB" ]; then
   rg -q -F '.nonPersistent()' "$ELWEB" || report "[elevenlabs-web] $ELWEB must use .nonPersistent():" "$ELWEB"
   out=$(rg -n -F -e '.default()' -e 'httpCookieStore' -e 'WKHTTPCookieStore' -e 'WKUserScript' -e 'addUserScript' \
-    -e 'WKScriptMessageHandler' -e 'evaluateJavaScript' -e 'isInspectable = true' -e 'hasSuffix("elevenlabs.io")' "$ELWEB")
+    -e 'WKScriptMessageHandler' -e 'evaluateJavaScript' -e 'isInspectable = true' -e 'hasSuffix("elevenlabs.io")' \
+    -e 'createWebViewWith' "$ELWEB"; rg -n -P 'javaScriptCanOpenWindowsAutomatically\s*=\s*true' "$ELWEB")
   [ -n "$out" ] && report "[elevenlabs-web] forbidden API or bare suffix host match in $ELWEB:" "$out"
   n=$(rg -c -F 'callAsyncJavaScript(' "$ELWEB"); n=${n:-0}
   if [ "$n" -ne 1 ] || ! rg -U -q 'callAsyncJavaScript\(\s*ElevenLabsSignInModel\.probeScript\b' "$ELWEB"; then

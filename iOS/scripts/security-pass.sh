@@ -88,12 +88,12 @@ else
   else result PASS "S3 keychain ($rows items cku, sync=0)"; fi
 fi
 
-# S4 web store: no claude/anthropic data persisted in the app container (auth session is ephemeral).
+# S4 web store: no claude/anthropic/elevenlabs/firebase data persisted in the app container (auth session is ephemeral).
 app=$(xcrun simctl get_app_container booted "$BUNDLE" data 2>/dev/null || true)
 if [ -z "$app" ]; then result FAIL "S4 web store (app not installed)"
 else
   dirs=(); for d in Library/Cookies Library/WebKit Library/Caches; do [ -d "$app/$d" ] && dirs+=("$app/$d"); done
-  w=""; [ ${#dirs[@]} -gt 0 ] && w=$(rg -l -a -i -e 'claude' -e 'anthropic' "${dirs[@]}" 2>/dev/null | sed "s|^$app/||" || true)
+  w=""; [ ${#dirs[@]} -gt 0 ] && w=$(rg -l -a -i -e 'claude' -e 'anthropic' -e 'elevenlabs' -e 'firebase' -e 'securetoken' "${dirs[@]}" 2>/dev/null | sed "s|^$app/||" || true)
   if [ -n "$w" ]; then echo "$w"; result FAIL "S4 web store"; else result PASS "S4 web store"; fi
 fi
 

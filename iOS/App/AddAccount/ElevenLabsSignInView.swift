@@ -3,9 +3,9 @@ import UIKit
 import UsageCore
 import WebKit
 
-/// ElevenLabs sign-in in an embedded, ephemeral web view. The page signs in as usual (Google
-/// popups load in place); a probe polls the page's auth user and hands it to the model, which
-/// finishes the account. Nothing read from the page is logged.
+/// ElevenLabs sign-in in an embedded, ephemeral web view. Email and password only: Google blocks
+/// embedded web views, so social and SSO popups are dropped. A probe polls the page's auth user and
+/// hands it to the model, which finishes the account. Nothing read from the page is logged.
 struct ElevenLabsSignInView: View {
     let model: ElevenLabsSignInModel
     let onRetry: () -> Void
@@ -33,6 +33,13 @@ struct ElevenLabsSignInView: View {
                 .padding(.vertical, 4)
                 .background(.bar)
                 .accessibilityLabel("Current site \(model.currentHost ?? "none")")
+            Text("Sign in with email and password. Google, Apple and SSO sign-in aren't supported here; set a password at elevenlabs.io first if you use those.")
+                .font(.footnote)
+                .foregroundStyle(SheetTone.secondary(scheme, glass: isGlass))
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
             ElevenLabsWebView(model: model)
                 .id(ObjectIdentifier(model))
         }
@@ -105,10 +112,11 @@ private struct ElevenLabsWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .nonPersistent()
-        config.preferences.javaScriptCanOpenWindowsAutomatically = true
+        // No popups: Google/Apple/SSO sign-in opens one, and Google refuses embedded web views.
+        // No uiDelegate either, so window.open has nowhere to go.
+        config.preferences.javaScriptCanOpenWindowsAutomatically = false
         let web = WKWebView(frame: .zero, configuration: config)
         web.isInspectable = false
-        web.uiDelegate = context.coordinator
         web.navigationDelegate = context.coordinator
         context.coordinator.attach(web)
         web.load(URLRequest(url: ElevenLabsSignInModel.signInURL))
@@ -123,16 +131,16 @@ private struct ElevenLabsWebView: UIViewRepresentable {
         store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {}
     }
 
-    /// The only pages the sign-in web view may load: https on elevenlabs.io, Google accounts, and
-    /// the Firebase auth handler. Hosts match exactly or as a dot-prefixed subdomain.
-    private static func isAllowed(_ url: URL) -> Bool {
+    /// Main frame: https on elevenlabs.io (exact or dot-prefixed subdomain), or about:blank.
+    /// Subframes (hCaptcha, Cloudflare challenge) may load any https page.
+    private static func isAllowed(_ url: URL, isMainFrame: Bool) -> Bool {
+        if isMainFrame && url.absoluteString == "about:blank" { return true }
         guard url.scheme?.lowercased() == "https", let host = url.host?.lowercased() else { return false }
-        if host == "elevenlabs.io" || host.hasSuffix(".elevenlabs.io") { return true }
-        if host == "accounts.google.com" { return true }
-        return host.hasSuffix(".firebaseapp.com") && url.path.hasPrefix("/__/auth")
+        if !isMainFrame { return true }
+        return host == "elevenlabs.io" || host.hasSuffix(".elevenlabs.io")
     }
 
-    @MainActor final class Coordinator: NSObject, WKUIDelegate, WKNavigationDelegate {
+    @MainActor final class Coordinator: NSObject, WKNavigationDelegate {
         private let model: ElevenLabsSignInModel
         private weak var web: WKWebView?
         private var timer: Timer?
@@ -175,27 +183,19 @@ private struct ElevenLabsWebView: UIViewRepresentable {
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void,
         ) {
-            guard let url = navigationAction.request.url, ElevenLabsWebView.isAllowed(url) else {
-                return decisionHandler(.cancel)
+            guard let url = navigationAction.request.url else { return decisionHandler(.cancel) }
+            // targetFrame is nil for new-window requests; treat those as main frame.
+            let isMainFrame = navigationAction.targetFrame?.isMainFrame != false
+            if ElevenLabsWebView.isAllowed(url, isMainFrame: isMainFrame) { return decisionHandler(.allow) }
+            // A tapped link off the allowlist (terms, help) opens in the system browser.
+            if isMainFrame, navigationAction.navigationType == .linkActivated, url.scheme?.lowercased() == "https" {
+                UIApplication.shared.open(url)
             }
-            decisionHandler(.allow)
+            decisionHandler(.cancel)
         }
 
         func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
             model.currentHost = webView.url?.host?.lowercased()
-        }
-
-        /// Google sign-in opens a popup: load it in place instead, if allowed.
-        func webView(
-            _ webView: WKWebView,
-            createWebViewWith configuration: WKWebViewConfiguration,
-            for navigationAction: WKNavigationAction,
-            windowFeatures: WKWindowFeatures,
-        ) -> WKWebView? {
-            if let url = navigationAction.request.url, ElevenLabsWebView.isAllowed(url) {
-                webView.load(navigationAction.request)
-            }
-            return nil
         }
     }
 }
