@@ -1,0 +1,12 @@
+{
+  "five_hour": null,
+  "seven_day": {"utilization": 6.0, "resets_at": "2026-11-06T22:59:59.908144+00:00", "limit_dollars": null, "used_dollars": null, "remaining_dollars": null, "locked_reason": null},
+  "seven_day_opus": null,
+  "seven_day_sonnet": null,
+  "limits": [
+    {"kind": "weekly_all", "percent": 6, "resets_at": "2026-11-06T22:59:59.992336+00:00", "scope": null},
+    {"kind": "weekly_scoped", "percent": 2, "resets_at": "2026-11-06T22:59:59.992602+00:00", "scope": {"model": {"id": null, "display_name": "Fable"}, "surface": null}}
+  ],
+  "weekly_scoped_shares": [{"limit_index": 1, "used_percent_of_weekly": 1, "allowance_percent_of_weekly": 50}],
+  "member_dashboard_available": false
+}

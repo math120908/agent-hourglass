@@ -50,6 +50,21 @@ struct ClaudeProviderTests {
         #expect(s.meters[0].percentUsed == 12.5)
     }
 
+    /// Verified Ultra: no session limit, `five_hour` null, only weekly limits (live shape, 2026-10-31).
+    @Test func weeklyOnlyUltra() throws {
+        let s = try ClaudeProvider.decodeUsage(fixture("claude-weekly-only"), accountID: account, now: now)
+        #expect(s.meters.map(\.kind) == [.weeklyAll, .weeklyModel])
+        #expect(s.meters[0].percentUsed == 6)
+        #expect(s.meters[1].label == "Fable")
+    }
+
+    /// Every fixture shape decodes to a snapshot whose card has a headline (or none only when all-null throws).
+    @Test(arguments: ["claude-new", "claude-idle", "claude-legacy-only", "claude-weekly-only", "claude-spend-disabled", "claude-unknown-keys"])
+    func everyPlanShapeHasHeadline(name: String) throws {
+        let s = try ClaudeProvider.decodeUsage(fixture(name), accountID: account, now: now)
+        #expect(CardModel.headlineMeter(s.meters, kind: .claude) != nil)
+    }
+
     @Test func idleSessionNullReset() throws {
         let s = try ClaudeProvider.decodeUsage(fixture("claude-idle"), accountID: account, now: now)
         #expect(s.meters[0].resetsAt == nil)

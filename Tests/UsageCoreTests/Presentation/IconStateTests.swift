@@ -39,6 +39,18 @@ import Testing
         #expect(make([a: claude(10, resetsIn: 3 * 3600)]).pace == 40)
     }
 
+    @Test func claudeWithoutSessionShowsWeekly() {
+        let snap = UsageSnapshot(accountID: a, fetchedAt: now, plan: nil, meters: [
+            Meter(kind: .weeklyAll, label: "All models", percentUsed: 6,
+                  resetsAt: now.addingTimeInterval(6 * 86400), windowLength: .seconds(7 * 86400)),
+        ], spend: nil)
+        let s = make([a: snap])
+        #expect(s.caption == "WK")
+        #expect(s.percent == 6)
+        #expect(s.level == .normal)
+        #expect(s.weekly == nil)
+    }
+
     @Test func staleOutline() {
         let s = make([a: claude(42)], [a: .stale])
         #expect(s.level == .outline)

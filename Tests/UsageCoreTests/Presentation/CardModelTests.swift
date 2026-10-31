@@ -129,6 +129,16 @@ import Testing
         let h = make(UsageSnapshot(accountID: id, fetchedAt: now, plan: "Creator", meters: [m]), .fresh, .elevenlabs).headline
         #expect(h?.detailText == "200 / 130,539 credits")
     }
+    @Test func claudeWeeklyOnlyHeadline() {
+        let c = make(claude([weekly(6, resetsIn: 6 * 86400)], plan: nil))
+        #expect(c.headline?.percentText == "6%")
+        #expect(c.secondary == nil)
+    }
+    @Test func claudeSessionStillPreferred() {
+        let c = make(claude([session(40, resetsIn: 3600), weekly(6, resetsIn: 6 * 86400)]))
+        #expect(c.headline?.percentText == "40%")
+        #expect(c.secondary == "Wk 6%")
+    }
     @Test func copilotZeroEntitlement() {
         let s = UsageSnapshot(accountID: copilotID, fetchedAt: now, meters: [premium(used: 0, limit: 0)])
         let h = make(s, .fresh, .copilot).headline
