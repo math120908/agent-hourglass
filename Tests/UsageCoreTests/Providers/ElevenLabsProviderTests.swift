@@ -27,7 +27,7 @@ struct ElevenLabsProviderTests {
         #expect(m.used == 200)
         #expect(m.limit == 130539)
         #expect(m.percentUsed == 0.2)
-        #expect(m.unit == "characters")
+        #expect(m.unit == "credits")
         #expect(m.resetsAt == Date(timeIntervalSince1970: 1_800_000_000))
     }
 

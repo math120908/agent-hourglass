@@ -70,11 +70,11 @@ public struct ElevenLabsProvider: UsageProvider {
         let percent = limit > 0 ? ((used / limit * 100) * 10).rounded() / 10 : nil
         let meter = Meter(
             kind: .window,
-            label: "Characters",
+            label: "Credits",
             percentUsed: percent,
             used: used,
             limit: limit,
-            unit: "characters",
+            unit: "credits",
             resetsAt: ClaudeProvider.number(root["next_character_count_reset_unix"]).map { Date(timeIntervalSince1970: $0) },
             windowLength: .seconds(monthSeconds)
         )

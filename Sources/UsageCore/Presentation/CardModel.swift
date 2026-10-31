@@ -153,6 +153,9 @@ public struct CardModel: Equatable, Sendable {
                     row.detailText = "\(Formatting.grouped(used)) / \(Formatting.grouped(total)) credits"
                         + " (≈ $\(dollars(used)) / $\(dollars(total)))"
                 }
+            } else if m.kind == .window, let unit = m.unit, let limit = m.limit, limit > 0 {
+                let used = Int((m.used ?? 0).rounded()), total = Int(limit.rounded())
+                row.detailText = "\(Formatting.grouped(used)) / \(Formatting.grouped(total)) \(unit)"
             }
             return row
         }
