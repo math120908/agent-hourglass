@@ -1,7 +1,7 @@
 #!/bin/bash
 # Archive, verify, export and upload the iOS app to TestFlight (P6 Task 13).
 #   testflight.sh                 preflight, archive, verify, export a local .ipa, verify it, upload that .ipa
-#   testflight.sh --dry-run       same, without the upload
+#   testflight.sh --dry-run       same, without the upload (and without the tag)
 #   testflight.sh --verify-archive <xcarchive> <build> <commit>   verify only (tests)
 #   testflight.sh --verify-ipa <ipa> <build> <commit>             verify an exported ipa (tests)
 #   testflight.sh --check-export-options <plist>                  assert the export plist keys (tests)
@@ -18,6 +18,7 @@
 # xcodebuild and altool output to <out>/xcodebuild.log (both 600); failures show a redacted tail. The
 # *.xcdistributionlogs bundles and the altool log the run writes (both hold the key id and issuer id) are
 # removed on every exit. Verify requires iPhone only (UIDeviceFamily [1]) and portrait only.
+# After the upload the built commit gets an annotated tag ios-v<version>-<build>, pushed to origin.
 set -euo pipefail
 # --verify-* paths are relative to the caller's cwd, not iOS/.
 if [ $# -ge 2 ] && [[ "$1" == --verify-archive || "$1" == --verify-ipa || "$1" == --check-export-options ]] \
@@ -258,6 +259,7 @@ fetch_key() {
 }
 # 2. Version and output dir (before the test runs, which log into it).
 build=$(scripts/build-number.sh); head=$(git rev-parse HEAD); commit=$(git rev-parse --short "$head")
+tag=ios-v$version-$build
 # check_tree: the shared worktree can change during the minutes-long tests and archive. Re-check that it
 # is still clean and at the recorded commit before each step that builds or ships it.
 check_tree() {
@@ -334,6 +336,7 @@ ipa=$(echo "$out"/export/*.ipa); [ -f "$ipa" ] || die "export produced no .ipa"
 verify_ipa "$ipa" "$build" "$commit"
 if [ $dry -eq 1 ]; then
   echo "testflight: dry run ok $version ($build) $commit"
+  echo "testflight: dry run, would tag $tag at $commit"
   exit 0
 fi
 
@@ -365,3 +368,16 @@ rm_altlogs() {
 altlogs_armed=1
 run xcrun altool --upload-package "$ipa" --api-key "$kid" --api-issuer "$iss"
 echo "testflight: uploaded $version ($build) $commit"
+
+# 8. Tag the uploaded commit (annotated, pushed), as scripts/bump-version.sh tags Mac master builds, so every
+# TestFlight build has a matching tag. An existing tag is never moved. The upload already succeeded, so a
+# failed tag or push only warns.
+if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+  echo "testflight: tag $tag already exists, not moving it"
+elif ! git tag -a "$tag" "$head" -m "TestFlight $version ($build)"; then
+  echo "testflight: warning: could not create tag $tag (tag it later: git tag -a $tag $commit -m 'TestFlight $version ($build)')" >&2
+else
+  git push -q origin "refs/tags/$tag" \
+    || echo "testflight: warning: could not push $tag (push it later: git push origin $tag)" >&2
+  echo "testflight: tagged $tag at $commit"
+fi

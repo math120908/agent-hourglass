@@ -31,6 +31,9 @@
 #               internal TestFlight only, no version management, team), by --check-export-options and
 #               by a full run of a copy of iOS/ (before the archive, and again before the export).
 #   build-number-now-upload: upload mode refuses a pinned build number.
+#   tag-*:      after the upload the recorded HEAD gets an annotated tag ios-v<version>-<build> ("TestFlight
+#               <version> (<build>)"), pushed to origin; an existing tag is never moved; a failed tag or push
+#               only warns (exit 0). --dry-run prints the tag it would make and runs no tag or push.
 #   All flows run with a GNU-style fake `stat` first on PATH; the mode checks must use /usr/bin/stat.
 #   preflight-log: a failing preflight `make test` leaves its output in <out>/preflight.log (mode 600)
 #               and the failure message shows the log's tail and path.
@@ -120,6 +123,8 @@ case " $* " in
 esac
 EOF
 # Fake git: the tree turns dirty once $FAKE_STATE/dirty exists, HEAD moves once $FAKE_STATE/moved exists.
+# Tag lookups, `tag -a` and `push` are logged to $FAKE_CALLS; FAKE_TAG_EXISTS=1 makes the tag exist,
+# FAKE_GIT_FAIL=tag|push fails that command.
 # fake_touch <flag> (in the fake make and xcodebuild) creates one when FAKE_<WHEN>=<flag> asks for it.
 export FAKE_STATE=$t/state; mkdir -p "$FAKE_STATE"
 cat > "$bin/git" <<'EOF'
@@ -130,6 +135,9 @@ case "$*" in
     else echo abc1234000000000000000000000000000000000; fi ;;
   "rev-parse --short abc1234000000000000000000000000000000000") echo abc1234 ;;
   "rev-parse --short HEAD") echo abc1234 ;;
+  "rev-parse -q --verify refs/tags/"*) echo "git $*" >> "$FAKE_CALLS"; [ "${FAKE_TAG_EXISTS:-0}" = 1 ] ;;
+  "tag -a "*|"push -q origin refs/tags/"*) echo "git $*" >> "$FAKE_CALLS"
+    [ "${FAKE_GIT_FAIL:-}" != "${1}" ] || { echo "fake git $1 error" >&2; exit 1; } ;;
   *) exit 2 ;;
 esac
 EOF
@@ -349,6 +357,15 @@ RUN_WANT_MSG='tree changed during run' RUN_NO_CALL=xcrun FAKE_EXPORT_TOUCH=dirty
 RUN_WANT_MSG='get-task-allow' RUN_NO_CALL=xcrun FAKE_EXPORT_GTA=true run_flow upload-verifies-ipa-first 1
 RUN_WANT_MSG='fake upload error' FAKE_UPLOAD_FAIL=1 run_flow upload-fail-redacted 1
 
+# tag-*: the upload tags the recorded HEAD and pushes the tag; dry run only says what it would tag.
+RUN_CALL='git tag -a ios-v1.0.0-' RUN_WANT_MSG='testflight: tagged ios-v1.0.0-' run_flow tag-upload 0
+RUN_CALL='abc1234000000000000000000000000000000000 -m TestFlight 1.0.0 (' run_flow tag-upload-head-message 0
+RUN_CALL='git push -q origin refs/tags/ios-v1.0.0-' run_flow tag-upload-pushed 0
+RUN_WANT_MSG='already exists, not moving it' RUN_NO_CALL='git tag' FAKE_TAG_EXISTS=1 run_flow tag-exists-not-moved 0
+RUN_WANT_MSG='push it later: git push origin ios-v1.0.0-' FAKE_GIT_FAIL=push run_flow tag-push-fail-warns 0
+RUN_WANT_MSG='could not create tag ios-v1.0.0-' RUN_NO_CALL='git push' FAKE_GIT_FAIL=tag run_flow tag-create-fail-warns 0
+RUN_WANT_MSG='dry run, would tag ios-v1.0.0-' RUN_NO_CALL='git ' run_flow tag-dry-run-no-tag 0 --dry-run
+RUN_WANT_MSG='fake upload error' RUN_NO_CALL='git ' FAKE_UPLOAD_FAIL=1 run_flow tag-upload-fail-no-tag 1
 # build-number-now-upload: BUILD_NUMBER_NOW is for --dry-run only.
 RUN_WANT_MSG='BUILD_NUMBER_NOW' RUN_NO_CALL=make BUILD_NUMBER_NOW=2026-10-23T12:00:00Z run_flow build-number-now-upload 1
 
