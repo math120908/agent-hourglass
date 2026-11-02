@@ -123,7 +123,7 @@ Each run asks for Touch ID: once when preflight checks the item, and again befor
 - `make -C iOS icon`: regenerate the app icon from `App/Resources/AppIcon.svg`
 - `make -C iOS security-pass-start-log` then `make -C iOS security-pass`: runtime security checks S1-S5 against the booted simulator
 - `make -C iOS archive`: preflight, archive, verify, export an `.ipa` without uploading
-- `make -C iOS testflight`: same, then upload to App Store Connect (TestFlight internal only)
+- `make -C iOS testflight`: same, then upload to App Store Connect (TestFlight internal only) and tag the commit `ios-v<version>-<build>` (annotated, pushed; an existing tag is never moved)
 
 Grok (experimental, see above): sign-in uses the same device-code sheet as Codex ("Open x.ai"). The widget refreshes Grok under the shared cross-process refresh lock (`FileRefreshLock`), since rotating refresh tokens are single use. Accounts live in `accounts-ext.json`.
 
