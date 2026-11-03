@@ -18,6 +18,11 @@ final class SmallWidgetContentTests: XCTestCase {
         XCTAssertNotNil(c.ageText)
     }
 
+    func testUltraRowsAreWeekly() {
+        let c = SmallWidgetContent(entry(F.claudeUltra), calendar: F.calendar, locale: F.locale)
+        XCTAssertEqual(c.rows.map(\.shortLabel), ["WK", "Opus W"])
+    }
+
     @MainActor func testStaleDerivedFromEntryDateNotDimmed() {
         let c = SmallWidgetContent(entry(F.claudeMax, at: F.now.addingTimeInterval(31 * 60)), calendar: F.calendar, locale: F.locale)
         XCTAssertEqual(c.freshness, .stale)

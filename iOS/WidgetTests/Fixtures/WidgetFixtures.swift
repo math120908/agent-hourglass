@@ -19,6 +19,13 @@ enum WidgetFixtures {
         Meter(kind: .weeklyModel, label: "Opus", percentUsed: 12),
     ])
 
+    /// Claude Ultra: no 5-hour limit, only weekly meters.
+    static let claudeUltra = UsageSnapshot(accountID: AccountID(rawValue: "claude:ultra")!, fetchedAt: now, meters: [
+        Meter(kind: .weeklyAll, label: "Weekly", percentUsed: 27, resetsAt: ISO8601DateFormatter().date(from: "2026-10-23T22:59:00Z")!, windowLength: .seconds(604_800)),
+        Meter(kind: .weeklyModel, label: "Opus", percentUsed: 9),
+        Meter(kind: .weeklyModel, label: "Sonnet", percentUsed: 4),
+    ])
+
     static let codexPlus = UsageSnapshot(accountID: AccountID(rawValue: "codex:plus")!, fetchedAt: now, meters: [
         Meter(kind: .window, label: "5-hour", percentUsed: 8, resetsAt: now.addingTimeInterval(3600), windowLength: .seconds(18000)),
         Meter(kind: .window, label: "Weekly", percentUsed: 72, resetsAt: now.addingTimeInterval(3 * 86400), windowLength: .seconds(604_800)),

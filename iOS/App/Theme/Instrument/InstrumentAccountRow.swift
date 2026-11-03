@@ -41,9 +41,11 @@ struct InstrumentAccountRow: View {
     }
     private var meters: [Meter] { MeterDisplay.visibleMeters(snapshot) }
 
-    private var headline: MeterDisplay? {
-        let k: Meter.Kind = kind.usesWindowMeters ? .window : .session5h
-        return meters.first { $0.kind == k }.map { MeterDisplay.make($0, now: now, options: options) }
+    private var headline: MeterDisplay? { Self.headline(meters, kind: kind, now: now, options: options) }
+
+    /// Shared with the Mac card: Claude plans without a 5-hour limit headline weekly-all.
+    nonisolated static func headline(_ meters: [Meter], kind: ProviderKind, now: Date, options: MeterDisplayOptions) -> MeterDisplay? {
+        CardModel.headlineMeter(meters, kind: kind).map { MeterDisplay.make($0, now: now, options: options) }
     }
 
     var body: some View {
@@ -120,16 +122,20 @@ struct InstrumentAccountRow: View {
 
     private var ringColor: Color { GlassStyle.color(headline?.severity ?? .normal, kind) }
 
-    /// "Session 1% | Week 39%" (Claude) or "30d 12% | resets Nov 7" (Codex).
-    private var subtitle: String {
-        guard let h = headline else {
-            return snapshot.map { MeterDisplay.ageText(fetchedAt: $0.fetchedAt, now: now, options: options) } ?? "No data yet"
+    private var subtitle: String { Self.subtitle(meters, kind: kind, fetchedAt: snapshot?.fetchedAt, now: now, options: options) }
+
+    /// "Session 1% | Week 39%" (Claude), "Week 39%" (Claude without a 5-hour limit), or "30d 12% | resets Nov 7" (Codex).
+    nonisolated static func subtitle(_ meters: [Meter], kind: ProviderKind, fetchedAt: Date?, now: Date, options: MeterDisplayOptions) -> String {
+        guard let head = CardModel.headlineMeter(meters, kind: kind) else {
+            return fetchedAt.map { MeterDisplay.ageText(fetchedAt: $0, now: now, options: options) } ?? "No data yet"
         }
+        let h = MeterDisplay.make(head, now: now, options: options)
         if kind.usesWindowMeters {
             let reset = h.resetText.hasPrefix("Resets ") ? "resets " + h.resetText.dropFirst(7) : h.resetText
             let second = meters.dropFirst().first.map { MeterDisplay.make($0, now: now, options: options) }
             return "\(h.label) \(h.percentText) | " + (second.map { "\($0.label) \($0.percentText)" } ?? reset)
         }
+        if head.kind == .weeklyAll { return "Week \(h.percentText)" }
         let week = meters.first { $0.kind == .weeklyAll }
             .map { " | Week " + MeterDisplay.make($0, now: now, options: options).percentText } ?? ""
         return "Session \(h.percentText)" + week

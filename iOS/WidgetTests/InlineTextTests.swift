@@ -25,6 +25,10 @@ final class InlineTextTests: XCTestCase {
         XCTAssertEqual(text(entry(at: F.now.addingTimeInterval(120), status: .needsLogin)), "Claude 34% | Sign in | 2m")
     }
 
+    func testInlineUltraShowsWeekly() {
+        XCTAssertTrue(text(entry(snapshot: F.claudeUltra)).hasPrefix("Claude 27% | "), text(entry(snapshot: F.claudeUltra)))
+    }
+
     func testInlineNoAccount() { XCTAssertEqual(text(entry(snapshot: nil)), "Choose account") }
 
     func testInlineNoData() {

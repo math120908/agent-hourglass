@@ -29,18 +29,21 @@ struct WidgetMeterRow: Equatable, Sendable {
 enum WidgetMeterModel {
     static func visibleMeters(_ s: UsageSnapshot) -> [Meter] { MeterDisplay.visibleMeters(s) }
 
-    /// Configured order, missing keys skipped; empty falls back to the family defaults; truncated to `maxRows`.
+    /// Configured order, missing keys skipped; empty falls back to the family defaults. Defaults are
+    /// matched against the snapshot before truncating to `maxRows`, so an absent default (Claude Ultra
+    /// has no 5-hour meter) yields the next one instead of nothing.
     static func resolveMeters(_ keys: [MeterKey], in s: UsageSnapshot, family: WidgetFamilyKind) -> [Meter] {
         let visible = visibleMeters(s)
         func pick(_ ks: [MeterKey]) -> [Meter] { ks.compactMap { k in visible.first(where: k.matches) } }
         var result = pick(keys)
         if result.isEmpty, let kind = s.accountID.kind {
-            result = pick(defaultKeys(for: kind, family: family, snapshot: s))
+            result = pick(defaultKeys(for: kind, snapshot: s))
         }
         return Array(result.prefix(family.maxRows))
     }
 
-    static func defaultKeys(for kind: ProviderKind, family: WidgetFamilyKind) -> [MeterKey] {
+    /// Default meters in priority order, untruncated: callers match them against a snapshot, then cut to `maxRows`.
+    static func defaultKeys(for kind: ProviderKind) -> [MeterKey] {
         let raw: [String]
         switch kind {
         case .claude: raw = ["session5h", "weeklyAll"]
@@ -50,17 +53,16 @@ enum WidgetMeterModel {
         case .grok: raw = ["window:604800"]
         case .elevenlabs: raw = ["window:2592000"]
         }
-        return Array(raw.compactMap(MeterKey.init(rawValue:)).prefix(family.maxRows))
+        return raw.compactMap(MeterKey.init(rawValue:))
     }
 
-    /// Claude rectangular default adds the first weeklyModel present in the snapshot.
-    static func defaultKeys(for kind: ProviderKind, family: WidgetFamilyKind, snapshot: UsageSnapshot?) -> [MeterKey] {
-        var keys = defaultKeys(for: kind, family: family)
-        if kind == .claude, family == .rectangular,
-           let model = snapshot.flatMap({ visibleMeters($0).first { $0.kind == .weeklyModel } }) {
+    /// Claude defaults end with the first weeklyModel present in the snapshot.
+    static func defaultKeys(for kind: ProviderKind, snapshot: UsageSnapshot?) -> [MeterKey] {
+        var keys = defaultKeys(for: kind)
+        if kind == .claude, let model = snapshot.flatMap({ visibleMeters($0).first { $0.kind == .weeklyModel } }) {
             keys.append(MeterKey(model))
         }
-        return Array(keys.prefix(family.maxRows))
+        return keys
     }
 
     static func row(_ m: Meter, at date: Date, settings: DisplaySettings, calendar: Calendar, locale: Locale) -> WidgetMeterRow {

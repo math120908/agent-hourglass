@@ -17,6 +17,11 @@ final class RectangularUsageWidgetTests: XCTestCase {
         XCTAssertFalse(c.ageText.isEmpty)
     }
 
+    func testUltraFiveHourOnlyFallsBackToWeekly() {
+        let c = RectangularUsageContent.make(entry(["session5h"], snapshot: F.claudeUltra), calendar: F.calendar, locale: F.locale)!
+        XCTAssertEqual(c.rows.map(\.key.rawValue), ["weeklyAll", "weeklyModel:Opus"])
+    }
+
     func testMultipleRowsDropResetKeepAge() {
         let c = RectangularUsageContent.make(entry([]), calendar: F.calendar, locale: F.locale)!
         XCTAssertGreaterThanOrEqual(c.rows.count, 2)
