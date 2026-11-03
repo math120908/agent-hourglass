@@ -86,12 +86,32 @@ final class WidgetMeterModelTests: XCTestCase {
         XCTAssertEqual(d.map(MeterKey.init), [key("weeklyAll")])
     }
 
-    func testDefaultsPerFamily() {
-        XCTAssertEqual(WidgetMeterModel.defaultKeys(for: .claude, family: .small), [key("session5h"), key("weeklyAll")])
-        XCTAssertEqual(WidgetMeterModel.defaultKeys(for: .claude, family: .circular), [key("session5h")])
-        XCTAssertEqual(WidgetMeterModel.defaultKeys(for: .codex, family: .rectangular), [key("window:18000"), key("window:604800")])
-        XCTAssertEqual(WidgetMeterModel.defaultKeys(for: .copilot, family: .rectangular), [key("copilotPremium")])
+    func testDefaultsAreUntruncatedPriorityOrder() {
+        XCTAssertEqual(WidgetMeterModel.defaultKeys(for: .claude), [key("session5h"), key("weeklyAll")])
+        XCTAssertEqual(WidgetMeterModel.defaultKeys(for: .claude, snapshot: F.claudeMax), [key("session5h"), key("weeklyAll"), key("weeklyModel:Opus")])
+        XCTAssertEqual(WidgetMeterModel.defaultKeys(for: .codex), [key("window:18000"), key("window:604800")])
+        XCTAssertEqual(WidgetMeterModel.defaultKeys(for: .copilot), [key("copilotPremium")])
         XCTAssertEqual([WidgetFamilyKind.small, .circular, .rectangular, .inline].map(\.maxRows), [2, 1, 3, 1])
+    }
+
+    func testDefaultsPerFamilyOnMax() {
+        func r(_ f: WidgetFamilyKind) -> [MeterKey] { WidgetMeterModel.resolveMeters([], in: F.claudeMax, family: f).map(MeterKey.init) }
+        XCTAssertEqual(r(.circular), [key("session5h")])
+        XCTAssertEqual(r(.inline), [key("session5h")])
+        XCTAssertEqual(r(.small), [key("session5h"), key("weeklyAll")])
+    }
+
+    /// Ultra has no session5h: defaults are matched first, then truncated, so the next default fills in.
+    func testUltraDefaultsFallBackToWeekly() {
+        func r(_ keys: [MeterKey], _ f: WidgetFamilyKind) -> [MeterKey] { WidgetMeterModel.resolveMeters(keys, in: F.claudeUltra, family: f).map(MeterKey.init) }
+        XCTAssertEqual(r([], .circular), [key("weeklyAll")])
+        XCTAssertEqual(r([], .inline), [key("weeklyAll")])
+        XCTAssertEqual(r([], .small), [key("weeklyAll"), key("weeklyModel:Opus")])
+        XCTAssertEqual(r([], .rectangular), [key("weeklyAll"), key("weeklyModel:Opus")])
+        // A widget configured with only the 5-hour meter falls back to weekly too.
+        XCTAssertEqual(r([key("session5h")], .circular), [key("weeklyAll")])
+        XCTAssertEqual(r([key("session5h")], .inline), [key("weeklyAll")])
+        XCTAssertEqual(r([key("session5h")], .small), [key("weeklyAll"), key("weeklyModel:Opus")])
     }
 
     func testVisibleMeters() {

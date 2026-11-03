@@ -26,13 +26,13 @@ struct MeterEntity: AppEntity {
 }
 
 enum MeterCatalog {
-    /// Visible meters of the snapshot, else the rectangular-family defaults.
+    /// Visible meters of the snapshot, else the provider defaults.
     static func meters(for account: AccountEntry, snapshot: UsageSnapshot?) -> [MeterEntity] {
         let pairs: [(MeterKey, String)]
         if let snapshot {
             pairs = WidgetMeterModel.visibleMeters(snapshot).map { (MeterKey($0), $0.label) }
         } else {
-            pairs = WidgetMeterModel.defaultKeys(for: account.kind, family: .rectangular).map { ($0, label(for: $0)) }
+            pairs = WidgetMeterModel.defaultKeys(for: account.kind).map { ($0, label(for: $0)) }
         }
         return pairs.map { MeterEntity(id: MeterEntity.makeID(account: account.id, key: $0.0), label: $0.1, key: $0.0) }
     }

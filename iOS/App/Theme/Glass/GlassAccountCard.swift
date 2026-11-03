@@ -45,9 +45,11 @@ struct GlassAccountCard: View {
         CardModel.make(snapshot: snapshot, status: status, kind: kind, now: now, calendar: calendar, locale: options.locale)
     }
 
-    private var headline: MeterDisplay? {
-        let k: Meter.Kind = kind.usesWindowMeters ? .window : .session5h
-        return meters.first { $0.kind == k }.map { MeterDisplay.make($0, now: now, options: options) }
+    private var headline: MeterDisplay? { Self.headline(meters, kind: kind, now: now, options: options) }
+
+    /// Shared with the Mac card: Claude plans without a 5-hour limit headline weekly-all.
+    nonisolated static func headline(_ meters: [Meter], kind: ProviderKind, now: Date, options: MeterDisplayOptions) -> MeterDisplay? {
+        CardModel.headlineMeter(meters, kind: kind).map { MeterDisplay.make($0, now: now, options: options) }
     }
 
     private var ageText: String {

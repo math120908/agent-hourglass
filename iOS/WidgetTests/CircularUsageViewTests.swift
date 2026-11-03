@@ -21,6 +21,12 @@ final class CircularUsageViewTests: XCTestCase {
         XCTAssertFalse(c.isDimmed)
     }
 
+    func testUltraShowsWeeklyNotNoData() {
+        let c = content(entry(F.claudeUltra))!
+        XCTAssertEqual(c.row.key.rawValue, "weeklyAll")
+        XCTAssertTrue(c.caption.hasPrefix("WK | "), c.caption)
+    }
+
     func testCenterDropsPercentAtThreeDigits() {
         XCTAssertEqual(CircularUsageView.centerText("100%"), "100")
         XCTAssertEqual(CircularUsageView.centerText("34%"), "34%")

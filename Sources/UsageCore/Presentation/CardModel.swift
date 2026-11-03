@@ -57,7 +57,7 @@ public struct CardModel: Equatable, Sendable {
     }
 
     /// Claude: the 5-hour session, or weekly-all on plans without a session limit (verified Ultra).
-    static func headlineMeter(_ meters: [Meter], kind: ProviderKind) -> Meter? {
+    public static func headlineMeter(_ meters: [Meter], kind: ProviderKind) -> Meter? {
         switch kind {
         case .claude: meters.first { $0.kind == .session5h } ?? meters.first { $0.kind == .weeklyAll }
         case .copilot: meters.first { $0.kind == .copilotPremium }
