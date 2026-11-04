@@ -113,6 +113,13 @@ if [ -f "$ELWEB" ]; then
   fi
   rg -q -F 'decidePolicyFor' "$ELWEB" || report "[elevenlabs-web] $ELWEB must implement decidePolicyFor:" "$ELWEB"
 fi
+# BGTaskScheduler handlers: a closure formed in @MainActor code inherits that isolation, and the
+# Swift 6 runtime traps when BackgroundTasks calls it elsewhere (TestFlight crash, 261103). The
+# launch handler names a queue (`using: .main`), never nil; expiration handlers are @Sendable.
+out=$(rg -n -U -P -g '*.swift' 'register\(\s*forTaskWithIdentifier:[^{}]*?using:\s*nil\b' "${IOSSRC[@]}" Sources App 2>/dev/null | nocomment)
+[ -n "$out" ] && report "[bgtask-queue] BGTaskScheduler.register(... using: nil) (use .main; the handler is @MainActor):" "$out"
+out=$(rg -n -P -g '*.swift' '\.expirationHandler\s*=\s*\{(?!\s*@Sendable\b)' "${IOSSRC[@]}" Sources App 2>/dev/null | nocomment)
+[ -n "$out" ] && report "[bgtask-queue] BGTask expirationHandler closure not @Sendable (it may run off the main actor):" "$out"
 out=$(rg -n -g '*.swift' '\bdump\(' "${IOSSRC[@]}" 2>/dev/null)
 [ -n "$out" ] && report "[dump] dump( in iOS/:" "$out"
 

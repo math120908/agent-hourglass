@@ -1,0 +1,10 @@
+// fixture: iOS/App/BGProbe.swift bgtask-queue
+import BackgroundTasks
+@MainActor final class Probe {
+    func register() {
+        BGTaskScheduler.shared.register(
+            forTaskWithIdentifier: "x",
+            using: nil
+        ) { task in task.setTaskCompleted(success: true) }
+    }
+}

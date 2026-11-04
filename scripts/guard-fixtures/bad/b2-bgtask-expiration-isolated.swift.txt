@@ -1,0 +1,7 @@
+// fixture: iOS/App/BGProbe.swift bgtask-queue
+import BackgroundTasks
+@MainActor final class Probe {
+    func run(_ task: BGTask, _ work: Task<Void, Never>) {
+        task.expirationHandler = { work.cancel() }
+    }
+}
