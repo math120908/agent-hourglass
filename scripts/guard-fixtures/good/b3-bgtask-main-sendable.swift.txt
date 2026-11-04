@@ -1,0 +1,11 @@
+// fixture: iOS/App/BGProbe.swift
+import BackgroundTasks
+@MainActor final class Probe {
+    // Not `using: nil`: that queue would trap the @MainActor handler.
+    func register(_ work: Task<Void, Never>) {
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: "x", using: .main) { task in
+            task.expirationHandler = { @Sendable in work.cancel() }
+            task.setTaskCompleted(success: true)
+        }
+    }
+}

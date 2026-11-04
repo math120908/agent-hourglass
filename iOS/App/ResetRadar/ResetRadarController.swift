@@ -89,12 +89,14 @@ final class ResetRadarController: NSObject, UNUserNotificationCenterDelegate {
     /// Must run before the app finishes launching.
     func registerBackgroundTask() {
         isRegistered = true
-        BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.taskID, using: nil) { [weak self] task in
+        // The handler inherits @MainActor isolation; `using: nil` ran it on a background queue and trapped.
+        BGTaskScheduler.shared.register(forTaskWithIdentifier: Self.taskID, using: .main) { [weak self] task in
             nonisolated(unsafe) let task = task
             Task { @MainActor in
                 guard let self else { task.setTaskCompleted(success: false); return }
                 let work = Task { await self.refreshNow() }
-                task.expirationHandler = { work.cancel() }
+                // @Sendable keeps it nonisolated: the system may call it off the main queue.
+                task.expirationHandler = { @Sendable in work.cancel() }
                 await work.value
                 self.scheduleBackgroundRefresh()
                 task.setTaskCompleted(success: true)
