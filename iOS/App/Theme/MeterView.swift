@@ -5,6 +5,8 @@ import UsageCore
 /// Instrument mirrors Mac `InstrumentMeterGrid.meter`.
 struct MeterView: View {
     var meter: Meter
+    /// The account's provider: picks the bar and percent colour (window meters span Codex, Grok, Google, ElevenLabs).
+    var kind: ProviderKind
     var settings: DisplaySettings
     var theme: Theme
     var now: Date = Date()
@@ -15,6 +17,7 @@ struct MeterView: View {
 
     init(
         meter: Meter,
+        kind: ProviderKind,
         settings: DisplaySettings,
         theme: Theme,
         now: Date = Date(),
@@ -22,19 +25,12 @@ struct MeterView: View {
         onToggleReset: (() -> Void)? = nil
     ) {
         self.meter = meter
+        self.kind = kind
         self.settings = settings
         self.theme = theme
         self.now = now
         self.calendar = calendar
         self.onToggleReset = onToggleReset
-    }
-
-    private var kind: ProviderKind {
-        switch meter.kind {
-        case .copilotPremium, .copilotChat, .copilotCompletions: .copilot
-        case .window: .codex
-        default: .claude
-        }
     }
 
     private var display: MeterDisplay {

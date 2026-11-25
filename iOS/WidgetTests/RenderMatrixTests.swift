@@ -62,12 +62,18 @@ final class RenderMatrixTests: XCTestCase {
             ("afterreset", F.entry(F.claudeAfterReset)),
             ("empty", F.entry(nil, account: nil, status: nil)),
             ("codex", F.entry(F.codexPlus, account: F.codexAccount)),
+            ("elevenlabs", F.entry(F.elevenlabsCreator, account: F.elevenlabsAccount)),
         ]
         for family in Family.allCases {
             let mode = family == .small ? smallModes[1] : vibrant
             for (state, entry) in states {
                 cases.append(Case(name: "\(family.rawValue)-glass-\(mode.name)-\(state)", family: family, mode: mode, entry: entry))
             }
+        }
+        let elevenlabs = F.entry(F.elevenlabsCreator, account: F.elevenlabsAccount)
+        cases.append(Case(name: "small-glass-fullcolor-light-elevenlabs", family: .small, mode: smallModes[0], entry: elevenlabs))
+        for mode in smallModes {
+            cases.append(Case(name: "small-instrument-\(mode.name)-elevenlabs", family: .small, mode: mode, entry: F.entry(F.elevenlabsCreator, account: F.elevenlabsAccount, theme: .instrument)))
         }
         var remaining = DisplaySettings.default
         remaining.showRemaining = true
@@ -113,8 +119,8 @@ final class RenderMatrixTests: XCTestCase {
         }
         let dir = URL(fileURLWithPath: out)
         let cases = Self.matrix
-        XCTAssertEqual(cases.count, 37)
-        XCTAssertEqual(Set(cases.map(\.name)).count, 37)
+        XCTAssertEqual(cases.count, 46)
+        XCTAssertEqual(Set(cases.map(\.name)).count, 46)
         for c in cases {
             let url = dir.appendingPathComponent("\(c.name).png")
             try RenderHarness.render(Self.view(c), size: c.family.size, backdrop: c.mode.backdrop, to: url)

@@ -67,6 +67,7 @@ struct GlassAccountCard: View {
                         GlassDivider()
                         MeterView(
                             meter: meter,
+                            kind: kind,
                             settings: settings,
                             theme: .glass,
                             now: now,
@@ -156,7 +157,7 @@ struct GlassAccountCard: View {
 
     private var glyph: some View {
         RoundedRectangle(cornerRadius: 5, style: .continuous)
-            .fill(accent.gradient)
+            .fill(GlassStyle.fill(kind).gradient)
             .frame(width: 20, height: 20)
             .overlay(ProviderIcon(kind: kind, size: 12).foregroundStyle(.white))
     }

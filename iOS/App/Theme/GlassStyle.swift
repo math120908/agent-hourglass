@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import UsageCore
 
 /// Glass palette. Accent per provider at normal severity; amber / red take over at warning / critical.
@@ -9,6 +10,13 @@ enum GlassStyle {
     /// Deeper teal for filled controls (prominent buttons, done discs): white label 5.2:1, where
     /// `codex` gives 4.48:1. Bars, icons and chips keep `codex`.
     static let codexFill = Color(red: 0.045, green: 0.48, blue: 0.46)
+    /// Grok: Mac slate in light mode; dark mode lifts it to Mac Instrument's dark text slate so the
+    /// bar fill clears the dark card and widget.
+    static let grok = adaptive(light: grokRGB, dark: (0.86, 0.88, 0.92))
+    private static let grokRGB = (0.42, 0.45, 0.52)
+    /// ElevenLabs: Mac near-black graphite in light mode, Mac Instrument's dark text silver in dark mode.
+    static let elevenlabs = adaptive(light: elevenlabsRGB, dark: (0.90, 0.90, 0.92))
+    private static let elevenlabsRGB = (0.30, 0.30, 0.32)
     static let warning = Color(red: 0.86, green: 0.62, blue: 0.10)
     static let critical = Color(red: 0.86, green: 0.25, blue: 0.24)
 
@@ -32,14 +40,28 @@ enum GlassStyle {
         case .copilot: Color.gray
         case .codex: codex
         case .google: Color(red: 0.26, green: 0.52, blue: 0.96)
-        case .grok: Color(red: 0.42, green: 0.45, blue: 0.52)
-        case .elevenlabs: Color(red: 0.30, green: 0.30, blue: 0.32)
+        case .grok: grok
+        case .elevenlabs: elevenlabs
         }
     }
 
-    /// Fill behind a white label or glyph: `codexFill` for Codex, the accent otherwise.
+    /// A colour that follows the environment's colour scheme (app, widget and `ImageRenderer` alike).
+    static func adaptive(light: (Double, Double, Double), dark: (Double, Double, Double)) -> Color {
+        Color(uiColor: UIColor { traits in
+            let c = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: c.0, green: c.1, blue: c.2, alpha: 1)
+        })
+    }
+
+    /// Fill behind a white label or glyph: `codexFill` for Codex; Grok and ElevenLabs keep their dark
+    /// (light-mode) tone in both schemes, since their dark-mode accent is too light for white; the accent otherwise.
     static func fill(_ kind: ProviderKind) -> Color {
-        kind == .codex ? codexFill : accent(kind)
+        switch kind {
+        case .codex: codexFill
+        case .grok: Color(red: grokRGB.0, green: grokRGB.1, blue: grokRGB.2)
+        case .elevenlabs: Color(red: elevenlabsRGB.0, green: elevenlabsRGB.1, blue: elevenlabsRGB.2)
+        default: accent(kind)
+        }
     }
 
     static func color(_ severity: Meter.Severity, _ kind: ProviderKind) -> Color {

@@ -31,12 +31,28 @@ enum WidgetFixtures {
         Meter(kind: .window, label: "Weekly", percentUsed: 72, resetsAt: now.addingTimeInterval(3 * 86400), windowLength: .seconds(604_800)),
     ])
 
+    /// ElevenLabs credits: one 30-day window, 31.2% used, resetting in 6 days.
+    static let elevenlabsCreator = UsageSnapshot(accountID: AccountID(rawValue: "elevenlabs:creator")!, fetchedAt: now, meters: [
+        Meter(
+            kind: .window,
+            label: "Credits",
+            percentUsed: 31.2,
+            used: 40_728,
+            limit: 130_539,
+            unit: "credits",
+            resetsAt: now.addingTimeInterval(6 * 86_400),
+            windowLength: .seconds(30 * 86_400)
+        ),
+    ])
+
     static var allMeters: [Meter] { [claudeMax, codexPlus].flatMap(\.meters) }
 
     // MARK: Render matrix state fixtures
 
     static let claudeAccount = AccountEntry(id: claudeMax.accountID, kind: .claude, displayName: "Claude Max", remoteLogin: nil, order: 0, addedAt: now, status: "ok")
     static let codexAccount = AccountEntry(id: codexPlus.accountID, kind: .codex, displayName: "Codex Plus", remoteLogin: nil, order: 1, addedAt: now, status: "ok")
+
+    static let elevenlabsAccount = AccountEntry(id: elevenlabsCreator.accountID, kind: .elevenlabs, displayName: "ElevenLabs", remoteLogin: nil, order: 2, addedAt: now, status: "ok")
 
     /// Fetched 2 h before `now`.
     static var claudeStale: UsageSnapshot {
