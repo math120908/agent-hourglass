@@ -16,6 +16,7 @@ private struct MeterGallery: View {
 
     private struct Item {
         var meter: Meter
+        var kind: ProviderKind
         var settings: DisplaySettings
     }
 
@@ -50,14 +51,14 @@ private struct MeterGallery: View {
             resetsAt: month
         )
         return [
-            Item(meter: all, settings: h24),
-            Item(meter: all, settings: countdown),
-            Item(meter: all, settings: remaining),
-            Item(meter: eeveeWeekly, settings: h24),
-            Item(meter: codex, settings: h24),
-            Item(meter: session, settings: h24),
-            Item(meter: credits, settings: h24),
-            Item(meter: premium, settings: h24),
+            Item(meter: all, kind: .claude, settings: h24),
+            Item(meter: all, kind: .claude, settings: countdown),
+            Item(meter: all, kind: .claude, settings: remaining),
+            Item(meter: eeveeWeekly, kind: .claude, settings: h24),
+            Item(meter: codex, kind: .codex, settings: h24),
+            Item(meter: session, kind: .claude, settings: h24),
+            Item(meter: credits, kind: .elevenlabs, settings: h24),
+            Item(meter: premium, kind: .copilot, settings: h24),
         ]
     }
 
@@ -67,6 +68,7 @@ private struct MeterGallery: View {
                 if i > 0, theme == .glass { Divider().opacity(0.6) }
                 MeterView(
                     meter: item.meter,
+                    kind: item.kind,
                     settings: item.settings,
                     theme: theme,
                     now: Fixtures.now,

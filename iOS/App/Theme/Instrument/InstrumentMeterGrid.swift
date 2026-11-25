@@ -27,7 +27,15 @@ struct InstrumentMeterGrid: View {
             if let hero { heroView(hero) }
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(meters.enumerated()), id: \.offset) { _, m in
-                    MeterView(meter: m, settings: settings, theme: .instrument, now: now, calendar: calendar, onToggleReset: onToggleReset)
+                    MeterView(
+                        meter: m,
+                        kind: kind,
+                        settings: settings,
+                        theme: .instrument,
+                        now: now,
+                        calendar: calendar,
+                        onToggleReset: onToggleReset
+                    )
                 }
                 if let spend { spendRow(spend) }
                 if let ageText {
